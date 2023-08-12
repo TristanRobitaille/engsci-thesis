@@ -1,0 +1,57 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 2.9 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated by
+% biber as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{nty/global//global/global}
+    \entry{yao2023cnn}{inproceedings}{}
+      \name{author}{2}{}{%
+        {{hash=44c305adaebcb8d84963c99832b5959e}{%
+           family={Yao},
+           familyi={Y\bibinitperiod},
+           given={Zongyan},
+           giveni={Z\bibinitperiod}}}%
+        {{hash=83d0fd0cbf3753f2498a6f0096be213d}{%
+           family={Liu},
+           familyi={L\bibinitperiod},
+           given={Xilin},
+           giveni={X\bibinitperiod}}}%
+      }
+      \list{organization}{1}{%
+        {IEEE}%
+      }
+      \strng{namehash}{11d70daffcb7a105ec62ea8b7626b17a}
+      \strng{fullhash}{11d70daffcb7a105ec62ea8b7626b17a}
+      \strng{bibnamehash}{11d70daffcb7a105ec62ea8b7626b17a}
+      \strng{authorbibnamehash}{11d70daffcb7a105ec62ea8b7626b17a}
+      \strng{authornamehash}{11d70daffcb7a105ec62ea8b7626b17a}
+      \strng{authorfullhash}{11d70daffcb7a105ec62ea8b7626b17a}
+      \field{sortinit}{Y}
+      \field{sortinithash}{b8d711a035f7be9840c721c82920477e}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{2023 11th International IEEE/EMBS Conference on Neural Engineering (NER)}
+      \field{title}{A cnn-transformer deep learning model for real-time sleep stage classification in an energy-constrained wireless device}
+      \field{year}{2023}
+      \field{pages}{1\bibrangedash 4}
+      \range{pages}{4}
+    \endentry
+  \enddatalist
+\endrefsection
+\endinput
+
