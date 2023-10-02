@@ -1,2 +1,25 @@
 .DS_Store
 */.DS_Store
+
+### Latex
+# Thesis
+latex/thesis/thesis.aux
+latex/thesis/thesis.bbl
+latex/thesis/thesis.bcf
+latex/thesis/thesis.blg
+latex/thesis/thesis.fdb_latexmk
+latex/thesis/thesis.fls
+latex/thesis/thesis.log
+latex/thesis/thesis.run.xml
+latex/thesis/thesis.synctex.gz
+
+# Proposal
+latex/proposal/proposal.aux
+latex/proposal/proposal.bbl
+latex/proposal/proposal.bcf
+latex/proposal/proposal.blg
+latex/proposal/proposal.fdb_latexmk
+latex/proposal/proposal.fls
+latex/proposal/proposal.log
+latex/proposal/proposal.run.xml
+latex/proposal/proposal.synctex.gz
