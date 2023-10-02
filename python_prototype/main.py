@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 
 #TODO
 #-Consider using multiple encoder and decoder layers
+#-Proper masking and padding
+#-Fix batch sizes
 
 #--- Notes ---#
 #Assume input data is a single sequential vector of voltages: x = [x0, x1, ... , xn] (can augment to multichannel later)
@@ -17,8 +19,9 @@ import matplotlib.pyplot as plt
 #--- Constants and Hyperparameters ---#
 CLIP_LENGTH = int(3840/4) #Number of voltage samples @ 256Hz -> 30s clips
 OUTPUT_SEQUENCE_LENGTH = 1
-MAX_VOLTAGE = 2**16 #Maximum ADC code output
-NUM_SLEEP_STAGES = 5
+MIN_VOLTAGE = 0
+MAX_VOLTAGE = 2**16-1 #Maximum ADC code output
+NUM_SLEEP_STAGES = 5 + 1 #5 stages + unknown
 DATA_TYPE = tf.float32
 
 VOLTAGE_EMBEDDING_DEPTH = 32 #Length of voltage embedding vector for each timestep. I let model dimensionality = embedding depth
@@ -41,13 +44,31 @@ def plot_matrix_colours(matrix, title:str, xlabel:str="X", ylabel:str="Y", block
     plt.colorbar()
     plt.show(block=block_execution)
 
-def random_input_batch(length:int=CLIP_LENGTH) -> tf.Tensor:
-    random_values = tf.random.normal((BATCH_SIZE, length), mean=0.0, stddev=1.0, dtype=tf.float32)
-    return tf.math.abs(random_values)
-
-def positional_encoder(length:int=CLIP_LENGTH) -> tf.Tensor:
+def random_dataset(input_sequence_length:int=CLIP_LENGTH, output_sequence_length:int=OUTPUT_SEQUENCE_LENGTH, num_sequences:int=1000) -> (np.array, np.array):
     """
-    Return a matrix of dimensions (BATCH_SIZE, length, VOLTAGE_EMBEDDING_DEPTH) where each row represents
+    Returns a tuple of NumPy arrays: (input sequence, sleep stage).
+    The give some sort of relationship between the input and output, we generate input data from a different range based on the output.
+    Dimensions:
+        -input_sequence: (num_sequences, input_sequence_length)
+        -sleep_stage: (num_sequences, output_sequence_length)
+    """
+    sleep_stage_dataset = tf.random.uniform(shape=[num_sequences], minval=1, maxval=NUM_SLEEP_STAGES-1) #Sleep stage of zero means uninitialized
+    sleep_stage_dataset = tf.math.round(sleep_stage_dataset)
+    input_dataset = tf.zeros(shape=(0, input_sequence_length))
+   
+    for sleep_stage in sleep_stage_dataset:
+        mean = (2**16-1) * sleep_stage/NUM_SLEEP_STAGES
+
+        new_input_sequence = tf.random.normal(shape=(1, input_sequence_length), mean=mean, stddev=5000)
+        new_input_sequence = tf.clip_by_value(new_input_sequence, clip_value_min=MIN_VOLTAGE, clip_value_max=MAX_VOLTAGE-1)
+        new_input_sequence = tf.round(new_input_sequence)
+        input_dataset = tf.concat([input_dataset, new_input_sequence], axis=0)
+
+    return input_dataset, sleep_stage_dataset
+
+def positional_encoder(num_clips:int=1, length:int=CLIP_LENGTH) -> tf.Tensor:
+    """
+    Return a matrix of dimensions (num_clips, length, VOLTAGE_EMBEDDING_DEPTH) where each row represents
     the position encoding for a particular position in the input sequence voltage vector.
     """
     voltage_pos = np.arange(stop=length)[:, np.newaxis]
@@ -61,7 +82,7 @@ def positional_encoder(length:int=CLIP_LENGTH) -> tf.Tensor:
     angle_matrix_rads = tf.cast(angle_matrix_rads, dtype=DATA_TYPE)
 
     angle_matrix_rads = tf.expand_dims(angle_matrix_rads, axis=0)
-    angle_matrix_rads = tf.tile(angle_matrix_rads, multiples=[BATCH_SIZE, 1, 1])
+    angle_matrix_rads = tf.tile(angle_matrix_rads, multiples=[num_clips, 1, 1])
 
     if PRINT_POSITION_EMBEDDING:
         plot_matrix_colours(angle_matrix_rads, title='Position encoding matrix', xlabel='Position in voltage embedding', ylabel='Position in voltage embedding')
@@ -84,12 +105,17 @@ def create_padding_mask(input:tf.Tensor) -> tf.Tensor:
     We ignore values in the oldest positions (lower indices)
     """
 
-    mask_keep = tf.constant(1, shape=(input.shape[1]), dtype=DATA_TYPE)
+    return tf.ones(shape=(1, CLIP_LENGTH), dtype=DATA_TYPE)
 
-    if input.shape[1] > CLIP_LENGTH: #No need to pad
+    if input.shape[0] is None: input_length = input.shape[1]
+    else: input_length = input.shape[0]
+
+    mask_keep = tf.ones(shape=(1, input_length), dtype=DATA_TYPE)
+
+    if input_length > CLIP_LENGTH: #No need to pad
         return mask_keep[0:CLIP_LENGTH]
     else:
-        return tf.concat([tf.constant(0, dtype=DATA_TYPE, shape=(CLIP_LENGTH-input.shape[1])), mask_keep], axis=0)
+        return tf.concat([tf.zeros(shape=(1, CLIP_LENGTH-input_length), dtype=DATA_TYPE), mask_keep], axis=0)
 
 def self_attention(q:tf.Tensor, k:tf.Tensor, v:tf.Tensor, mask:tf.Tensor) -> (tf.Tensor, tf.Tensor):
     """
@@ -117,10 +143,8 @@ def self_attention(q:tf.Tensor, k:tf.Tensor, v:tf.Tensor, mask:tf.Tensor) -> (tf
 class Encoder(tf.keras.layers.Layer):
     def __init__(self):
         super().__init__()
-        self.positional_encoding = positional_encoder(OUTPUT_SEQUENCE_LENGTH)
-        
         #Layers
-        self.voltage_embedding_layer = tf.keras.layers.Embedding(MAX_VOLTAGE, VOLTAGE_EMBEDDING_DEPTH)
+        self.voltage_embedding_layer = tf.keras.layers.Embedding(input_dim=MAX_VOLTAGE, output_dim=VOLTAGE_EMBEDDING_DEPTH, input_length=CLIP_LENGTH)
         self.dropout = tf.keras.layers.Dropout(rate=DROPOUT_RATE)
         self.mha = tf.keras.layers.MultiHeadAttention(num_heads=MHA_NUM_HEADS, key_dim=VOLTAGE_EMBEDDING_DEPTH, dropout=DROPOUT_RATE)
         self.norm = tf.keras.layers.LayerNormalization(epsilon=LAYER_NORM_EPSILON)
@@ -133,10 +157,12 @@ class Encoder(tf.keras.layers.Layer):
         voltage_embedding *= tf.math.sqrt(tf.cast(VOLTAGE_EMBEDDING_DEPTH, tf.float32))
 
         #2 - Positonal encoding
-        encoder_input = voltage_embedding + positional_encoder()
+        if (input.shape == (CLIP_LENGTH,)): encoder_input = voltage_embedding + positional_encoder(1, OUTPUT_SEQUENCE_LENGTH)
+        else: encoder_input = voltage_embedding + positional_encoder(input.shape[0], OUTPUT_SEQUENCE_LENGTH)
 
         #3 - [Training only] Apply dropout
-        encoder_input = self.dropout(encoder_input, training=training)
+        encoder_input = self.dropout(encoder_input, training=training) #encoder_input: (batch size, clip_length, embedding_depth)
+
 
         #4 - Run through encoder
         mha_output = self.mha(encoder_input, encoder_input, encoder_input, mask) #4.1 - Multi-head (self) attention
@@ -144,13 +170,13 @@ class Encoder(tf.keras.layers.Layer):
         fc_output = self.dense_relu(skip_mha) #4.3 - Feed MHA output to 2 Dense layers
         fc_output = self.dense(fc_output)
         fc_output = self.dropout(fc_output, training=training) #4.4 - [Training only] Apply dropout to FC
-        return self.norm(skip_mha + fc_output) #4.5 - Normalize output
+        out = self.norm(skip_mha + fc_output) #4.5 - Normalize output
+        return out #out: (batch size, clip_length, embedding_depth)
 
 #--- Decoder ---#
 class Decoder(tf.keras.layers.Layer):
     def __init__(self):
         super(Decoder, self).__init__()
-        self.positional_encoding = positional_encoder(OUTPUT_SEQUENCE_LENGTH)
         self.attention_weights = {}
 
         #Layers
@@ -166,15 +192,19 @@ class Decoder(tf.keras.layers.Layer):
         self.dense = tf.keras.layers.Dense(VOLTAGE_EMBEDDING_DEPTH)
 
     def call(self, sleep_stage:tf.Tensor, encoder_output:tf.Tensor, padding_mask:tf.Tensor, training:bool=False):
+        #sleep_stage: (batch size, output_sequence_length)
+        #encoder_output: (batch_size, input_sequence_length, embedding depth)
+
         #1 - Voltage embedding
         embedding = self.embedding_layer(sleep_stage)
         embedding *= tf.math.sqrt(tf.cast(VOLTAGE_EMBEDDING_DEPTH, tf.float32))
 
         #2 - Positonal encoding
-        decoder_input = embedding + self.positional_encoding
+        if (embedding.shape == (1,VOLTAGE_EMBEDDING_DEPTH)): decoder_input = embedding + positional_encoder(1, OUTPUT_SEQUENCE_LENGTH)
+        else: decoder_input = embedding + positional_encoder(encoder_output.shape[0], OUTPUT_SEQUENCE_LENGTH)
 
         #3 - [Training only] Apply dropout
-        decoder_input = self.dropout1(decoder_input, training=training)
+        decoder_input = self.dropout1(decoder_input, training=training) #decoder_input: (batch size, output_sequence_length, embedding_depth)
 
         #4 - Go through decoder
         mha1_output, mha1_attention_weights = self.mha1(decoder_input, decoder_input, decoder_input, None, return_attention_scores=True) #4.1 - Multi-head (self) attention
@@ -189,7 +219,7 @@ class Decoder(tf.keras.layers.Layer):
         self.attention_weights[f'decoder_layer1_block1_self_att'] = mha1_attention_weights
         self.attention_weights[f'decoder_layer1_block2_decenc_att'] = mha2_attention_weights
 
-        return decoder_output, self.attention_weights
+        return decoder_output, self.attention_weights #decoder_output: (batch size, output_sequence_length, embedding depth)
 
 #--- Transformer ---#
 class Transformer(tf.keras.Model):
@@ -198,21 +228,25 @@ class Transformer(tf.keras.Model):
         self.encoder = Encoder()
         self.decoder = Decoder()
         self.final_dense_layer = tf.keras.layers.Dense(NUM_SLEEP_STAGES, activation='softmax')
-    
-    def call(self, inputs, training:int=False):
+
+    @tf.function
+    def call(self, inputs, training):
         eeg_clip, sleep_stage = inputs
 
-        #Masks
+        eeg_clip = tf.reshape(eeg_clip, (1, CLIP_LENGTH))
+        sleep_stage = tf.reshape(sleep_stage, (1, OUTPUT_SEQUENCE_LENGTH))
+
+       #Masks
         encoder_padding_mask = create_padding_mask(eeg_clip)
         encoder_padding_mask = tf.reshape(encoder_padding_mask, (1, CLIP_LENGTH, 1))
         decoder_padding_mask = tf.constant(True, shape=(1, OUTPUT_SEQUENCE_LENGTH, 1))
 
-        encoder_output = self.encoder(eeg_clip, encoder_padding_mask, training)
+        encoder_output = self.encoder(eeg_clip, encoder_padding_mask, training)        
         sleep_stage, attention_weights = self.decoder(sleep_stage, encoder_output, padding_mask=decoder_padding_mask, training=training)
 
         final_softmax = self.final_dense_layer(sleep_stage)
 
-        return final_softmax
+        return final_softmax #final_softmax: (batch size, output_sequence_length, num_sleep_stages+1)
 
 #--- Learning rate schedule ---#
 class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
@@ -229,16 +263,57 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
 
     return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
 
+#--- Loss and Accuracy ---#
+def masked_loss(label, pred):
+  mask = label != 0
+  loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False, reduction='none')
+  loss = loss_object(label, pred)
+
+  mask = tf.cast(mask, dtype=loss.dtype)
+  loss *= mask
+
+  loss = tf.reduce_sum(loss)/tf.reduce_sum(mask)
+  return loss
+
+def masked_accuracy(label, pred):
+  pred = tf.argmax(pred, axis=2)
+  label = tf.cast(label, pred.dtype)
+  match = label == pred
+
+  mask = label != 0
+
+  match = match & mask
+
+  match = tf.cast(match, dtype=tf.float32)
+  mask = tf.cast(mask, dtype=tf.float32)
+  return tf.reduce_sum(match)/tf.reduce_sum(mask)
+
 def main():
-    eeg_clip_batch = random_input_batch()
-    sleep_stage = tf.zeros((OUTPUT_SEQUENCE_LENGTH, 1))
+    x_train, y_train = random_dataset(num_sequences=500)
+    x_val, y_val = random_dataset(num_sequences=100)
+    x_test, y_test = random_dataset(num_sequences=100)
+
+    y_uninitialized = tf.zeros(shape=[500])
 
     model = Transformer()
-    output = model((eeg_clip_batch, sleep_stage))
-    model.summary()
-    
-    #Training
-    optimizer = tf.keras.optimizers.Adam(CustomSchedule(), beta_1=0.9, beta_2=0.98, epsilon=1e-9)
+
+    model.compile(
+        loss=masked_loss,
+        optimizer=tf.keras.optimizers.Adam(CustomSchedule(), beta_1=0.9, beta_2=0.98, epsilon=1e-9),
+        metrics=[masked_accuracy]
+    )
+
+    model.fit(x=(x_train, y_uninitialized), y=y_train, epochs=2, batch_size=1, validation_split=0.1)
+
+    #Manual validation
+    total_correct = 0
+    total = 0
+
+    for x,y in zip(x_test, y_test):
+        sleep_stage = model.call(inputs=(x, tf.zeros(shape=[1])), training=False)
+        total += 1
+        if (tf.argmax(sleep_stage[0][0]) == tf.cast(y, dtype=tf.int64)): total_correct += 1
+        print(f"Ground truth: {y}, sleep stage pred: {tf.argmax(sleep_stage[0][0])}, accuracy: {total_correct/total:.4f}")
 
 if __name__ == "__main__":
     main()
