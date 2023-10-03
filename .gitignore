@@ -23,3 +23,6 @@ latex/proposal/proposal.fls
 latex/proposal/proposal.log
 latex/proposal/proposal.run.xml
 latex/proposal/proposal.synctex.gz
+
+### Tensforflow
+python_prototype/*.out

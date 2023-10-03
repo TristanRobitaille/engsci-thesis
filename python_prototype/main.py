@@ -4,7 +4,6 @@ Python prototype of transdformer model
 
 import tensorflow as tf
 import numpy as np
-import matplotlib.pyplot as plt
 
 #TODO
 #-Consider using multiple encoder and decoder layers
@@ -33,6 +32,9 @@ DROPOUT_RATE = 0.1
 
 PRINT_POSITION_EMBEDDING = False
 PRINT_SELF_ATTENTION = False
+
+if PRINT_POSITION_EMBEDDING or PRINT_SELF_ATTENTION:
+    import matplotlib.pyplot as plt
 
 #--- Helpers ---#
 def plot_matrix_colours(matrix, title:str, xlabel:str="X", ylabel:str="Y", block_execution:bool=True) -> None:
