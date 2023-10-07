@@ -2,6 +2,9 @@
 Python prototype of transdformer model
 """
 
+import os
+import datetime
+import pkg_resources
 import tensorflow as tf
 import numpy as np
 
@@ -9,6 +12,7 @@ import numpy as np
 #-Consider using multiple encoder and decoder layers
 #-Proper masking and padding
 #-Fix batch sizes
+#-No global constants; pass in parameters instead
 
 #--- Notes ---#
 #Assume input data is a single sequential vector of voltages: x = [x0, x1, ... , xn] (can augment to multichannel later)
@@ -16,7 +20,7 @@ import numpy as np
 #There are only a few sleep stage classes, and y = [sleep stage for given clip]
 
 #--- Constants and Hyperparameters ---#
-CLIP_LENGTH = int(3840/4) #Number of voltage samples @ 256Hz -> 30s clips
+CLIP_LENGTH = int(7680) #Number of voltage samples @ 256Hz -> 30s clips
 OUTPUT_SEQUENCE_LENGTH = 1
 MIN_VOLTAGE = 0
 MAX_VOLTAGE = 2**16-1 #Maximum ADC code output
@@ -24,7 +28,7 @@ NUM_SLEEP_STAGES = 5 + 1 #5 stages + unknown
 DATA_TYPE = tf.float32
 
 VOLTAGE_EMBEDDING_DEPTH = 32 #Length of voltage embedding vector for each timestep. I let model dimensionality = embedding depth
-BATCH_SIZE = 16
+BATCH_SIZE = 1
 FULLY_CONNECTED_DIM = 64
 MHA_NUM_HEADS = 8
 LAYER_NORM_EPSILON = 0.5
@@ -46,7 +50,7 @@ def plot_matrix_colours(matrix, title:str, xlabel:str="X", ylabel:str="Y", block
     plt.colorbar()
     plt.show(block=block_execution)
 
-def random_dataset(input_sequence_length:int=CLIP_LENGTH, output_sequence_length:int=OUTPUT_SEQUENCE_LENGTH, num_sequences:int=1000) -> (np.array, np.array):
+def random_dataset(input_sequence_length:int=CLIP_LENGTH, output_sequence_length:int=OUTPUT_SEQUENCE_LENGTH, num_sequences:int=1000) -> (tf.Tensor, tf.Tensor):
     """
     Returns a tuple of NumPy arrays: (input sequence, sleep stage).
     The give some sort of relationship between the input and output, we generate input data from a different range based on the output.
@@ -291,21 +295,41 @@ def masked_accuracy(label, pred):
   return tf.reduce_sum(match)/tf.reduce_sum(mask)
 
 def main():
-    x_train, y_train = random_dataset(num_sequences=500)
-    x_val, y_val = random_dataset(num_sequences=100)
-    x_test, y_test = random_dataset(num_sequences=100)
+    # Load data
+    if (pkg_resources.get_distribution("tensorflow").version == "2.8.0+computecanada"):
+        data = tf.data.experimental.load(os.getcwd() + '/SS3_EDF_Tensorized')
+    else:
+        data = tf.data.Dataset.load(os.getcwd() + '/SS3_EDF_Tensorized')
+    iterator = iter(data)
+    x, y, z = next(iterator)
 
-    y_uninitialized = tf.zeros(shape=[500])
+    x = x[0:4999]
+    y = y[0:4999]
 
+    x = tf.cast(x, dtype=DATA_TYPE)
+    y = tf.cast(y, dtype=DATA_TYPE)
+
+    clip_train_cutoff = int(0.95*x.shape[0])
+    x_train = x[0:clip_train_cutoff, 0, :]
+    y_train = y[0:clip_train_cutoff:, 0, :]
+    x_test = x[clip_train_cutoff:-1, 0, :]
+    y_test = y[clip_train_cutoff:-1:, 0, :]
+
+    y_uninitialized = tf.zeros(shape=[x_train.shape[0]])
+
+    # Model
     model = Transformer()
-
     model.compile(
         loss=masked_loss,
         optimizer=tf.keras.optimizers.Adam(CustomSchedule(), beta_1=0.9, beta_2=0.98, epsilon=1e-9),
         metrics=[masked_accuracy]
     )
 
-    model.fit(x=(x_train, y_uninitialized), y=y_train, epochs=2, batch_size=1, validation_split=0.1)
+    log_dir = "logs/fit/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
+
+    model.fit(x=(x_train, y_uninitialized), y=y_train, epochs=20, batch_size=1,
+              validation_split=0.1, callbacks=[tensorboard_callback])
 
     #Manual validation
     total_correct = 0

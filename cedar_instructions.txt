@@ -1,0 +1,25 @@
+Execution instructions for Tensorflow model on Compute Canada Cedar:
+1) $ cd ~/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype
+2) $ module load python/3
+3) $ source ~/tensorflow/bin/activate
+4) $ sbatch run_{python-script}.sh
+
+Or, three first steps:
+cd ~/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype ; module load python/3 ; source ~/tensorflow/bin/activate
+
+A .out log file will be created in the current directory (but are .gitignore'd)
+
+More details: https://docs.alliancecan.ca/wiki/TensorFlow
+
+For TensorBoard monitoring:
+1) $ sbatch run_tf_proto.sh
+2) $ sq
+3) Find hostname of compute node running the job in the 'NODELIST' column
+4) On local machine, $ sudo ssh -N -f -L localhost:6006:computenode:6006 tristanr@cedar.computecanada.ca
+    -Replace 'computenode' with the hostnname from step 3
+    -Note that 6006 could be different (6007, 6008, ...) if 6006 was already in use
+5) Go to http://localhost:6006/ on local machine for Tensorboard
+
+Other
+-View current jobs: $ sq
+-Cancel job: $ scancel <NODEID>
