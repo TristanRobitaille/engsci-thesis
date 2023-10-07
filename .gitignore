@@ -26,3 +26,5 @@ latex/proposal/proposal.synctex.gz
 
 ### Tensforflow
 python_prototype/*.out
+python_prototype/log*
+python_prototype/data*
