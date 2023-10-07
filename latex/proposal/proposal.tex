@@ -33,7 +33,10 @@ custom neuromodulation hardware.
 Thus, the objective of this thesis is to demonstrate the superiority of a hardware implementation of an AI model compared to state-of-the-art SSD methods. The proposed solution should match or exceed the accuracy of traditional polysomnography and published models in the literature while consuming less power than the currently available commercial hardware solutions.
 
 \section{Methodology}
-To achieve the aforementioned objectives, a three-step plan is proposed. First, a prototype Python model will be developed, trained, evaluated and optimized until its accuracy surpasses existing solutions and size cannot be reduced further. Then, this model will be translated into C. Finally, the model and associated system architecture will be designed, implemented on FPGA, benchmarked and continuously optimized for low power consumption and area. Most of the effort of this project will be spent on architectural optimizations. This high- to low-level approach will provide gradually increasing exposure to the computations involved and opportunities for design improvements while still providing relatively rapid debugging and optimization cycles. This final model will be benchmarked against published research and an equivalent model running on Google Coral.
+To achieve the aforementioned objectives, a three-step plan is proposed. First, a prototype Python model will be developed, trained, evaluated and optimized until its accuracy surpasses existing solutions and size cannot be reduced further. Then, this model will be translated into C.
+Finally, the model and associated system architecture will be designed, implemented on FPGA, benchmarked and continuously optimized for low power consumption and area.
+Most of the effort of this project will be spent on architectural optimizations. This high- to low-level approach will provide gradually increasing exposure to the computations involved and opportunities for design improvements while still providing relatively rapid debugging and optimization cycles.
+This final model will be benchmarked against published research and an equivalent model running on Google Coral.
 
 % Bibliography
 \newpage
