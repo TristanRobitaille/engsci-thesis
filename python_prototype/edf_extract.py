@@ -1,5 +1,10 @@
 """
 Methods to extract data from EDF files
+
+CLI arguments:
+-clip_length: Clip length (in sec). Must be one of 3.25, 5, 7.5, 10, 15, 30. Default is 30s.
+-directory: Directory from which to fetch EDF files. Searches current workding directory by default. Default is current directory.
+-num_files: Number of files to parse. Parsed in alphabetical order. Defaults is 10 files.
 """
 
 from pyedflib import EdfReader
@@ -8,11 +13,12 @@ from os import getcwd, path
 from glob import glob
 from pathlib import Path
 from tensorflow import Tensor, DType, float32, uint16
-from tensorflow import convert_to_tensor, zeros, concat, reshape, ones, expand_dims, add, reduce_min, reduce_max, cast
+from tensorflow import convert_to_tensor, zeros, concat, reshape, expand_dims, cast, convert_to_tensor
 from tensorflow import data
 from typing import List
+from argparse import ArgumentParser
 
-CLIP_DURATION_SEC = 30.0 #Length or each clip/sleep stage annotation
+SLEEP_STAGE_RESOLUTION_SEC = 30.0 #Nominal (i.e. in EDF file) length or each clip/sleep stage annotation
 
 def signals_processing(signals:Tensor) -> Tensor:
     """
@@ -23,7 +29,7 @@ def signals_processing(signals:Tensor) -> Tensor:
     signals += cast(2**15, dtype=signals.dtype)
     return signals
 
-def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels_to_read:List[str], clip_duration_sec:float32=CLIP_DURATION_SEC, data_type:DType=float32) -> (Tensor, Tensor, List[str]):
+def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels_to_read:List[str], clip_duration_sec:float32=SLEEP_STAGE_RESOLUTION_SEC, data_type:DType=float32) -> (Tensor, Tensor, List[str]):
     """
     Returns a tuple of tensors and list with each channel cut into clips: (signals_tensor, sleep_stage_tensor, channel_names_list) Measurements are converted into their digital ADC code, and cast to data_type.
 
@@ -49,14 +55,15 @@ def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels
                                      "Sleep stage W": 5}
 
     # Load data
+    ratio_sleep_stage_resolution_to_clip_length = int(SLEEP_STAGE_RESOLUTION_SEC/clip_duration_sec)
     signal_reader = EdfReader(psg_filepath)
-    sleep_stages  = EdfReader(annotations_filepath).readAnnotations()[SLEEP_STAGE_ANNOTATONS_CHANNEL]
+    sleep_stages  = list(EdfReader(annotations_filepath).readAnnotations()[SLEEP_STAGE_ANNOTATONS_CHANNEL])
     channel_labels = list(signal_reader.getSignalLabels())
 
     clip_duration_samples = int(clip_duration_sec * signal_reader.getSampleFrequency(0)) #Duration of a clip in number of samples
     recording_duration_s = signal_reader.getFileDuration()
 
-    number_clips = min(int(recording_duration_s // clip_duration_sec), len(sleep_stages)) #Sometimes number of sleep stages in Base file and clips in PSG file don't match
+    number_clips = min(int(recording_duration_s // clip_duration_sec), int(len(sleep_stages)*ratio_sleep_stage_resolution_to_clip_length)) #Sometimes number of sleep stages in Base file and clips in PSG file don't match
     if number_clips == 0: raise Exception(f"Insufficient data in file ({psg_filepath})! File duration: {recording_duration_s}s.")
 
     valid_clips = list(range(number_clips)) #Clips are invalid when their sleep stage is unknown
@@ -65,16 +72,17 @@ def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels
     channel_names_list = []
     output_tensor = zeros(shape=(1, 0, clip_duration_samples), dtype=data_type)
 
-    # Sleep stages
-    sleep_stage_tensor = zeros(shape=(0,1), dtype=data_type)
-    for clip_number in range(number_clips): #Iterate over each clip in the signal
-        if sleep_stages[clip_number] == sleep_stage_unknown:
-            valid_clips.remove(clip_number)
+    # Prune unknown sleep stages and construct list of valid clip numbers
+    for sleep_stage_number in range(len(sleep_stages)):
+        if sleep_stages[sleep_stage_number] == sleep_stage_unknown:
+            for i in range(ratio_sleep_stage_resolution_to_clip_length):
+                valid_clips.remove(ratio_sleep_stage_resolution_to_clip_length*sleep_stage_number + i)
             continue
-
-        sleep_stage = sleep_stage_annotation_to_int[sleep_stages[clip_number]]
-        sleep_stage = sleep_stage * ones(shape=(1,1), dtype=data_type)
-        sleep_stage_tensor = concat([sleep_stage_tensor, sleep_stage], axis=0) #Stack vertically
+        
+    sleep_stages = [sleep_stage_annotation_to_int[item] for item in sleep_stages if item != sleep_stage_unknown] #Convert to int and prune unknown values
+    sleep_stages = [item for item in sleep_stages for _ in range(ratio_sleep_stage_resolution_to_clip_length)]
+    sleep_stage_tensor = convert_to_tensor(sleep_stages, dtype=data_type)
+    sleep_stage_tensor = reshape(sleep_stage_tensor, shape=(sleep_stage_tensor.shape[0], 1, 1))
 
     # Measurements
     first_channel = 1
@@ -104,14 +112,11 @@ def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels
             first_channel = 0
         output_tensor = concat([output_tensor, signal_tensor], axis=1) #Stack horizontally with output tensor
 
-    # Processing
-    sleep_stage_tensor = expand_dims(sleep_stage_tensor, axis=1)
-
     return (output_tensor, sleep_stage_tensor, channel_names_list)
 
-def read_all_nights_from_directory(directory_filepath:str, channels_to_read:List[str], num_files:int=-1, clip_duration_sec:float32=CLIP_DURATION_SEC, data_type:DType=float32) -> (Tensor, Tensor, List[str]):
+def read_all_nights_from_directory(directory_filepath:str, channels_to_read:List[str], num_files:int=-1, clip_duration_sec:float32=SLEEP_STAGE_RESOLUTION_SEC, data_type:DType=float32) -> (Tensor, Tensor, List[str], int):
     """
-    Calls read_single_whole_night() for all files in folder and returns concatenated versions of each output tensor
+    Calls read_single_whole_night() for all files in folder and returns concatenated versions of each output tensor along with a success flag
 
     Dimensions:
         -signals_tensor: (total_num_clips, num_channels, num_samples_per_clip)
@@ -125,6 +130,9 @@ def read_all_nights_from_directory(directory_filepath:str, channels_to_read:List
         -All PSG files have the same number of channels
     """
     PSG_file_list = glob(path.join(directory_filepath, "*PSG.edf"))
+    if len(PSG_file_list) == 0:
+        print(f"No valid PSG (*PSG.edf) files found in search directory ({directory_filepath})!")
+        return 0, 0, 0, -1
 
     output_signals_tensor = zeros(shape=(0, 0, 0), dtype=data_type)
     output_sleep_stages = zeros(shape=(0, 0, 0), dtype=data_type)
@@ -153,24 +161,37 @@ def read_all_nights_from_directory(directory_filepath:str, channels_to_read:List
             if file_cnt == num_files:
                 break
 
-    return output_signals_tensor, output_sleep_stages, signal_channel_names
+    return output_signals_tensor, output_sleep_stages, signal_channel_names, 0
 
 def main():
-    channels_to_read = ["EEG F4-LER", "EOG Upper Vertic", "EMG Chin"]
-    num_files = 10
-    PSG_dir = "/home/tristanr/projects/def-xilinliu/data/SS3_EDF"
+    # Parser
+    parser = ArgumentParser(description='Script to extract data from EDF files and export to a Tensorflow dataset.')
+    parser.add_argument('--clip_length', help='Clip length (in sec). Must be one of 3.25, 5, 7.5, 10, 15, 30.', default='30')
+    parser.add_argument('--directory', help='Directory from which to fetch EDF files. Searches current workding directory by default.', default="")
+    parser.add_argument('--num_files', help='Number of files to parse. Parsed in alphabetical order. Defaults to 10 files.', default=10)
 
-    output_signals_tensor, output_sleep_stages, signal_channel_names = read_all_nights_from_directory(PSG_dir, channels_to_read=channels_to_read, num_files=num_files, data_type=uint16)
+    args = parser.parse_args()
+    if not float(args.clip_length) in [3.25, 7.5, 15, 30]:
+        print(f"Requested clip length ({float(args.clip_length):.2f}) not one of [3.25, 5, 7.5, 10, 15, 30]. Exiting program.")
+        return 
+
+    # Load data
+    channels_to_read = ["EEG F4-LER", "EOG Upper Vertic", "EMG Chin"]
+    if args.directory == "": directory = getcwd()
+    else: directory = args.directory
+
+    output_signals_tensor, output_sleep_stages, signal_channel_names, return_code = read_all_nights_from_directory(directory, channels_to_read=channels_to_read, num_files=int(args.num_files), clip_duration_sec=float(args.clip_length), data_type=uint16)
 
     # Create and save dataset
-    ds = data.Dataset.from_tensors((output_signals_tensor, output_sleep_stages, signal_channel_names))
+    if return_code == 0:
+        ds = data.Dataset.from_tensors((output_signals_tensor, output_sleep_stages, signal_channel_names))
 
-    if get_distribution("tensorflow").version == '2.8.0+computecanada': #Tensorflow 2.8.0 does not support .save()
-        data.experimental.save(ds, compression=None, path="SS3_EDF_Tensorized")
-    else:
-        data.Dataset.save(ds, compression=None, path="SS3_EDF_Tensorized")
+        if get_distribution("tensorflow").version == '2.8.0+computecanada': #Tensorflow 2.8.0 does not support .save()
+            data.experimental.save(ds, compression=None, path=f"SS3_EDF_Tensorized_{args.clip_length}s")
+        else:
+            data.Dataset.save(ds, compression=None, path=f"SS3_EDF_Tensorized_{args.clip_length}s")
 
-    print(f"Dataset saved at: {getcwd() + 'SS3_EDF_Tensorized'}")
+        print(f"Dataset saved at: {getcwd() + '/SS3_EDF_Tensorized'}_{args.clip_length}s")
 
 if __name__ == "__main__":
     main()
