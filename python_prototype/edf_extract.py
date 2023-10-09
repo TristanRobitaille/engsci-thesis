@@ -1,17 +1,16 @@
 """
 Methods to extract data from EDF files
 
-CLI arguments:
--clip_length: Clip length (in sec). Must be one of 3.25, 5, 7.5, 10, 15, 30. Default is 30s.
--directory: Directory from which to fetch EDF files. Searches current workding directory by default. Default is current directory.
--num_files: Number of files to parse. Parsed in alphabetical order. Defaults is 10 files.
+Arguments:
+    --clip_length_s: Clip length (in sec). Must be one of 3.25, 5, 7.5, 10, 15, 30. Default = 30s.
+    --directory: Directory from which to fetch EDF files. Searches current workding directory by default. Default = current directory.
+    --num_files: Number of files to parse. Parsed in alphabetical order. Defaults = 10 files.
 """
 
 from pyedflib import EdfReader
 from pkg_resources import get_distribution
 from os import getcwd, path
 from glob import glob
-from pathlib import Path
 from tensorflow import Tensor, DType, float32, uint16
 from tensorflow import convert_to_tensor, zeros, concat, reshape, expand_dims, cast, convert_to_tensor
 from tensorflow import data
@@ -19,6 +18,7 @@ from typing import List
 from argparse import ArgumentParser
 
 SLEEP_STAGE_RESOLUTION_SEC = 30.0 #Nominal (i.e. in EDF file) length or each clip/sleep stage annotation
+NOMINAL_FREQUENCY_HZ = 256 #Sampling frequency for most channels
 
 def signals_processing(signals:Tensor) -> Tensor:
     """
@@ -47,12 +47,13 @@ def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels
     SLEEP_STAGE_ANNOTATONS_CHANNEL = 2 #Channel of sleep stages in annotations file
 
     sleep_stage_unknown = "Sleep stage ?"
-    sleep_stage_annotation_to_int = { #Note: Stages 1 and 2 are combined
-                                     "Sleep stage 1": 2,
+    sleep_stage_annotation_to_int = { #Note: Stages 3 and 4 are combined and '0' is reserved to be a padding mask
+                                     "Sleep stage 1": 1,
                                      "Sleep stage 2": 2,
                                      "Sleep stage 3": 3,
+                                     "Sleep stage 4": 3,
                                      "Sleep stage R": 4,
-                                     "Sleep stage W": 5}
+                                     "Sleep stage W": 5,}
 
     # Load data
     ratio_sleep_stage_resolution_to_clip_length = int(SLEEP_STAGE_RESOLUTION_SEC/clip_duration_sec)
@@ -88,11 +89,13 @@ def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels
     first_channel = 1
     for channel_name in channels_to_read: #Iterate over each signal in measurement file
         if channel_name not in channel_labels:
+            print(f"Requested channel ({channel_name}) not in available channels!")
             continue
 
         channel_number = channel_labels.index(channel_name)
 
-        if (signal_reader.getSampleFrequency(channel_number) != signal_reader.getSampleFrequency(0)): #Simply skip if channel frequency doesn't match others
+        if (signal_reader.getSampleFrequency(channel_number) != NOMINAL_FREQUENCY_HZ): #Simply skip if channel frequency doesn't match others
+            print(f"Sampling frequency ({signal_reader.getSampleFrequency(channel_number)}Hz) for channel '{channel_name}' does not match nominal frequency ({NOMINAL_FREQUENCY_HZ}Hz)!")
             continue
 
         signal_tensor = zeros(shape=(0, clip_duration_samples), dtype=data_type)
@@ -166,32 +169,34 @@ def read_all_nights_from_directory(directory_filepath:str, channels_to_read:List
 def main():
     # Parser
     parser = ArgumentParser(description='Script to extract data from EDF files and export to a Tensorflow dataset.')
-    parser.add_argument('--clip_length', help='Clip length (in sec). Must be one of 3.25, 5, 7.5, 10, 15, 30.', default='30')
+    parser.add_argument('--clip_length_s', help='Clip length (in sec). Must be one of 3.25, 5, 7.5, 10, 15, 30.', default='30')
     parser.add_argument('--directory', help='Directory from which to fetch EDF files. Searches current workding directory by default.', default="")
     parser.add_argument('--num_files', help='Number of files to parse. Parsed in alphabetical order. Defaults to 10 files.', default=10)
-
     args = parser.parse_args()
-    if not float(args.clip_length) in [3.25, 7.5, 15, 30]:
-        print(f"Requested clip length ({float(args.clip_length):.2f}) not one of [3.25, 5, 7.5, 10, 15, 30]. Exiting program.")
+
+    if not float(args.clip_length_s) in [3.25, 7.5, 15, 30]:
+        print(f"Requested clip length ({float(args.clip_length_s):.2f}) not one of [3.25, 5, 7.5, 10, 15, 30]. Exiting program.")
         return 
 
     # Load data
-    channels_to_read = ["EEG F4-LER", "EOG Upper Vertic", "EMG Chin"]
+    channels_to_read = ["EEG F4-LER", "EEG P4-LER", "EEG A2-LER"]
     if args.directory == "": directory = getcwd()
     else: directory = args.directory
 
-    output_signals_tensor, output_sleep_stages, signal_channel_names, return_code = read_all_nights_from_directory(directory, channels_to_read=channels_to_read, num_files=int(args.num_files), clip_duration_sec=float(args.clip_length), data_type=uint16)
+    output_signals_tensor, output_sleep_stages, signal_channel_names, return_code = read_all_nights_from_directory(directory, channels_to_read=channels_to_read, num_files=int(args.num_files), clip_duration_sec=float(args.clip_length_s), data_type=uint16)
 
     # Create and save dataset
     if return_code == 0:
         ds = data.Dataset.from_tensors((output_signals_tensor, output_sleep_stages, signal_channel_names))
+        ds_filepath = f"/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/SS3_EDF_Tensorized_{args.clip_length_s}s"
+        ds_filepath = ds_filepath.replace('.', '-')
 
         if get_distribution("tensorflow").version == '2.8.0+computecanada': #Tensorflow 2.8.0 does not support .save()
-            data.experimental.save(ds, compression=None, path=f"SS3_EDF_Tensorized_{args.clip_length}s")
+            data.experimental.save(ds, compression=None, path=ds_filepath)
         else:
-            data.Dataset.save(ds, compression=None, path=f"SS3_EDF_Tensorized_{args.clip_length}s")
+            data.Dataset.save(ds, compression=None, path=ds_filepath)
 
-        print(f"Dataset saved at: {getcwd() + '/SS3_EDF_Tensorized'}_{args.clip_length}s")
+        print(f"Dataset saved at: {getcwd()}/{ds_filepath}")
 
 if __name__ == "__main__":
     main()
