@@ -7,4 +7,4 @@
 
 module load cuda cudnn 
 source ~/tensorflow/bin/activate
-python edf_extract.py
+python edf_extract.py --directory /home/tristanr/projects/def-xilinliu/data/SS3_EDF --clip_length_s 7.5 --num_files 3

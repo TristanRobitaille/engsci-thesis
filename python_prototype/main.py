@@ -34,6 +34,9 @@ MIN_VOLTAGE = 0
 MAX_VOLTAGE = 2**16-1 #Maximum ADC code output
 NUM_SLEEP_STAGES = 5 #Excludes 'unknown'
 DATA_TYPE = tf.float32
+USE_HISTORICAL_LOOKBACK = False
+HISTORICAL_LOOKBACK_LENGTH = 8
+NUM_EPOCHS = 10
 
 VOLTAGE_EMBEDDING_DEPTH = 32 #Length of voltage embedding vector for each timestep. I let model dimensionality = embedding depth
 BATCH_SIZE = 1
@@ -44,6 +47,7 @@ DROPOUT_RATE = 0.1
 
 PRINT_POSITION_EMBEDDING = False
 PRINT_SELF_ATTENTION = False
+VERBOSITY = 'NORMAL' #'QUIET', 'NORMAL', 'DETAILED'
 
 if PRINT_POSITION_EMBEDDING or PRINT_SELF_ATTENTION:
     import matplotlib.pyplot as plt
@@ -113,23 +117,14 @@ def positional_encoder(sequence_length:int, batch_size:int=1) -> tf.Tensor:
 
     return angle_matrix_rads
 
-def create_padding_mask(input:tf.Tensor, length:int) -> tf.Tensor:
+def maskify(input:tf.Tensor) -> tf.Tensor:
     """
-    Returns a mask to avoid attending to padded values (if input sequence is too short). 1 to attend, 0 to ignore.
-    We ignore values in the oldest positions (lower indices).
+    Returns a Tensor of boolean values of the same shape as input, where an element is 
+    False if the corresponding input element is 0, else is True.
     """
+    nonzero_mask = tf.math.not_equal(input, 0)
 
-    return tf.ones(shape=(1, length), dtype=DATA_TYPE)
-
-    if input.shape[0] is None: input_length = input.shape[1]
-    else: input_length = input.shape[0]
-
-    mask_keep = tf.ones(shape=(1, input_length), dtype=DATA_TYPE)
-
-    if input_length > CLIP_LENGTH: #No need to pad
-        return mask_keep[0:CLIP_LENGTH]
-    else:
-        return tf.concat([tf.zeros(shape=(1, CLIP_LENGTH-input_length), dtype=DATA_TYPE), mask_keep], axis=0)
+    return tf.cast(nonzero_mask, tf.bool)
 
 def self_attention(q:tf.Tensor, k:tf.Tensor, v:tf.Tensor, mask:tf.Tensor) -> (tf.Tensor, tf.Tensor):
     """
@@ -166,7 +161,7 @@ class Encoder(tf.keras.layers.Layer):
         self.dense_relu = tf.keras.layers.Dense(FULLY_CONNECTED_DIM, activation='relu')
         self.dense = tf.keras.layers.Dense(VOLTAGE_EMBEDDING_DEPTH)
 
-    def call(self, input:tf.Tensor, mask:tf.Tensor, training:bool=False):
+    def call(self, input:tf.Tensor, training:bool=False):
         #1 - Voltage embedding
         voltage_embedding = self.voltage_embedding_layer(input)
         voltage_embedding *= tf.math.sqrt(tf.cast(VOLTAGE_EMBEDDING_DEPTH, tf.float32))
@@ -178,7 +173,7 @@ class Encoder(tf.keras.layers.Layer):
         encoder_input = self.dropout(encoder_input, training=training) #encoder_input: (batch size, clip_length, embedding_depth)
 
         #4 - Run through encoder
-        mha_output = self.mha(encoder_input, encoder_input, encoder_input, mask) #4.1 - Multi-head (self) attention
+        mha_output = self.mha(encoder_input, encoder_input, encoder_input, attention_mask=tf.ones(shape=input.shape, dtype=input.dtype)) #4.1 - Multi-head (self) attention
         skip_mha = self.norm(encoder_input + mha_output) #4.2 - Skip connection to Add & Norm
         fc_output = self.dense_relu(skip_mha) #4.3 - Feed MHA output to 2 Dense layers
         fc_output = self.dense(fc_output)
@@ -220,9 +215,11 @@ class Decoder(tf.keras.layers.Layer):
         decoder_input = self.dropout1(decoder_input, training=training) #decoder_input: (batch size, output_sequence_length, embedding_depth)
 
         #4 - Go through decoder
-        mha1_output, mha1_attention_weights = self.mha1(decoder_input, decoder_input, decoder_input, None, return_attention_scores=True) #4.1 - Multi-head (self) attention
+        #TODO: mask here
+        mha1_output, mha1_attention_weights = self.mha1(decoder_input, decoder_input, decoder_input, attention_mask=padding_mask, return_attention_scores=True) #4.1 - Multi-head (self) attention
         skip_mha1 = self.norm1(sleep_stage + mha1_output) #4.2 - Skip connection to Add & Norm
-        mha2_output, mha2_attention_weights = self.mha2(skip_mha1, encoder_output, encoder_output, padding_mask, return_attention_scores=True) #4.3 - Multi-head attention with encoder output
+        #TODO what mask should go here?
+        mha2_output, mha2_attention_weights = self.mha2(skip_mha1, encoder_output, encoder_output, attention_mask=None, return_attention_scores=True) #4.3 - Multi-head attention with encoder output
         skip_mha2 = self.norm2(skip_mha1 + mha2_output) #4.4 - Skip connection to Add & Norm
         fc_output = self.dense_relu(skip_mha2) #4.5 - Feed MHA output to 2 Dense layers
         fc_output = self.dense(fc_output)
@@ -245,19 +242,22 @@ class Transformer(tf.keras.Model):
 
     @tf.function
     def call(self, inputs, training):
-        #eeg_clip = (batch_size, )
-        #sleep_stage = (batch_size, 1, 1)
+        #eeg_clip = (batch_size, num_samples_per_clip)
+        #sleep_stage = (batch_size, 1)
         eeg_clip, sleep_stage = inputs
+
+        print(eeg_clip)
+        print(sleep_stage)
 
         eeg_clip = tf.reshape(eeg_clip, (1, self.clip_length))
         sleep_stage = tf.reshape(sleep_stage, (1, OUTPUT_SEQUENCE_LENGTH))
 
-        #Masks
-        encoder_padding_mask = create_padding_mask(eeg_clip, self.clip_length)
-        encoder_padding_mask = tf.reshape(encoder_padding_mask, (1, self.clip_length, 1))
-        decoder_padding_mask = tf.constant(True, shape=(1, OUTPUT_SEQUENCE_LENGTH, 1))
+        #Masks #TODO: Fix this
+        decoder_padding_mask = maskify(sleep_stage)
+        decoder_padding_mask = tf.expand_dims(decoder_padding_mask, axis=1)
+        # decoder_padding_mask = tf.constant(True, shape=(1, OUTPUT_SEQUENCE_LENGTH, 1))
 
-        encoder_output = self.encoder(eeg_clip, encoder_padding_mask, training)        
+        encoder_output = self.encoder(eeg_clip, training)        
         sleep_stage, attention_weights = self.decoder(sleep_stage, encoder_output, padding_mask=decoder_padding_mask, training=training)
 
         #TODO: Should I 'mask' the first class here (set to -inf) since it is reserved and we want a probability of zero there always?
@@ -326,6 +326,9 @@ def main():
     else:
         data = tf.data.Dataset.load(args.input_dataset)
     iterator = iter(data)
+
+    #x -> (num_clips, num_channels, num_samples_per_clips)
+    #y -> (num_clips, 1, historical_lookback_length)
     x, y, z = next(iterator)
 
     if int(args.num_training_clips) < (x.shape[0] + 1):
@@ -337,9 +340,14 @@ def main():
 
     clip_train_cutoff = int(0.95*x.shape[0])
     x_train = x[0:clip_train_cutoff, 0, :]
-    y_train = y[0:clip_train_cutoff:, 0, :]
     x_test = x[clip_train_cutoff:-1, 0, :]
-    y_test = y[clip_train_cutoff:-1:, 0, :]
+
+    if (USE_HISTORICAL_LOOKBACK):
+        y_train = y[0:clip_train_cutoff:, 0, 0:HISTORICAL_LOOKBACK_LENGTH]
+        y_test = y[clip_train_cutoff:-1:, 0, 0:HISTORICAL_LOOKBACK_LENGTH]
+    else:
+        y_train = y[0:clip_train_cutoff:, 0, 0]
+        y_test = y[clip_train_cutoff:-1:, 0, 0]
 
     y_uninitialized = tf.zeros(shape=[x_train.shape[0]])
 
@@ -354,7 +362,7 @@ def main():
     tensorboard_log_dir = "logs/fit/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=tensorboard_log_dir, histogram_freq=1)
 
-    model.fit(x=(x_train, y_uninitialized), y=y_train, epochs=2,
+    model.fit(x=(x_train, y_uninitialized), y=y_train, epochs=NUM_EPOCHS,
               batch_size=BATCH_SIZE, callbacks=[tensorboard_callback])
 
     #Manual validation
@@ -362,10 +370,13 @@ def main():
     total = 0
 
     for x,y in zip(x_test, y_test):
-        sleep_stage = model.call(inputs=(x, tf.zeros(shape=[1])), training=False)
+        print(x.shape)
+        print(y.shape)
+        y_uninitialized = tf.zeros(shape=[1])
+        sleep_stage = model.call(inputs=(x, y_uninitialized), training=False)
         total += 1
         if (tf.argmax(sleep_stage[0][0]) == tf.cast(y, dtype=tf.int64)): total_correct += 1
-        print(f"Ground truth: {y}, sleep stage pred: {tf.argmax(sleep_stage[0][0])}, accuracy: {total_correct/total:.4f}")
+        if VERBOSITY == 'DETAILED': print(f"Ground truth: {y}, sleep stage pred: {tf.argmax(sleep_stage[0][0])}, accuracy: {total_correct/total:.4f}")
 
     #Save accuracy and model details to log file
     with Capturing() as model_summary:

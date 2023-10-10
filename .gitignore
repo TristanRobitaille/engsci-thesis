@@ -28,3 +28,5 @@ latex/proposal/proposal.synctex.gz
 python_prototype/*.out
 python_prototype/log*
 python_prototype/data*
+python_prototype/results/*
+python_prototype/SS3_EDF_*

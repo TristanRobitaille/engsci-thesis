@@ -19,6 +19,7 @@ from argparse import ArgumentParser
 
 SLEEP_STAGE_RESOLUTION_SEC = 30.0 #Nominal (i.e. in EDF file) length or each clip/sleep stage annotation
 NOMINAL_FREQUENCY_HZ = 256 #Sampling frequency for most channels
+HISTORICAL_LOOKBACK_LENGTH = 16 #We save the last HISTORICAL_LOOKBACK_LENGTH - 1 sleep stages  
 
 def signals_processing(signals:Tensor) -> Tensor:
     """
@@ -29,13 +30,15 @@ def signals_processing(signals:Tensor) -> Tensor:
     signals += cast(2**15, dtype=signals.dtype)
     return signals
 
-def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels_to_read:List[str], clip_duration_sec:float32=SLEEP_STAGE_RESOLUTION_SEC, data_type:DType=float32) -> (Tensor, Tensor, List[str]):
+def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels_to_read:List[str],
+                            clip_duration_sec:float32=SLEEP_STAGE_RESOLUTION_SEC, historical_lookback_length=HISTORICAL_LOOKBACK_LENGTH,
+                            data_type:DType=float32) -> (Tensor, Tensor, List[str]):
     """
     Returns a tuple of tensors and list with each channel cut into clips: (signals_tensor, sleep_stage_tensor, channel_names_list) Measurements are converted into their digital ADC code, and cast to data_type.
 
     Dimensions:
         -signals_tensor: (num_clips, num_channels, num_samples_per_clip)
-        -sleep_stage_tensor: (num_clips, 1, 1)
+        -sleep_stage_tensor: (num_clips, 1, historical_sample_length)
         -channel_names_list: 1D list
     where num_clips = signal_recording_length//sleep_stage_resolution_sec and num_samples_per_clip = measurement_freq*sleep_stage_resolution_sec
 
@@ -82,11 +85,10 @@ def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels
         
     sleep_stages = [sleep_stage_annotation_to_int[item] for item in sleep_stages if item != sleep_stage_unknown] #Convert to int and prune unknown values
     sleep_stages = [item for item in sleep_stages for _ in range(ratio_sleep_stage_resolution_to_clip_length)]
-    sleep_stage_tensor = convert_to_tensor(sleep_stages, dtype=data_type)
-    sleep_stage_tensor = reshape(sleep_stage_tensor, shape=(sleep_stage_tensor.shape[0], 1, 1))
-
+        
     # Measurements
     first_channel = 1
+    sleep_stages_with_lookback = list()
     for channel_name in channels_to_read: #Iterate over each signal in measurement file
         if channel_name not in channel_labels:
             print(f"Requested channel ({channel_name}) not in available channels!")
@@ -102,6 +104,7 @@ def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels
         channel_names_list.append(channel_name)
 
         #Iterate over each clip in the signal
+        clip_counter = 0
         for clip_number in valid_clips:
             clip_samples = signal_reader.readSignal(channel_number, start=clip_duration_samples*clip_number, n=clip_duration_samples, digital=True)
             clip_samples = signals_processing(clip_samples)
@@ -109,11 +112,27 @@ def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels
             clip_samples = cast(clip_samples, dtype=data_type)
             signal_tensor = concat([signal_tensor, clip_samples], axis=0) #Stack vertically
 
+            if first_channel:
+                #Sleep stages -> This gives a 2D list with shape (len(valid_clips), historical_lookback_length)
+                local_sleep_stage_historical_lookback = []
+                for i in range(0, historical_lookback_length): #Append historical lookback to sleep stage tensor
+                    if i > clip_counter: local_sleep_stage_historical_lookback.append(0)
+                    else: local_sleep_stage_historical_lookback.append(sleep_stages[clip_counter-i])
+
+                sleep_stages_with_lookback.append(local_sleep_stage_historical_lookback)
+                clip_counter += 1
+
+                if (len(sleep_stages_with_lookback) > clip_counter):
+                    print('here')
+
         signal_tensor = expand_dims(signal_tensor, axis=1)
         if first_channel:
             output_tensor = reshape(output_tensor, shape=(signal_tensor.shape[0], 0, signal_tensor.shape[2]))
             first_channel = 0
         output_tensor = concat([output_tensor, signal_tensor], axis=1) #Stack horizontally with output tensor
+
+    sleep_stage_tensor = convert_to_tensor(sleep_stages_with_lookback, dtype=data_type)
+    sleep_stage_tensor = expand_dims(sleep_stage_tensor, axis=1)
 
     return (output_tensor, sleep_stage_tensor, channel_names_list)
 
