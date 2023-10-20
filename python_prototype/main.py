@@ -37,6 +37,7 @@ DATA_TYPE = tf.float32
 USE_HISTORICAL_LOOKBACK = False
 HISTORICAL_LOOKBACK_LENGTH = 8
 NUM_EPOCHS = 10
+TEST_SET_RATIO = 0.05 #Percentage of training data reserved for validation
 
 VOLTAGE_EMBEDDING_DEPTH = 32 #Length of voltage embedding vector for each timestep. I let model dimensionality = embedding depth
 BATCH_SIZE = 1
@@ -147,6 +148,90 @@ def self_attention(q:tf.Tensor, k:tf.Tensor, v:tf.Tensor, mask:tf.Tensor) -> (tf
         plot_matrix_colours(self_attention_weights, title="Self-attention weights")
 
     return self_attention, self_attention_weights
+
+def export_summary(parser, model, accuracy, sleep_stages_count_training, sleep_stages_count_pred, num_training_clips, num_test_clips) -> None:
+    """
+    Saves model and training summary to file
+    """
+    with Capturing() as model_summary:
+        model.summary()
+    model_summary = "\n".join(model_summary)
+    
+    log = "TRANSFORMER MODEL TRAINING SUMMARY\n"
+    log += model_summary
+    log += f"\nTest set accuracy: {accuracy:.4f}\n"
+    log += f"Dataset: {parser.input_dataset}\n"
+    log += f"Channel: {parser.input_channel}\n"
+    log += f"CLIP_LENGTH (s): {int(parser.clip_length_s)/SAMPLING_FREQUENCY_HZ:.2f}\n"
+    log += f"NUM_TRAINING_CLIPS: {int(parser.num_training_clips)}\n"
+    log += f"OUTPUT_SEQUENCE_LENGTH: {OUTPUT_SEQUENCE_LENGTH}\n"
+    log += f"NUM_SLEEP_STAGES: {NUM_SLEEP_STAGES}\n"
+    log += f"DATA_TYPE: {DATA_TYPE}\n"
+    log += f"VOLTAGE_EMBEDDING_DEPTH: {VOLTAGE_EMBEDDING_DEPTH}\n"
+    log += f"BATCH_SIZE: {BATCH_SIZE}\n"
+    log += f"FULLY_CONNECTED_DIM: {FULLY_CONNECTED_DIM}\n"
+    log += f"MHA_NUM_HEADS: {MHA_NUM_HEADS}\n"
+    log += f"LAYER_NORM_EPSILON: {LAYER_NORM_EPSILON}\n"
+    log += f"DROPOUT_RATE: {DROPOUT_RATE}\n"
+    log += f"Sleep stages count in training data: {sleep_stages_count_training}\n"
+    log += f"Sleep stages count in prediction: {sleep_stages_count_pred}\n"
+    log += f"Number of training clips: {num_training_clips}\n"
+    log += f"Number of test clips: {num_test_clips}\n"
+    log += f"Takes in historical sleep stages: {USE_HISTORICAL_LOOKBACK}\n"
+
+    output_log_filename = "/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/results/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + ".txt"
+    with open(output_log_filename, 'w') as file:
+        file.write(log)
+
+def load_from_dataset(args) -> (tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor):
+    """
+    Loads data from dataset and returns training and test tensor pairs, along with a return code.
+    """
+    if (pkg_resources.get_distribution("tensorflow").version == "2.8.0+computecanada"):
+        data = tf.data.experimental.load(args.input_dataset)
+    else:
+        data = tf.data.Dataset.load(args.input_dataset)
+    iterator = iter(data)
+
+    #x -> (num_clips, num_channels, num_samples_per_clips)
+    #y -> (num_clips, 1, historical_lookback_length)
+    #z -> (#channels in dataset)
+    x, y, z = next(iterator)
+    
+    if int(args.num_training_clips) < (x.shape[0] + 1):
+        x = x[0:int(args.num_training_clips)]
+        y = y[0:int(args.num_training_clips)]
+
+    x = tf.cast(x, dtype=DATA_TYPE)
+    y = tf.cast(y, dtype=DATA_TYPE)
+
+    # Select data from input channel parameter
+    channel_index = -1
+    channel_list = []
+    channels_list_numpy = z.numpy()
+    count = 0
+    for s in channels_list_numpy:
+        temp_string = s.decode()
+        if temp_string == args.input_channel : channel_index = count
+        count += 1
+
+    if channel_index == -1:
+        print(f"Could not find requested input channel ('{args.input_channel}') in input dataset ('{args.input_dataset}'). Available channels are: {channel_list}. Aborting!")
+        return 0, 0, 0, 0, -1
+
+    clip_train_cutoff = int((1-TEST_SET_RATIO)*x.shape[0])
+
+    x_train = x[0:clip_train_cutoff, channel_index, :]
+    x_test = x[clip_train_cutoff:-1, channel_index, :]
+
+    if (USE_HISTORICAL_LOOKBACK):
+        y_train = y[0:clip_train_cutoff:, 0, 0:HISTORICAL_LOOKBACK_LENGTH]
+        y_test = y[clip_train_cutoff:-1:, 0, 0:HISTORICAL_LOOKBACK_LENGTH]
+    else:
+        y_train = y[0:clip_train_cutoff:, 0, 0]
+        y_test = y[clip_train_cutoff:-1:, 0, 0]
+
+    return x_train, x_test, y_train, y_test, 0
 
 #--- Encoder ---#
 class Encoder(tf.keras.layers.Layer):
@@ -260,8 +345,6 @@ class Transformer(tf.keras.Model):
         encoder_output = self.encoder(eeg_clip, training)        
         sleep_stage, attention_weights = self.decoder(sleep_stage, encoder_output, padding_mask=decoder_padding_mask, training=training)
 
-        #TODO: Should I 'mask' the first class here (set to -inf) since it is reserved and we want a probability of zero there always?
-
         final_softmax = self.final_dense_layer(sleep_stage)
 
         try:
@@ -317,42 +400,23 @@ def main():
     parser.add_argument('--clip_length_s', help='Clip length (in sec). Must match input dataset clip length. Must be one of 3.25, 5, 7.5, 10, 15, 30.', default='30')
     parser.add_argument('--num_training_clips', help='Number of clips to use for training. Defaults to 3000.', default=3000)
     parser.add_argument('--input_dataset', help='Filepath of the dataset used for training and validation.')
+    parser.add_argument('--input_channel', help='Name of the channel to use for training and validation.')
     args = parser.parse_args()
-    args.clip_length_s = int(SAMPLING_FREQUENCY_HZ * float(args.clip_length_s))
+    num_samples_per_clip = int(SAMPLING_FREQUENCY_HZ * float(args.clip_length_s))
 
     # Load data
-    if (pkg_resources.get_distribution("tensorflow").version == "2.8.0+computecanada"):
-        data = tf.data.experimental.load(args.input_dataset)
-    else:
-        data = tf.data.Dataset.load(args.input_dataset)
-    iterator = iter(data)
+    x_train, x_test, y_train, y_test, success = load_from_dataset(args=args)
+    if (success == -1): return
 
-    #x -> (num_clips, num_channels, num_samples_per_clips)
-    #y -> (num_clips, 1, historical_lookback_length)
-    x, y, z = next(iterator)
-
-    if int(args.num_training_clips) < (x.shape[0] + 1):
-        x = x[0:int(args.num_training_clips)]
-        y = y[0:int(args.num_training_clips)]
-
-    x = tf.cast(x, dtype=DATA_TYPE)
-    y = tf.cast(y, dtype=DATA_TYPE)
-
-    clip_train_cutoff = int(0.95*x.shape[0])
-    x_train = x[0:clip_train_cutoff, 0, :]
-    x_test = x[clip_train_cutoff:-1, 0, :]
-
-    if (USE_HISTORICAL_LOOKBACK):
-        y_train = y[0:clip_train_cutoff:, 0, 0:HISTORICAL_LOOKBACK_LENGTH]
-        y_test = y[clip_train_cutoff:-1:, 0, 0:HISTORICAL_LOOKBACK_LENGTH]
-    else:
-        y_train = y[0:clip_train_cutoff:, 0, 0]
-        y_test = y[clip_train_cutoff:-1:, 0, 0]
+    #Count sleep stages in dataset
+    sleep_stages_count_training = [0, 0, 0, 0, 0, 0]
+    for sleep_stage_number in range(len(y_train)):
+        sleep_stages_count_training[int(y_train[sleep_stage_number])] += 1
 
     y_uninitialized = tf.zeros(shape=[x_train.shape[0]])
 
     # Model
-    model = Transformer(args.clip_length_s)
+    model = Transformer(num_samples_per_clip)
     model.compile(
         loss=masked_loss,
         optimizer=tf.keras.optimizers.Adam(CustomSchedule(), beta_1=0.9, beta_2=0.98, epsilon=1e-9),
@@ -369,40 +433,20 @@ def main():
     total_correct = 0
     total = 0
 
+    sleep_stages_count_pred = [0, 0, 0, 0, 0, 0]
     for x,y in zip(x_test, y_test):
-        print(x.shape)
-        print(y.shape)
-        y_uninitialized = tf.zeros(shape=[1])
-        sleep_stage = model.call(inputs=(x, y_uninitialized), training=False)
+        y_uninitialized = tf.zeros(shape=(1, 1))
+        sleep_stage = model.call(inputs=(tf.reshape(x, (1, x.shape[0])), y_uninitialized), training=False)
+        sleep_stage = tf.argmax(sleep_stage[0][0])
         total += 1
-        if (tf.argmax(sleep_stage[0][0]) == tf.cast(y, dtype=tf.int64)): total_correct += 1
-        if VERBOSITY == 'DETAILED': print(f"Ground truth: {y}, sleep stage pred: {tf.argmax(sleep_stage[0][0])}, accuracy: {total_correct/total:.4f}")
-
+        if (sleep_stage) == tf.cast(y, dtype=tf.int64): total_correct += 1
+        print(f"Ground truth: {y}, sleep stage pred: {sleep_stage}, accuracy: {total_correct/total:.4f}")
+        sleep_stages_count_pred[int(sleep_stage)] += 1
+    
     #Save accuracy and model details to log file
-    with Capturing() as model_summary:
-        model.summary()
-    model_summary = "\n".join(model_summary)
-
-    log = "TRANSFORMER MODEL TRAINING SUMMARY\n"
-    log += model_summary
-    log += f"\nTest set accuracy: {total_correct/total:.4f}\n"
-    log += f"Dataset: {args.input_dataset}\n"
-    log += f"CLIP_LENGTH (s): {args.clip_length_s/SAMPLING_FREQUENCY_HZ:.2f}\n"
-    log += f"NUM_TRAINING_CLIPS: {args.num_training_clips}\n"
-    log += f"OUTPUT_SEQUENCE_LENGTH: {OUTPUT_SEQUENCE_LENGTH}\n"
-    log += f"NUM_SLEEP_STAGES: {NUM_SLEEP_STAGES}\n"
-    log += f"DATA_TYPE: {DATA_TYPE}\n"
-    log += f"VOLTAGE_EMBEDDING_DEPTH: {VOLTAGE_EMBEDDING_DEPTH}\n"
-    log += f"BATCH_SIZE: {BATCH_SIZE}\n"
-    log += f"FULLY_CONNECTED_DIM: {FULLY_CONNECTED_DIM}\n"
-    log += f"MHA_NUM_HEADS: {MHA_NUM_HEADS}\n"
-    log += f"LAYER_NORM_EPSILON: {LAYER_NORM_EPSILON}\n"
-    log += f"DROPOUT_RATE: {DROPOUT_RATE}\n"
-    log += f"Takes in historical sleep stages: False\n"
-
-    output_log_filename = "/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/results/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    with open(output_log_filename, 'w') as file:
-        file.write(log)
+    export_summary(args, model, total_correct/total,
+                   sleep_stages_count_training, sleep_stages_count_pred,
+                   int(x_train.shape[0]), int(x_test.shape[0]))
 
 if __name__ == "__main__":
     main()

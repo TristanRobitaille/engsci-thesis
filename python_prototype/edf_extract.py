@@ -198,7 +198,7 @@ def main():
         return 
 
     # Load data
-    channels_to_read = ["EEG F4-LER", "EEG P4-LER", "EEG A2-LER"]
+    channels_to_read = ["EEG Pz-LER", "EEG T6-LER", "EEG Fp1-LER", "EEG T3-LER", "EEG Cz-LER"]
     if args.directory == "": directory = getcwd()
     else: directory = args.directory
 
