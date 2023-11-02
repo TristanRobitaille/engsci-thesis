@@ -4,7 +4,10 @@ Python prototype of transformer model
 Arguments:
     --clip_length_s: Clip length (in sec). Must be one of 3.25, 5, 7.5, 10, 15, 30. Must match input dataset clip length. Default = 30s.
     --input_dataset: Filepath of the dataset used for training and validation.
+    --input_channel: Channel to use
+    --num_epochs: Number of epochs to train
     --num_training_clips: Number of clips to use for training. Defaults to 3000.
+    --voltage_embedding_depth: Depth of the voltage embedding layers. Defaults to 32.
 """
 
 import datetime
@@ -14,6 +17,7 @@ import numpy as np
 from argparse import ArgumentParser
 from io import StringIO 
 import sys
+import git
 
 #TODO
 #-Consider using multiple encoder and decoder layers, understand it 
@@ -36,7 +40,7 @@ NUM_SLEEP_STAGES = 5 #Excludes 'unknown'
 DATA_TYPE = tf.float32
 USE_HISTORICAL_LOOKBACK = False
 HISTORICAL_LOOKBACK_LENGTH = 8
-NUM_EPOCHS = 10
+NUM_EPOCHS_DEFAULT = 10
 TEST_SET_RATIO = 0.05 #Percentage of training data reserved for validation
 
 VOLTAGE_EMBEDDING_DEPTH = 32 #Length of voltage embedding vector for each timestep. I let model dimensionality = embedding depth
@@ -48,7 +52,7 @@ DROPOUT_RATE = 0.1
 
 PRINT_POSITION_EMBEDDING = False
 PRINT_SELF_ATTENTION = False
-VERBOSITY = 'NORMAL' #'QUIET', 'NORMAL', 'DETAILED'
+VERBOSITY = 'QUIET' #'QUIET', 'NORMAL', 'DETAILED'
 
 if PRINT_POSITION_EMBEDDING or PRINT_SELF_ATTENTION:
     import matplotlib.pyplot as plt
@@ -149,20 +153,30 @@ def self_attention(q:tf.Tensor, k:tf.Tensor, v:tf.Tensor, mask:tf.Tensor) -> (tf
 
     return self_attention, self_attention_weights
 
-def export_summary(parser, model, accuracy, sleep_stages_count_training, sleep_stages_count_pred, num_training_clips, num_test_clips) -> None:
+def export_summary(parser, model, accuracy:float, sleep_stages_count_training:list, sleep_stages_count_pred:list, num_training_clips:int, num_test_clips:int) -> None:
     """
     Saves model and training summary to file
     """
     with Capturing() as model_summary:
         model.summary()
     model_summary = "\n".join(model_summary)
-    
+
+    repo = git.Repo(search_parent_directories=True)
+
+    # Count relative number of stages
+    sleep_stages_count_training_percentage = []
+    sleep_stages_count_pred_percentage = []
+    for i in range(len(sleep_stages_count_training)):
+        sleep_stages_count_training_percentage.append(sleep_stages_count_training[i] / sum(sleep_stages_count_training))
+        sleep_stages_count_pred_percentage.append(sleep_stages_count_pred[i] / sum(sleep_stages_count_pred))
+
     log = "TRANSFORMER MODEL TRAINING SUMMARY\n"
     log += model_summary
     log += f"\nTest set accuracy: {accuracy:.4f}\n"
+    log += f"Git hash: {repo.head.object.hexsha}\n"
     log += f"Dataset: {parser.input_dataset}\n"
     log += f"Channel: {parser.input_channel}\n"
-    log += f"CLIP_LENGTH (s): {int(parser.clip_length_s)/SAMPLING_FREQUENCY_HZ:.2f}\n"
+    log += f"CLIP_LENGTH (s): {float(parser.clip_length_s)}\n"
     log += f"NUM_TRAINING_CLIPS: {int(parser.num_training_clips)}\n"
     log += f"OUTPUT_SEQUENCE_LENGTH: {OUTPUT_SEQUENCE_LENGTH}\n"
     log += f"NUM_SLEEP_STAGES: {NUM_SLEEP_STAGES}\n"
@@ -173,10 +187,11 @@ def export_summary(parser, model, accuracy, sleep_stages_count_training, sleep_s
     log += f"MHA_NUM_HEADS: {MHA_NUM_HEADS}\n"
     log += f"LAYER_NORM_EPSILON: {LAYER_NORM_EPSILON}\n"
     log += f"DROPOUT_RATE: {DROPOUT_RATE}\n"
-    log += f"Sleep stages count in training data: {sleep_stages_count_training}\n"
-    log += f"Sleep stages count in prediction: {sleep_stages_count_pred}\n"
+    log += f"Sleep stages count in training data: {sleep_stages_count_training} ({sleep_stages_count_training_percentage})\n"
+    log += f"Sleep stages count in prediction: {sleep_stages_count_pred} ({sleep_stages_count_pred_percentage})\n"
     log += f"Number of training clips: {num_training_clips}\n"
     log += f"Number of test clips: {num_test_clips}\n"
+    log += f"Number of epochs: {int(parser.num_epochs)}\n"
     log += f"Takes in historical sleep stages: {USE_HISTORICAL_LOOKBACK}\n"
 
     output_log_filename = "/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/results/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + ".txt"
@@ -331,9 +346,6 @@ class Transformer(tf.keras.Model):
         #sleep_stage = (batch_size, 1)
         eeg_clip, sleep_stage = inputs
 
-        print(eeg_clip)
-        print(sleep_stage)
-
         eeg_clip = tf.reshape(eeg_clip, (1, self.clip_length))
         sleep_stage = tf.reshape(sleep_stage, (1, OUTPUT_SEQUENCE_LENGTH))
 
@@ -401,6 +413,9 @@ def main():
     parser.add_argument('--num_training_clips', help='Number of clips to use for training. Defaults to 3000.', default=3000)
     parser.add_argument('--input_dataset', help='Filepath of the dataset used for training and validation.')
     parser.add_argument('--input_channel', help='Name of the channel to use for training and validation.')
+    parser.add_argument('--num_epochs', help='Number of epochs to use for training. Defaults to 10.', default=10)
+    parser.add_argument('--voltage_embedding_depth', help='Depth of the voltage embedding layers. Defaults to 32.', default=32)
+
     args = parser.parse_args()
     num_samples_per_clip = int(SAMPLING_FREQUENCY_HZ * float(args.clip_length_s))
 
@@ -426,8 +441,8 @@ def main():
     tensorboard_log_dir = "logs/fit/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=tensorboard_log_dir, histogram_freq=1)
 
-    model.fit(x=(x_train, y_uninitialized), y=y_train, epochs=NUM_EPOCHS,
-              batch_size=BATCH_SIZE, callbacks=[tensorboard_callback])
+    model.fit(x=(x_train, y_uninitialized), y=y_train, epochs=int(args.num_epochs),
+              batch_size=BATCH_SIZE, callbacks=[tensorboard_callback], verbose=2)
 
     #Manual validation
     total_correct = 0
@@ -440,7 +455,7 @@ def main():
         sleep_stage = tf.argmax(sleep_stage[0][0])
         total += 1
         if (sleep_stage) == tf.cast(y, dtype=tf.int64): total_correct += 1
-        print(f"Ground truth: {y}, sleep stage pred: {sleep_stage}, accuracy: {total_correct/total:.4f}")
+        if (VERBOSITY == 'Normal'): print(f"Ground truth: {y}, sleep stage pred: {sleep_stage}, accuracy: {total_correct/total:.4f}")
         sleep_stages_count_pred[int(sleep_stage)] += 1
     
     #Save accuracy and model details to log file
