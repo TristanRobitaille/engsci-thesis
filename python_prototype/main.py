@@ -43,9 +43,9 @@ HISTORICAL_LOOKBACK_LENGTH = 8
 NUM_EPOCHS_DEFAULT = 10
 TEST_SET_RATIO = 0.05 #Percentage of training data reserved for validation
 
-VOLTAGE_EMBEDDING_DEPTH = 32 #Length of voltage embedding vector for each timestep. I let model dimensionality = embedding depth
+VOLTAGE_EMBEDDING_DEPTH = 8 #Length of voltage embedding vector for each timestep. I let model dimensionality = embedding depth
 BATCH_SIZE = 1
-FULLY_CONNECTED_DIM = 64
+FULLY_CONNECTED_DIM = 8
 MHA_NUM_HEADS = 8
 LAYER_NORM_EPSILON = 0.5
 DROPOUT_RATE = 0.1
@@ -346,8 +346,8 @@ class Transformer(tf.keras.Model):
         #sleep_stage = (batch_size, 1)
         eeg_clip, sleep_stage = inputs
 
-        eeg_clip = tf.reshape(eeg_clip, (1, self.clip_length))
-        sleep_stage = tf.reshape(sleep_stage, (1, OUTPUT_SEQUENCE_LENGTH))
+        eeg_clip = tf.reshape(eeg_clip, (eeg_clip.shape[0], self.clip_length))
+        sleep_stage = tf.reshape(sleep_stage, (eeg_clip.shape[0], OUTPUT_SEQUENCE_LENGTH))
 
         #Masks #TODO: Fix this
         decoder_padding_mask = maskify(sleep_stage)
@@ -399,7 +399,6 @@ def masked_accuracy(label, pred):
   match = label == pred
 
   mask = label != 0
-
   match = match & mask
 
   match = tf.cast(match, dtype=tf.float32)
@@ -418,6 +417,7 @@ def main():
 
     args = parser.parse_args()
     num_samples_per_clip = int(SAMPLING_FREQUENCY_HZ * float(args.clip_length_s))
+    
 
     # Load data
     x_train, x_test, y_train, y_test, success = load_from_dataset(args=args)
@@ -462,6 +462,8 @@ def main():
     export_summary(args, model, total_correct/total,
                    sleep_stages_count_training, sleep_stages_count_pred,
                    int(x_train.shape[0]), int(x_test.shape[0]))
+
+    print("Done. Good bye.")
 
 if __name__ == "__main__":
     main()
