@@ -14,5 +14,5 @@ tensorboard --logdir=/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis
 # python edf_extract.py --directory /home/tristanr/projects/def-xilinliu/data/SS3_EDF --clip_length_s 15 --num_files 25
 # python edf_extract.py --directory /home/tristanr/projects/def-xilinliu/data/SS3_EDF --clip_length_s 30 --num_files 25
 
-python main.py --clip_length_s 15 --num_training_clips 20000 --input_channel 'EEG Pz-LER' --input_dataset '/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/SS3_EDF_Tensorized_15s'
+python main.py --clip_length_s 15 --voltage_embedding_depth $1 --num_training_clips 20000 --input_channel 'EEG Pz-LER' --input_dataset '/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/SS3_EDF_Tensorized_15s'
 # python main.py --clip_length_s 30 --num_training_clips 20000 --input_channel 'EEG Pz-LER' --input_dataset '/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/SS3_EDF_Tensorized_30s'
