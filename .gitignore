@@ -27,7 +27,7 @@ latex/proposal/proposal.log
 latex/proposal/proposal.run.xml
 latex/proposal/proposal.synctex.gz
 
-### Tensforflow
+### Tensorflow
 python_prototype/*.out
 python_prototype/log*
 python_prototype/data*

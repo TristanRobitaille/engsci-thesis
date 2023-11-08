@@ -1,12 +1,5 @@
 """
-Methods to extract data from EDF files
-
-Arguments:
-    --clip_length_s: Clip length (in sec). Must be one of 3.25, 5, 7.5, 10, 15, 30. Default = 30s.
-    --directory_psg: Directory from which to fetch EDF files. Searches current workding directory by default. Default = current directory.
-    --directory_labels: Directory from which to fetch sleep stage files. Searches current workding directory by default. Default = current directory.
-    --num_files: Number of files to parse. Parsed in alphabetical order. Defaults = 10 files.
-    --equal_num_sleep_stages: If True, exports the same number of example tensors for each sleep stage to avoid bias in dataset. Defaults to False
+Methods to extract data from EDF files and generate pseudo-random data.
 """
 
 from pyedflib import EdfReader
@@ -89,9 +82,8 @@ def pseudo_random_dataset(num_clips_per_sleep_stage:int, clip_length_num_samples
 
     return output, 0 # Return code == 0
 
-def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels_to_read:List[str],
-                            clip_duration_sec:float32=SLEEP_STAGE_RESOLUTION_SEC, historical_lookback_length=HISTORICAL_LOOKBACK_LENGTH,
-                            equal_num_sleep_stages:bool=False, data_type:DType=float32) -> (Tensor, Tensor, List[str]):
+def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, channels_to_read:List[str],
+                            historical_lookback_length=HISTORICAL_LOOKBACK_LENGTH, data_type:DType=float32) -> (Tensor, Tensor, List[str]):
     """
     Returns a dictionary of channels with signals cut into clips and a return code.
 
@@ -121,8 +113,8 @@ def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels
     signals = list()
     channels = list(signal_reader.getSignalLabels())
 
-    total_raw_clips = min(floor(signal_reader.getFileDuration() / clip_duration_sec), int(SLEEP_STAGE_RESOLUTION_SEC/clip_duration_sec)*len(sleep_stages))
-    clip_duration_samples = int(clip_duration_sec * NOMINAL_FREQUENCY_HZ)
+    total_raw_clips = min(floor(signal_reader.getFileDuration() / float(args.clip_length_s)), int(SLEEP_STAGE_RESOLUTION_SEC/float(args.clip_length_s))*len(sleep_stages))
+    clip_duration_samples = int(float(args.clip_length_s) * NOMINAL_FREQUENCY_HZ)
 
     # Make list (channels) of list of clips for signals
     for channel in channels_to_read:
@@ -141,7 +133,7 @@ def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels
         signals.append(temp_clip)
 
     # Duplicate sleep stages to account for stages being shorter than the nominal 30s
-    sleep_stages = [item for item in sleep_stages for _ in range(int(SLEEP_STAGE_RESOLUTION_SEC/clip_duration_sec))]
+    sleep_stages = [item for item in sleep_stages for _ in range(int(SLEEP_STAGE_RESOLUTION_SEC/float(args.clip_length_s)))]
     sleep_stages = sleep_stages[0:total_raw_clips] #On some files, sleep stages are longer than PSG signals so we slice it. Assume that they line up at the lowest index.
 
     # Prune unknown sleep stages from all lists
@@ -164,7 +156,7 @@ def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels
 
     # Output equal number of sleep stages
     sleep_stage_count = [0, 0, 0, 0, 0, 0]
-    if equal_num_sleep_stages:
+    if args.equal_num_sleep_stages:
         for sleep_stage_number in range(len(sleep_stages)):
             sleep_stage_count[sleep_stages[sleep_stage_number]] += 1
         
@@ -193,9 +185,7 @@ def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels
 
     return signals
 
-def read_all_nights_from_directory(directory_psg:str, directory_labels:str, channels_to_read:List[str], num_files:int=-1, 
-                                   clip_duration_sec:float32=SLEEP_STAGE_RESOLUTION_SEC, 
-                                   equal_num_sleep_stages:bool=False, data_type:DType=float32) -> (Tensor, Tensor, List[str]):
+def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:DType=float32) -> (Tensor, Tensor, List[str]):
 
     """
     Calls read_single_whole_night() for all files in folder and returns a dictionary of all channels and sleep stages concatenated along with a success flag.
@@ -210,13 +200,13 @@ def read_all_nights_from_directory(directory_psg:str, directory_labels:str, chan
     """
 
     # Get filenames (assume base of filenames for PSG and Labels match)
-    PSG_file_list = glob(path.join(directory_psg, "*PSG.edf"))
-    labels_file_list = glob(path.join(directory_labels, "*Base.edf"))
+    PSG_file_list = glob(path.join(args.directory_psg, "*PSG.edf"))
+    labels_file_list = glob(path.join(args.directory_labels, "*Base.edf"))
     if len(PSG_file_list) == 0:
-        print(f"No valid PSG (*PSG.edf) files found in search directory ({directory_psg})!")
+        print(f"No valid PSG (*PSG.edf) files found in search directory ({args.directory_psg})!")
         return -1
     if len(labels_file_list) == 0:
-        print(f"No valid sleep stages (*Base.edf) files found in search directory ({directory_labels})!")
+        print(f"No valid sleep stages (*Base.edf) files found in search directory ({args.directory_labels})!")
         return -1
 
     output = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"]}
@@ -228,7 +218,7 @@ def read_all_nights_from_directory(directory_psg:str, directory_labels:str, chan
 
         sleep_stage_file = labels_file_list[file_cnt]
 
-        output_one_night = read_single_whole_night(PSG_file, sleep_stage_file, channels_to_read, clip_duration_sec, equal_num_sleep_stages=equal_num_sleep_stages, data_type=data_type)
+        output_one_night = read_single_whole_night(args, PSG_file, sleep_stage_file, channels_to_read, data_type=data_type)
         if output == -1:
             continue #Skip this file
 
@@ -238,9 +228,9 @@ def read_all_nights_from_directory(directory_psg:str, directory_labels:str, chan
             else:
                 output[key] = concat([output[key], output_one_night[key]], axis=0)
 
-        if num_files != -1:
+        if args.num_files != -1:
             file_cnt += 1
-            if file_cnt == num_files: break
+            if file_cnt == args.num_files: break
 
     return output, 0
 
@@ -251,9 +241,10 @@ def main():
     parser.add_argument('--clip_length_s', help='Clip length (in sec). Must be one of 3.25, 5, 7.5, 10, 15, 30.', default=30, type=str)
     parser.add_argument('--directory_psg', help='Directory from which to fetch the PSG EDF files. Searches current workding directory by default.', default="")
     parser.add_argument('--directory_labels', help='Directory from which to fetch the PSG label files. Searches current workding directory by default.', default="")
-    parser.add_argument('--num_files', help='Number of files to parse. Parsed in alphabetical order. Defaults to 10 files.', type=int, default=10)
+    parser.add_argument('--num_files', help='Number of files to parse. Parsed in alphabetical order. Defaults to 5 files.', type=int, default=5)
     parser.add_argument('--equal_num_sleep_stages', help='If True, exports the same number of example tensors for each sleep stage to avoid bias in dataset. Defaults to False.', type=bool, default=False)
     parser.add_argument('--export_directory', help='Location to export dataset. Defaults to cwd.', default="")
+    parser.add_argument('--multicore', help='Tries to split job onto multiple cores. Defaults to True.', type=bool, default=True)
 
     # Parse arguments
     args = parser.parse_args()
@@ -276,8 +267,7 @@ def main():
         channels_to_read = ["EEG Pz-LER", "EEG T6-LER", "EEG Fp1-LER", "EEG T3-LER", "EEG Cz-LER"]
         print(f"Will read the following channels: {channels_to_read}")
 
-        output, return_code = read_all_nights_from_directory(args.directory_psg, args.directory_labels, channels_to_read=channels_to_read, num_files=args.num_files, clip_duration_sec=float(args.clip_length_s),
-                                                                                                                        equal_num_sleep_stages=args.equal_num_sleep_stages, data_type=float32)
+        output, return_code = read_all_nights_from_directory(args, channels_to_read=channels_to_read, data_type=float32)
 
     # Create and save dataset
     if return_code == 0:
