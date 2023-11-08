@@ -2,19 +2,19 @@
 Methods to extract data from EDF files and generate pseudo-random data.
 """
 
+import os
+import sys
+import glob
+import math
+
 from pyedflib import EdfReader
 from pkg_resources import get_distribution
-from os import getcwd, path
-from glob import glob
-from tensorflow import Tensor, DType, float32
-from tensorflow import convert_to_tensor, concat, expand_dims, convert_to_tensor, transpose, reshape
-from tensorflow import data
 from typing import List
 from argparse import ArgumentParser
-from math import floor
 
 import tensorflow as tf
 import numpy as np
+import multiprocessing as mp
 
 SLEEP_STAGE_RESOLUTION_SEC = 30.0 #Nominal (i.e. in EDF file) length or each clip/sleep stage annotation
 NOMINAL_FREQUENCY_HZ = 256 #Sampling frequency for most channels
@@ -61,7 +61,7 @@ def pseudo_random_clip(sleep_stage:int, clip_length_num_samples:int, max_min:tup
 
     return clip
 
-def pseudo_random_dataset(num_clips_per_sleep_stage:int, clip_length_num_samples, data_type:DType=float32):
+def pseudo_random_dataset(num_clips_per_sleep_stage:int, clip_length_num_samples, data_type:tf.DType=tf.float32):
     """
     Returns a properly formatted dictionary with the pseudo random data, with equal number of each sleep stage.
     """
@@ -76,14 +76,13 @@ def pseudo_random_dataset(num_clips_per_sleep_stage:int, clip_length_num_samples
             output["pseudo_random"].append(new_clip)
 
     # Convert to tensor
-    output["pseudo_random"] = convert_to_tensor(value=output["pseudo_random"], dtype=data_type)
-    output["sleep_stage"] = convert_to_tensor(value=output["sleep_stage"], dtype=data_type)
-    output["sleep_stage"] = reshape(tensor=output["sleep_stage"], shape=(output["sleep_stage"].shape[0], 1), name="sleep_stage")
+    output["pseudo_random"] = tf.convert_to_tensor(value=output["pseudo_random"], dtype=data_type)
+    output["sleep_stage"] = tf.convert_to_tensor(value=output["sleep_stage"], dtype=data_type)
+    output["sleep_stage"] = tf.reshape(tensor=output["sleep_stage"], shape=(output["sleep_stage"].shape[0], 1), name="sleep_stage")
 
     return output, 0 # Return code == 0
 
-def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, channels_to_read:List[str],
-                            historical_lookback_length=HISTORICAL_LOOKBACK_LENGTH, data_type:DType=float32) -> (Tensor, Tensor, List[str]):
+def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, channels_to_read:List[str], historical_lookback_length=HISTORICAL_LOOKBACK_LENGTH, data_type:tf.DType=tf.float32) -> (tf.Tensor, tf.Tensor, List[str]):
     """
     Returns a dictionary of channels with signals cut into clips and a return code.
 
@@ -113,7 +112,7 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
     signals = list()
     channels = list(signal_reader.getSignalLabels())
 
-    total_raw_clips = min(floor(signal_reader.getFileDuration() / float(args.clip_length_s)), int(SLEEP_STAGE_RESOLUTION_SEC/float(args.clip_length_s))*len(sleep_stages))
+    total_raw_clips = min(math.floor(signal_reader.getFileDuration() / float(args.clip_length_s)), int(SLEEP_STAGE_RESOLUTION_SEC/float(args.clip_length_s))*len(sleep_stages))
     clip_duration_samples = int(float(args.clip_length_s) * NOMINAL_FREQUENCY_HZ)
 
     # Make list (channels) of list of clips for signals
@@ -170,14 +169,14 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
                 sleep_stages.pop(clip_number)
 
     # Convert to tensors
-    sleep_stages = convert_to_tensor(sleep_stages, dtype=data_type, name="sleep_stage")
-    pseudo_random_list = convert_to_tensor(pseudo_random_list, dtype=data_type, name="pseudo_random")
+    sleep_stages = tf.convert_to_tensor(sleep_stages, dtype=data_type, name="sleep_stage")
+    pseudo_random_list = tf.convert_to_tensor(pseudo_random_list, dtype=data_type, name="pseudo_random")
     
-    if ONE_HOT_OUTPUT: sleep_stages = transpose(sleep_stages, perm=[0, 2, 1])
-    else: sleep_stages = expand_dims(sleep_stages, axis=1)
+    if ONE_HOT_OUTPUT: sleep_stages = tf.transpose(sleep_stages, perm=[0, 2, 1])
+    else: sleep_stages = tf.expand_dims(sleep_stages, axis=1)
 
     for i in range(len(channels_to_read)):
-        signals[i] = convert_to_tensor(signals[i], dtype=data_type, name=channels_to_read[i])      
+        signals[i] = tf.convert_to_tensor(signals[i], dtype=data_type, name=channels_to_read[i])      
 
     signals = dict(zip(channels_to_read, signals)) #Convert to dictionary
     signals["pseudo_random"] = pseudo_random_list
@@ -185,8 +184,37 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
 
     return signals
 
-def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:DType=float32) -> (Tensor, Tensor, List[str]):
+def insert_into_all_night_dict(output_all_nights, output_one_night, channels_to_read):
+    for key, value in output_one_night.items():
+        if output_all_nights[key] == None: output_all_nights[key] = output_one_night[key]
+        else: output_all_nights[key] = tf.concat([output_all_nights[key], output_one_night[key]], axis=0)
 
+    return output_all_nights
+
+def process_dispatch(args, PSG_file_list, labels_file_list, channels_to_read, data_type, result_queue):
+    try:
+        if PSG_file_list == []: # No file to process
+            print(f"Process ID {os.getpid()} received empty EDF file list ({PSG_file_list})!")
+            result_queue.put(-1)
+            return
+
+        output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"]}
+
+        for PSG_file, labels_file in zip(PSG_file_list, labels_file_list):
+            print(f"Process ID {os.getpid()} processing: {os.path.basename(PSG_file)} with {os.path.basename(labels_file)}")
+
+            output_one_night = read_single_whole_night(args, PSG_file, labels_file, channels_to_read, data_type)
+            if output_one_night == -1: continue #Skip this file
+
+            output_all_nights = insert_into_all_night_dict(output_all_nights, output_one_night, channels_to_read)
+
+        result_queue.put(output_all_nights)
+        print(f"Process ID {os.getpid()} completed reading its files.")
+
+    except Exception as e:
+        print(f"Error in child process {os.getpid()}: {e}")
+
+def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:tf.DType=tf.float32) -> (tf.Tensor, tf.Tensor, List[str]):
     """
     Calls read_single_whole_night() for all files in folder and returns a dictionary of all channels and sleep stages concatenated along with a success flag.
 
@@ -200,83 +228,88 @@ def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:D
     """
 
     # Get filenames (assume base of filenames for PSG and Labels match)
-    PSG_file_list = glob(path.join(args.directory_psg, "*PSG.edf"))
-    labels_file_list = glob(path.join(args.directory_labels, "*Base.edf"))
+    PSG_file_list = glob.glob(os.path.join(args.directory_psg, "*PSG.edf"))
     if len(PSG_file_list) == 0:
         print(f"No valid PSG (*PSG.edf) files found in search directory ({args.directory_psg})!")
         return -1
-    if len(labels_file_list) == 0:
-        print(f"No valid sleep stages (*Base.edf) files found in search directory ({args.directory_labels})!")
-        return -1
 
-    output = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"]}
-    file_cnt = 0
+    if (len(PSG_file_list) < args.num_files):
+        print(f"Did not find the requested number of files ({args.num_files}). Will use {len(PSG_file_list)} files instead.")    
+        num_files = len(PSG_file_list)
 
-    # Go through each file found in the input directory
-    for PSG_file in PSG_file_list:
-        print(f"Processing: {PSG_file}")
+    labels_file_list = [file.replace("PSG", "Base") for file in PSG_file_list]
 
-        sleep_stage_file = labels_file_list[file_cnt]
+    # Prepare for multiprocessing
+    num_cpus = mp.cpu_count() - 2 # Leave two CPUs
+    processes = []
+    result_queue = mp.SimpleQueue()
 
-        output_one_night = read_single_whole_night(args, PSG_file, sleep_stage_file, channels_to_read, data_type=data_type)
-        if output == -1:
-            continue #Skip this file
+    file_PSG_assignment, file_labels_assignment = [list() for _ in range(num_cpus)], [list() for _ in range(num_cpus)]
+    for i in range(num_files):
+        file_PSG_assignment[i%num_cpus].append(PSG_file_list[i])
+        file_labels_assignment[i%num_cpus].append(labels_file_list[i])
 
-        for key, value in output_one_night.items():
-            if output[key] == None:
-                output[key] = output_one_night[key]
-            else:
-                output[key] = concat([output[key], output_one_night[key]], axis=0)
+    # Start processes
+    for i in range(num_cpus):
+        if not file_PSG_assignment[i] == []:
+            process = mp.Process(target=process_dispatch, args=(args, file_PSG_assignment[i], file_labels_assignment[i], channels_to_read, data_type, result_queue))
+            processes.append(process)
+            process.start()
 
-        if args.num_files != -1:
-            file_cnt += 1
-            if file_cnt == args.num_files: break
+    # Collect results
+    children_outputs = [result_queue.get() for _ in range(len(processes))] # Need to do this before .join() because processes don't exit until their data has been .get() from the queue
 
-    return output, 0
+    # Wait for children to die
+    for process in processes:
+        process.join()
+
+    # Concatenate nights from all processes
+    output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"]}
+    for output in children_outputs:
+        if output == -1: continue # No files processed
+        output_all_nights = insert_into_all_night_dict(output_all_nights, output, channels_to_read)
+
+    return output_all_nights, 0
 
 def main():
     # Parser
     parser = ArgumentParser(description='Script to extract data from EDF files and export to a Tensorflow dataset.')
     parser.add_argument('--type', help='Type of generation: "EDF" (read PSG files and format their data) or "pseudo_random" (generate pseudo-random data for each sleep stage and equal number of sleep stages in dataset). Defaults to "EDF".', choices=["EDF", "pseudo_random"], default='EDF')
-    parser.add_argument('--clip_length_s', help='Clip length (in sec). Must be one of 3.25, 5, 7.5, 10, 15, 30.', default=30, type=str)
+    parser.add_argument('--clip_length_s', help='Clip length (in sec). Must be one of 3.25, 5, 7.5, 10, 15, 30.', choices=["3.25", "7.5", "15", "30"], default=30, type=str)
     parser.add_argument('--directory_psg', help='Directory from which to fetch the PSG EDF files. Searches current workding directory by default.', default="")
-    parser.add_argument('--directory_labels', help='Directory from which to fetch the PSG label files. Searches current workding directory by default.', default="")
+    parser.add_argument('--directory_labels', help='Directory from which to fetch the PSG label files. Defaults to --directory_psg.', default="")
+    parser.add_argument('--export_directory', help='Location to export dataset. Defaults to cwd.', default="")
     parser.add_argument('--num_files', help='Number of files to parse. Parsed in alphabetical order. Defaults to 5 files.', type=int, default=5)
     parser.add_argument('--equal_num_sleep_stages', help='If True, exports the same number of example tensors for each sleep stage to avoid bias in dataset. Defaults to False.', type=bool, default=False)
-    parser.add_argument('--export_directory', help='Location to export dataset. Defaults to cwd.', default="")
-    parser.add_argument('--multicore', help='Tries to split job onto multiple cores. Defaults to True.', type=bool, default=True)
 
     # Parse arguments
     args = parser.parse_args()
-
-    if not float(args.clip_length_s) in [3.25, 7.5, 15, 30]:
-        print(f"Requested clip length ({float(args.clip_length_s):.2f}) not one of [3.25, 5, 7.5, 10, 15, 30]. Exiting program.")
-        return
-
-    if args.directory_psg == "": args.directory_psg = getcwd()
-    if args.directory_labels == "": args.directory_labels = getcwd()
-    if args.export_directory == "": args.export_directory = getcwd()
+    if args.directory_psg == "": args.directory_psg = os.getcwd()
+    if args.directory_labels == "": args.directory_labels = args.directory_psg
+    if args.export_directory == "": args.export_directory = os.getcwd()
 
     # Generate data dictionary
     if args.type == "pseudo_random":
         print(f"Will generate {NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE} pseudo-random clips per sleep stage.")
-        output, return_code = pseudo_random_dataset(num_clips_per_sleep_stage=NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE, clip_length_num_samples=NOMINAL_FREQUENCY_HZ*float(args.clip_length_s), data_type=float32)
+        output, return_code = pseudo_random_dataset(num_clips_per_sleep_stage=NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE, clip_length_num_samples=NOMINAL_FREQUENCY_HZ*float(args.clip_length_s), data_type=tf.float32)
 
     elif args.type == "EDF":
         # Load data
         channels_to_read = ["EEG Pz-LER", "EEG T6-LER", "EEG Fp1-LER", "EEG T3-LER", "EEG Cz-LER"]
         print(f"Will read the following channels: {channels_to_read}")
-
-        output, return_code = read_all_nights_from_directory(args, channels_to_read=channels_to_read, data_type=float32)
+        print(f"PSG file directory: {args.directory_psg}")
+        print(f"Labels file directory: {args.directory_labels}")
+        print(f"Output directory: {args.export_directory}")
+        output, return_code = read_all_nights_from_directory(args, channels_to_read=channels_to_read, data_type=tf.float32)
 
     # Create and save dataset
     if return_code == 0:
-        ds = data.Dataset.from_tensors(output)
+        ds = tf.data.Dataset.from_tensors(output)
 
         # Make dataset filepath
         if args.type == 'pseudo_random':
             ds_filepath = f"{args.export_directory}/Pseudo_Random_Tensorized_{args.clip_length_s}s"
-        elif "filter" in path.basename(args.directory_psg):
+        elif "filter" in os.path.basename(args.directory_psg):
             ds_filepath = f"{args.export_directory}/SS3_EDF_filtered_Tensorized_{args.clip_length_s}s"
         else:
             ds_filepath = f"{args.export_directory}/SS3_EDF_Tensorized_{args.clip_length_s}s"
@@ -287,9 +320,9 @@ def main():
 
         # Save dataset
         if get_distribution("tensorflow").version == '2.8.0+computecanada': #Tensorflow 2.8.0 does not support .save()
-            data.experimental.save(ds, compression=None, path=ds_filepath)
+            tf.data.experimental.save(ds, compression=None, path=ds_filepath)
         else:
-            data.Dataset.save(ds, compression=None, path=ds_filepath)
+            tf.data.Dataset.save(ds, compression=None, path=ds_filepath)
 
         print(f"Dataset saved at: {ds_filepath}. It contains {output['sleep_stage'].shape[0]} clips.")
     

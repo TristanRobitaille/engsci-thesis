@@ -2,6 +2,7 @@ import datetime
 import pkg_resources
 import git
 import sys
+import os
 
 import tensorflow as tf
 import tensorflow_addons as tfa
@@ -112,7 +113,6 @@ def load_from_dataset(args):
         sleep_stages = sleep_stages[0:args.num_clips-args.num_clips%args.batch_size, :]
 
     signals, sleep_stages = reduce_bias(signals, sleep_stages)
-
     signals_train, signals_val, sleep_stages_train, sleep_stages_val = trim_clips(args, signals, sleep_stages)
 
     return signals_train, signals_val, sleep_stages_train, sleep_stages_val, 0
@@ -154,8 +154,7 @@ def export_summary(parser, model, accuracy:float, sleep_stages_count_training:li
     log += f"Number of epochs: {parser.num_epochs}\n"
     log += f"Learning rate: {parser.learning_rate:.6f}\n"
 
-    # output_log_filename = "/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/results/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_vision.txt"
-    output_log_filename = "/Users/tristan/Desktop/engsci-thesis/python_prototype/results/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_vision.txt"
+    output_log_filename = os.getcwd() + "/python_prototype/results/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_vision.txt"
 
     with open(output_log_filename, 'w') as file:
         file.write(log)
@@ -354,16 +353,14 @@ def main():
 
     # Train model
     print(f"Starting training with {int((1 - TEST_SET_RATIO)*signals_train.shape[0])} clips")
-    strategy = tf.distribute.MirroredStrategy()
-    with strategy.scope():
-        model = VisionTransformer(clip_length_num_samples=clip_length_num_samples, patch_length_num_samples=patch_length_num_samples, num_layers=args.num_layers, num_classes=NUM_SLEEP_STAGES,
-                                  embedding_depth=args.embedding_depth, num_heads=args.num_heads, mlp_dim=args.mlp_dim, dropout_rate=DROPOUT_RATE)
+    model = VisionTransformer(clip_length_num_samples=clip_length_num_samples, patch_length_num_samples=patch_length_num_samples, num_layers=args.num_layers, num_classes=NUM_SLEEP_STAGES,
+                                embedding_depth=args.embedding_depth, num_heads=args.num_heads, mlp_dim=args.mlp_dim, dropout_rate=DROPOUT_RATE)
 
-        model.compile(
-            loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False),
-            optimizer=tf.keras.optimizers.Adam(CustomSchedule(args.embedding_depth), beta_1=0.9, beta_2=0.98, epsilon=1e-9),
-            metrics=["accuracy"],
-        )
+    model.compile(
+        loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False),
+        optimizer=tf.keras.optimizers.Adam(CustomSchedule(args.embedding_depth), beta_1=0.9, beta_2=0.98, epsilon=1e-9),
+        metrics=["accuracy"],
+    )
 
     tensorboard_log_dir = "logs/fit/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=tensorboard_log_dir, histogram_freq=1)
