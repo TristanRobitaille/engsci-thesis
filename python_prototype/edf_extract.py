@@ -14,7 +14,7 @@ from pkg_resources import get_distribution
 from os import getcwd, path
 from glob import glob
 from tensorflow import Tensor, DType, float32
-from tensorflow import convert_to_tensor, concat, expand_dims, convert_to_tensor, transpose
+from tensorflow import convert_to_tensor, concat, expand_dims, convert_to_tensor, transpose, reshape
 from tensorflow import data
 from typing import List
 from argparse import ArgumentParser
@@ -27,6 +27,7 @@ SLEEP_STAGE_RESOLUTION_SEC = 30.0 #Nominal (i.e. in EDF file) length or each cli
 NOMINAL_FREQUENCY_HZ = 256 #Sampling frequency for most channels
 HISTORICAL_LOOKBACK_LENGTH = 16 #We save the last HISTORICAL_LOOKBACK_LENGTH - 1 sleep stages  
 SLEEP_STAGE_ANNOTATONS_CHANNEL = 2 #Channel of sleep stages in annotations file
+NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE = 5000 #Number of pseudo-random clips to generate for each sleep stage
 MAX_VOLTAGE = 2**15 - 1
 MIN_VOLTAGE = 0
 NUM_SLEEP_STAGES = 5 #Excluding 'unknown'
@@ -61,11 +62,32 @@ def pseudo_random_clip(sleep_stage:int, clip_length_num_samples:int, max_min:tup
     clip_max, clip_min, sleep_max, sleep_min = max_min
     mean = (clip_max) * sleep_stage/sleep_max
     
-    clip = np.random.normal(loc=mean, scale=stddev, size=clip_length_num_samples).astype(np.int32)
+    clip = np.random.normal(loc=mean, scale=stddev, size=int(clip_length_num_samples)).astype(np.int32)
     clip = np.round(clip)
     clip = np.clip(clip, a_min=clip_min, a_max=clip_max)
 
     return clip
+
+def pseudo_random_dataset(num_clips_per_sleep_stage:int, clip_length_num_samples, data_type:DType=float32):
+    """
+    Returns a properly formatted dictionary with the pseudo random data, with equal number of each sleep stage.
+    """
+
+    output = {"sleep_stage":[], "pseudo_random":[]}
+
+    for _ in range(num_clips_per_sleep_stage):
+        for sleep_stage in range(1, NUM_SLEEP_STAGES+1):
+            output["sleep_stage"].append(sleep_stage)
+
+            new_clip = pseudo_random_clip(sleep_stage, clip_length_num_samples, max_min=(MAX_VOLTAGE, MIN_VOLTAGE, NUM_SLEEP_STAGES, 1))
+            output["pseudo_random"].append(new_clip)
+
+    # Convert to tensor
+    output["pseudo_random"] = convert_to_tensor(value=output["pseudo_random"], dtype=data_type)
+    output["sleep_stage"] = convert_to_tensor(value=output["sleep_stage"], dtype=data_type)
+    output["sleep_stage"] = reshape(tensor=output["sleep_stage"], shape=(output["sleep_stage"].shape[0], 1), name="sleep_stage")
+
+    return output, 0 # Return code == 0
 
 def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels_to_read:List[str],
                             clip_duration_sec:float32=SLEEP_STAGE_RESOLUTION_SEC, historical_lookback_length=HISTORICAL_LOOKBACK_LENGTH,
@@ -225,43 +247,52 @@ def read_all_nights_from_directory(directory_psg:str, directory_labels:str, chan
 def main():
     # Parser
     parser = ArgumentParser(description='Script to extract data from EDF files and export to a Tensorflow dataset.')
-    parser.add_argument('--clip_length_s', help='Clip length (in sec). Must be one of 3.25, 5, 7.5, 10, 15, 30.', default='30')
+    parser.add_argument('--type', help='Type of generation: "EDF" (read PSG files and format their data) or "pseudo_random" (generate pseudo-random data for each sleep stage and equal number of sleep stages in dataset). Defaults to "EDF".', choices=["EDF", "pseudo_random"], default='EDF')
+    parser.add_argument('--clip_length_s', help='Clip length (in sec). Must be one of 3.25, 5, 7.5, 10, 15, 30.', default=30, type=str)
     parser.add_argument('--directory_psg', help='Directory from which to fetch the PSG EDF files. Searches current workding directory by default.', default="")
     parser.add_argument('--directory_labels', help='Directory from which to fetch the PSG label files. Searches current workding directory by default.', default="")
-    parser.add_argument('--num_files', help='Number of files to parse. Parsed in alphabetical order. Defaults to 10 files.', default=10)
-    parser.add_argument('--equal_num_sleep_stages', help='If True, exports the same number of example tensors for each sleep stage to avoid bias in dataset. Defaults to False', default="False")
-    parser.add_argument('--export_directory', help='Location to export dataset. Defaults to cwd', default="")
+    parser.add_argument('--num_files', help='Number of files to parse. Parsed in alphabetical order. Defaults to 10 files.', type=int, default=10)
+    parser.add_argument('--equal_num_sleep_stages', help='If True, exports the same number of example tensors for each sleep stage to avoid bias in dataset. Defaults to False.', type=bool, default=False)
+    parser.add_argument('--export_directory', help='Location to export dataset. Defaults to cwd.', default="")
 
+    # Parse arguments
     args = parser.parse_args()
 
     if not float(args.clip_length_s) in [3.25, 7.5, 15, 30]:
         print(f"Requested clip length ({float(args.clip_length_s):.2f}) not one of [3.25, 5, 7.5, 10, 15, 30]. Exiting program.")
         return
 
-    equal_num_sleep_stages = (args.equal_num_sleep_stages.lower() == "true") or (args.equal_num_sleep_stages.lower() == "1")
-
-    # Load data
-    channels_to_read = ["EEG Pz-LER", "EEG T6-LER", "EEG Fp1-LER", "EEG T3-LER", "EEG Cz-LER"]
-    print(f"Will read the following channels: {channels_to_read}")
-
     if args.directory_psg == "": args.directory_psg = getcwd()
     if args.directory_labels == "": args.directory_labels = getcwd()
     if args.export_directory == "": args.export_directory = getcwd()
 
-    output, return_code = read_all_nights_from_directory(args.directory_psg, args.directory_labels, channels_to_read=channels_to_read, num_files=int(args.num_files), clip_duration_sec=float(args.clip_length_s),
-                                                                                                                    equal_num_sleep_stages=equal_num_sleep_stages, data_type=float32)
+    # Generate data dictionary
+    if args.type == "pseudo_random":
+        print(f"Will generate {NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE} pseudo-random clips per sleep stage.")
+        output, return_code = pseudo_random_dataset(num_clips_per_sleep_stage=NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE, clip_length_num_samples=NOMINAL_FREQUENCY_HZ*float(args.clip_length_s), data_type=float32)
+
+    elif args.type == "EDF":
+        # Load data
+        channels_to_read = ["EEG Pz-LER", "EEG T6-LER", "EEG Fp1-LER", "EEG T3-LER", "EEG Cz-LER"]
+        print(f"Will read the following channels: {channels_to_read}")
+
+        output, return_code = read_all_nights_from_directory(args.directory_psg, args.directory_labels, channels_to_read=channels_to_read, num_files=args.num_files, clip_duration_sec=float(args.clip_length_s),
+                                                                                                                        equal_num_sleep_stages=args.equal_num_sleep_stages, data_type=float32)
 
     # Create and save dataset
     if return_code == 0:
         ds = data.Dataset.from_tensors(output)
 
         # Make dataset filepath
-        if "filter" in path.basename(args.directory_psg):
+        if args.type == 'pseudo_random':
+            ds_filepath = f"{args.export_directory}/Pseudo_Random_Tensorized_{args.clip_length_s}s"
+        elif "filter" in path.basename(args.directory_psg):
             ds_filepath = f"{args.export_directory}/SS3_EDF_filtered_Tensorized_{args.clip_length_s}s"
         else:
             ds_filepath = f"{args.export_directory}/SS3_EDF_Tensorized_{args.clip_length_s}s"
+
         if ONE_HOT_OUTPUT: ds_filepath = ds_filepath + '_one-hot'
-        if equal_num_sleep_stages: ds_filepath = ds_filepath + '_equal-sleep-stages'
+        if args.equal_num_sleep_stages: ds_filepath = ds_filepath + '_equal-sleep-stages'
         ds_filepath = ds_filepath.replace('.', '-')
 
         # Save dataset
@@ -271,6 +302,9 @@ def main():
             data.Dataset.save(ds, compression=None, path=ds_filepath)
 
         print(f"Dataset saved at: {ds_filepath}. It contains {output['sleep_stage'].shape[0]} clips.")
+    
+    else:
+        print(f"Could not generate dataset! Error return code: {return_code}. Nothing will be saved.")
 
 if __name__ == "__main__":
     main()

@@ -2,7 +2,6 @@ import datetime
 import pkg_resources
 import git
 import sys
-import random
 
 import tensorflow as tf
 import tensorflow_addons as tfa
@@ -101,7 +100,7 @@ def load_from_dataset(args):
     # Check corner cases
     if args.input_channel not in data.keys():
         print(f"Requested input chanel {args.input_channel} not found in input dataset ({args.input_dataset}). Available channels are {data.keys()}. Aborting.")
-        return 0, 0, -1
+        return 0, 0, 0, 0, -1
     else:
         signals = data[args.input_channel]
 
@@ -112,11 +111,7 @@ def load_from_dataset(args):
         signals = signals[0:args.num_clips-args.num_clips%args.batch_size, :]
         sleep_stages = sleep_stages[0:args.num_clips-args.num_clips%args.batch_size, :]
 
-    print(utilities.count_sleep_stages(sleep_stages, NUM_SLEEP_STAGES))
-
     signals, sleep_stages = reduce_bias(signals, sleep_stages)
-
-    print(utilities.count_sleep_stages(sleep_stages, NUM_SLEEP_STAGES))
 
     signals_train, signals_val, sleep_stages_train, sleep_stages_val = trim_clips(args, signals, sleep_stages)
 
