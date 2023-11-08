@@ -1,5 +1,8 @@
 .DS_Store
 */.DS_Store
+.vscode/
+~$weekly_progress.pptx
+logs/*
 
 ### Latex
 # Thesis
@@ -30,3 +33,4 @@ python_prototype/log*
 python_prototype/data*
 python_prototype/results/*
 python_prototype/SS3_EDF_*
+python_prototype/__pycache__/*

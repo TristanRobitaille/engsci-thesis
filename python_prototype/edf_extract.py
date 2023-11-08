@@ -13,23 +13,24 @@ from pyedflib import EdfReader
 from pkg_resources import get_distribution
 from os import getcwd, path
 from glob import glob
-from tensorflow import Tensor, DType, float32, uint16
-from tensorflow import convert_to_tensor, zeros, concat, reshape, expand_dims, cast, convert_to_tensor, transpose
+from tensorflow import Tensor, DType, float32
+from tensorflow import convert_to_tensor, concat, expand_dims, convert_to_tensor, transpose
 from tensorflow import data
 from typing import List
 from argparse import ArgumentParser
 from math import floor
-from copy import copy
 
-import matplotlib.pyplot as plt
+import tensorflow as tf
+import numpy as np
 
 SLEEP_STAGE_RESOLUTION_SEC = 30.0 #Nominal (i.e. in EDF file) length or each clip/sleep stage annotation
 NOMINAL_FREQUENCY_HZ = 256 #Sampling frequency for most channels
 HISTORICAL_LOOKBACK_LENGTH = 16 #We save the last HISTORICAL_LOOKBACK_LENGTH - 1 sleep stages  
 SLEEP_STAGE_ANNOTATONS_CHANNEL = 2 #Channel of sleep stages in annotations file
+MAX_VOLTAGE = 2**15 - 1
+MIN_VOLTAGE = 0
 NUM_SLEEP_STAGES = 5 #Excluding 'unknown'
 ONE_HOT_OUTPUT = False #If true, sleep stages are exported as their one-hot classes tensor, else they are reported as a scalar
-EQUAL_NUMBER_OF_SLEEP_STAGES = True #If true, we output the same number of each sleep stages (simply delete clips from stages s.t. that number of clips for each stage are equal)
 
 def signals_processing(signals:List) -> List:
     """
@@ -49,23 +50,36 @@ def scalar_to_one_hot(input:int) -> List:
 
     return [1 if i == input else 0 for i in range(NUM_SLEEP_STAGES+1)] #The +1 is to account for the 'unknown' class
 
+def pseudo_random_clip(sleep_stage:int, clip_length_num_samples:int, max_min:tuple, stddev:float=2000) -> tf.Tensor:
+    """
+    Outputs a clip of random measurements whose mean is centred around the sleep stage.
+    This is useful to validate trainability of a model as it should produce a very easily-trainable dataset.
+    
+    Output dimension: (clip_length_num_samples,)
+    """
+
+    clip_max, clip_min, sleep_max, sleep_min = max_min
+    mean = (clip_max) * sleep_stage/sleep_max
+    
+    clip = np.random.normal(loc=mean, scale=stddev, size=clip_length_num_samples).astype(np.int32)
+    clip = np.round(clip)
+    clip = np.clip(clip, a_min=clip_min, a_max=clip_max)
+
+    return clip
+
 def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels_to_read:List[str],
                             clip_duration_sec:float32=SLEEP_STAGE_RESOLUTION_SEC, historical_lookback_length=HISTORICAL_LOOKBACK_LENGTH,
                             equal_num_sleep_stages:bool=False, data_type:DType=float32) -> (Tensor, Tensor, List[str]):
     """
-    Returns a tuple of tensors and list with each channel cut into clips: (signals_tensor, sleep_stage_tensor, channel_names_list) Measurements are converted into their digital ADC code, and cast to data_type.
+    Returns a dictionary of channels with signals cut into clips and a return code.
 
     Dimensions:
-        -signals_tensor: (num_clips, num_channels, num_samples_per_clip)
-        -sleep_stage_tensor:
-            [if ONE_HOT_OUTPUT] (num_clips, num_sleep_stages+1, historical_sample_length)
-            [if not ONE_HOT_OUTPUT] (num_clips, 1, historical_sample_length)
-        -channel_names_list: 1D list
-    where num_clips = signal_recording_length//sleep_stage_resolution_sec and num_samples_per_clip = measurement_freq*sleep_stage_resolution_sec
-
+      -Dictionary value (one channel): (num_clips, num_samples_per_clip)
+      -Sleep stages: (num_clips, 1)
+    
     Assumptions:
         -Each channel is sampled at the same frequency, and is the same duration
-        -Clip duration, and therefore annotation resolution, is 30s
+        -Annotation resolution, is 30s
     """
 
     sleep_stage_annotation_to_int = { #Note: Stages 3 and 4 are combined and '0' is reserved to be a padding mask
@@ -91,7 +105,7 @@ def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels
     # Make list (channels) of list of clips for signals
     for channel in channels_to_read:
         if channel not in signal_reader.getSignalLabels():
-            print(f"Channel '{channel}' not found in file '{psg_filepath}'! Aborting.")
+            print(f"Channel '{channel}' not found in file '{psg_filepath}'! Skipping file.")
             return -1
         
         temp_clip = list()
@@ -120,6 +134,12 @@ def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels
         for channel_signals in signals:
             channel_signals.pop(clip_number)
 
+    # Generate pseudo-random signal
+    pseudo_random_list = list()
+    for sleep_stage in sleep_stages:
+        new_clip = pseudo_random_clip(sleep_stage, clip_duration_samples, max_min=(MAX_VOLTAGE, MIN_VOLTAGE, NUM_SLEEP_STAGES, 0))
+        pseudo_random_list.append(new_clip)
+
     # Output equal number of sleep stages
     sleep_stage_count = [0, 0, 0, 0, 0, 0]
     if equal_num_sleep_stages:
@@ -135,42 +155,33 @@ def read_single_whole_night(psg_filepath:str, annotations_filepath:str, channels
                     signals[channel].pop(clip_number)
                 sleep_stages.pop(clip_number)
 
-    # Create historical lookbacks
-    sleep_stages_with_history = copy(sleep_stages)
-    for clip_number in range(HISTORICAL_LOOKBACK_LENGTH, len(sleep_stages)):
-        temp_lookback = list()
-        for i in range(HISTORICAL_LOOKBACK_LENGTH):
-            if ONE_HOT_OUTPUT: temp_lookback.append(scalar_to_one_hot(sleep_stages[clip_number-i]))
-            else: temp_lookback.append(sleep_stages[clip_number-i])
-
-        sleep_stages_with_history[clip_number] = temp_lookback
-
-    # Remove historical lookback length from start of list to avoid having to pad
-    sleep_stages_with_history = sleep_stages_with_history[HISTORICAL_LOOKBACK_LENGTH:-1]
-    for channel_number in range(len(channels_to_read)): signals[channel_number] = signals[channel_number][HISTORICAL_LOOKBACK_LENGTH:-1]
-
     # Convert to tensors
-    sleep_stages = convert_to_tensor(sleep_stages_with_history, dtype=data_type)
+    sleep_stages = convert_to_tensor(sleep_stages, dtype=data_type, name="sleep_stage")
+    pseudo_random_list = convert_to_tensor(pseudo_random_list, dtype=data_type, name="pseudo_random")
+    
     if ONE_HOT_OUTPUT: sleep_stages = transpose(sleep_stages, perm=[0, 2, 1])
     else: sleep_stages = expand_dims(sleep_stages, axis=1)
 
-    signals = convert_to_tensor(signals, dtype=data_type)
-    signals = transpose(signals, perm=[1, 0, 2])
+    for i in range(len(channels_to_read)):
+        signals[i] = convert_to_tensor(signals[i], dtype=data_type, name=channels_to_read[i])      
 
-    return (signals, sleep_stages, channels_to_read)
+    signals = dict(zip(channels_to_read, signals)) #Convert to dictionary
+    signals["pseudo_random"] = pseudo_random_list
+    signals["sleep_stage"] = sleep_stages
+
+    return signals
 
 def read_all_nights_from_directory(directory_psg:str, directory_labels:str, channels_to_read:List[str], num_files:int=-1, 
                                    clip_duration_sec:float32=SLEEP_STAGE_RESOLUTION_SEC, 
                                    equal_num_sleep_stages:bool=False, data_type:DType=float32) -> (Tensor, Tensor, List[str]):
+
     """
-    Calls read_single_whole_night() for all files in folder and returns concatenated versions of each output tensor along with a success flag
+    Calls read_single_whole_night() for all files in folder and returns a dictionary of all channels and sleep stages concatenated along with a success flag.
 
     Dimensions:
-        -signals_tensor: (total_num_clips, num_channels, num_samples_per_clip)
-        -sleep_stage_tensor: (total_num_clips, historical_sample_length, num_sleep_stages+1)
-        -channel_names_list: 1D list
-    where total_num_clips = sum(num_clips for each night) and num_samples_per_clip = measurement_freq*SLEEP_STAGE_RESOLUTION_SEC
-
+      -Dictionary value (one channel): (num_clips_total, num_samples_per_clip)
+      -Sleep stages: (num_clips_total, 1)
+    
     Assumptions:
         -All equivalent channels have the same labels across all nights
         -All PSG files have the same number of channels
@@ -181,47 +192,35 @@ def read_all_nights_from_directory(directory_psg:str, directory_labels:str, chan
     labels_file_list = glob(path.join(directory_labels, "*Base.edf"))
     if len(PSG_file_list) == 0:
         print(f"No valid PSG (*PSG.edf) files found in search directory ({directory_psg})!")
-        return 0, 0, 0, -1
+        return -1
     if len(labels_file_list) == 0:
         print(f"No valid sleep stages (*Base.edf) files found in search directory ({directory_labels})!")
-        return 0, 0, 0, -1
+        return -1
 
-    output_signals_tensor = zeros(shape=(0, 0, 0), dtype=data_type)
-    output_sleep_stages = zeros(shape=(0, 0, 0), dtype=data_type)
-    signal_channel_names = []
-
+    output = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"]}
     file_cnt = 0
+
+    # Go through each file found in the input directory
     for PSG_file in PSG_file_list:
         print(f"Processing: {PSG_file}")
 
         sleep_stage_file = labels_file_list[file_cnt]
 
-        output = read_single_whole_night(PSG_file, sleep_stage_file, channels_to_read, clip_duration_sec, equal_num_sleep_stages=equal_num_sleep_stages, data_type=data_type)
+        output_one_night = read_single_whole_night(PSG_file, sleep_stage_file, channels_to_read, clip_duration_sec, equal_num_sleep_stages=equal_num_sleep_stages, data_type=data_type)
         if output == -1:
-            print(f"""Received failure code {output} from read_single_whole_night. Skipping night.\n
-                PSG_file: {PSG_file}\n
-                sleep_stage_file: {sleep_stage_file}\n
-                channels_to_read: {channels_to_read}\n
-                clip_duration_sec: {clip_duration_sec}\n
-                equal_num_sleep_stages: {equal_num_sleep_stages}\n
-                data_type: {data_type}""")
-            continue
-        else: new_signals_tensor, new_sleep_stages_tensor, new_signal_labels = output
+            continue #Skip this file
 
-        if output_signals_tensor.shape == (0, 0, 0): #Inherit num_channels, num_samples_per_clip and channel label from first tensor
-            output_signals_tensor = reshape(output_signals_tensor, shape=(0, new_signals_tensor.shape[1], new_signals_tensor.shape[2]))
-            output_sleep_stages =   reshape(output_signals_tensor, shape=(0, new_sleep_stages_tensor.shape[1], new_sleep_stages_tensor.shape[2]))
-            signal_channel_names = new_signal_labels
-
-        output_signals_tensor = concat([output_signals_tensor, new_signals_tensor], axis=0)
-        output_sleep_stages =   concat([output_sleep_stages, new_sleep_stages_tensor], axis=0)
+        for key, value in output_one_night.items():
+            if output[key] == None:
+                output[key] = output_one_night[key]
+            else:
+                output[key] = concat([output[key], output_one_night[key]], axis=0)
 
         if num_files != -1:
             file_cnt += 1
-            if file_cnt == num_files:
-                break
+            if file_cnt == num_files: break
 
-    return output_signals_tensor, output_sleep_stages, signal_channel_names, 0
+    return output, 0
 
 def main():
     # Parser
@@ -231,6 +230,8 @@ def main():
     parser.add_argument('--directory_labels', help='Directory from which to fetch the PSG label files. Searches current workding directory by default.', default="")
     parser.add_argument('--num_files', help='Number of files to parse. Parsed in alphabetical order. Defaults to 10 files.', default=10)
     parser.add_argument('--equal_num_sleep_stages', help='If True, exports the same number of example tensors for each sleep stage to avoid bias in dataset. Defaults to False', default="False")
+    parser.add_argument('--export_directory', help='Location to export dataset. Defaults to cwd', default="")
+
     args = parser.parse_args()
 
     if not float(args.clip_length_s) in [3.25, 7.5, 15, 30]:
@@ -241,31 +242,35 @@ def main():
 
     # Load data
     channels_to_read = ["EEG Pz-LER", "EEG T6-LER", "EEG Fp1-LER", "EEG T3-LER", "EEG Cz-LER"]
-    if args.directory_psg == "": directory_psg = getcwd()
-    else: directory_psg = args.directory_psg
-    if args.directory_labels == "": directory_labels = getcwd()
-    else: directory_labels = args.directory_labels
+    print(f"Will read the following channels: {channels_to_read}")
 
-    output_signals_tensor, output_sleep_stages, signal_channel_names, return_code = read_all_nights_from_directory(directory_psg, directory_labels, channels_to_read=channels_to_read, num_files=int(args.num_files), clip_duration_sec=float(args.clip_length_s),
-                                                                                                                    equal_num_sleep_stages=equal_num_sleep_stages, data_type=uint16)
+    if args.directory_psg == "": args.directory_psg = getcwd()
+    if args.directory_labels == "": args.directory_labels = getcwd()
+    if args.export_directory == "": args.export_directory = getcwd()
+
+    output, return_code = read_all_nights_from_directory(args.directory_psg, args.directory_labels, channels_to_read=channels_to_read, num_files=int(args.num_files), clip_duration_sec=float(args.clip_length_s),
+                                                                                                                    equal_num_sleep_stages=equal_num_sleep_stages, data_type=float32)
 
     # Create and save dataset
     if return_code == 0:
-        ds = data.Dataset.from_tensors((output_signals_tensor, output_sleep_stages, signal_channel_names))
-        if args.directory_psg == "/home/tristanr/projects/def-xilinliu/data/SS3_EDF":
-            ds_filepath = f"home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/data/SS3_EDF_Tensorized_{args.clip_length_s}s"
-        elif args.directory_psg == "/home/tristanr/projects/def-xilinliu/data/SS3_filter_new":
-            ds_filepath = f"home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/data/SS3_EDF_filtered_Tensorized_{args.clip_length_s}s"
+        ds = data.Dataset.from_tensors(output)
+
+        # Make dataset filepath
+        if "filter" in path.basename(args.directory_psg):
+            ds_filepath = f"{args.export_directory}/SS3_EDF_filtered_Tensorized_{args.clip_length_s}s"
+        else:
+            ds_filepath = f"{args.export_directory}/SS3_EDF_Tensorized_{args.clip_length_s}s"
         if ONE_HOT_OUTPUT: ds_filepath = ds_filepath + '_one-hot'
         if equal_num_sleep_stages: ds_filepath = ds_filepath + '_equal-sleep-stages'
         ds_filepath = ds_filepath.replace('.', '-')
 
+        # Save dataset
         if get_distribution("tensorflow").version == '2.8.0+computecanada': #Tensorflow 2.8.0 does not support .save()
             data.experimental.save(ds, compression=None, path=ds_filepath)
         else:
             data.Dataset.save(ds, compression=None, path=ds_filepath)
 
-        print(f"Dataset saved at: {getcwd()}/{ds_filepath}")
+        print(f"Dataset saved at: {ds_filepath}. It contains {output['sleep_stage'].shape[0]} clips.")
 
 if __name__ == "__main__":
     main()
