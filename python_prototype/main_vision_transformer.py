@@ -3,6 +3,8 @@ import pkg_resources
 import git
 import sys
 import os
+import time
+import glob
 
 import tensorflow as tf
 import tensorflow_addons as tfa
@@ -11,6 +13,8 @@ from io import StringIO
 from argparse import ArgumentParser
 from tensorflow.keras.layers import Dense, Dropout, LayerNormalization, Add
 from tensorflow.keras.layers.experimental.preprocessing import Rescaling
+from imblearn.under_sampling import RandomUnderSampler
+from sklearn.model_selection import train_test_split
 
 import utilities
 
@@ -23,8 +27,11 @@ NUM_SLEEP_STAGES = 5 + 1 # 'unknown'
 DROPOUT_RATE = 0.1
 DATA_TYPE = tf.float32
 TEST_SET_RATIO = 0.1 #Percentage of training data reserved for validation
+RANDOM_SEED = 42
 VERBOSITY = 'QUIET' #'QUIET', 'NORMAL', 'DETAILED'
 AUTOTUNE = tf.data.experimental.AUTOTUNE
+RESAMPLE_TRAINING_DATASET = True
+RESAMPLE_VALIDATION_DATASET = False
 
 #--- Helpers ---#
 class Capturing(list):
@@ -37,38 +44,7 @@ class Capturing(list):
         del self._stringio    # free up some memory
         sys.stdout = self._stdout
 
-def reduce_bias(signals, sleep_stage):
-
-    # Determine indices of each sleep stage
-    sleep_stage_indices = list()
-    for _ in range(NUM_SLEEP_STAGES): sleep_stage_indices.append([]) 
-
-    for i in range(len(sleep_stage)):
-        sleep_stage_indices[int(sleep_stage[i,:])].append(i)
-
-    # Delete 65% of sleep stages #2
-    #TODO: Should randomly sample the clips to be deleted since removing them from the end is introducing a bias in the validation data (that is taken from the end)
-    sleep_stage_indices[2].sort(reverse=True)
-
-    for i in range(int(0.65*len(sleep_stage_indices[2]))):
-        sleep_stage = tf.concat([sleep_stage[:sleep_stage_indices[2][i]], sleep_stage[sleep_stage_indices[2][i]+1:]], axis=0)
-        signals = tf.concat([signals[:sleep_stage_indices[2][i]], signals[sleep_stage_indices[2][i]+1:]], axis=0)
-
-    return signals, sleep_stage
-
-def trim_clips(args, signals:tf.Tensor, sleep_stages:tf.Tensor):
-    # Cast data type
-    signals = tf.cast(signals, dtype=DATA_TYPE)
-    sleep_stages = tf.cast(sleep_stages, dtype=DATA_TYPE)
-
-    # Dataset split
-    num_training_clips = int(signals.shape[0]*(1-TEST_SET_RATIO))
-
-    signals_train = signals[0:num_training_clips]
-    signals_val = signals[num_training_clips-1:-1]
-    sleep_stages_train = sleep_stages[0:num_training_clips]
-    sleep_stages_val = sleep_stages[num_training_clips-1:-1]
-
+def trim_clips(args, signals_train:tf.Tensor, signals_val:tf.Tensor, sleep_stages_train:tf.Tensor, sleep_stages_val:tf.Tensor):
     # Trim tensors to be a multiple of batch_size
     if (signals_train.shape[0] % args.batch_size != 0):
         max_training_length = signals_train.shape[0] - signals_train.shape[0] % args.batch_size
@@ -86,7 +62,8 @@ def load_from_dataset(args):
     """
     Loads data from dataset and returns batched, shuffled dataset of correct channel
     """
-    global NUM_TRAINING_CLIPS
+            
+    global NUM_SLEEP_STAGES
 
     if (pkg_resources.get_distribution("tensorflow").version == "2.8.0+computecanada"):
         data = tf.data.experimental.load(args.input_dataset)
@@ -97,7 +74,8 @@ def load_from_dataset(args):
     data = next(iter(data))
 
     sleep_stages = data['sleep_stage']
-
+    NUM_SLEEP_STAGES = int(args.input_dataset.split("-stg")[0].split("_")[-1]) + 1 # Extract number of sleep stages (+1 for unknown)
+    
     # Check corner cases
     if args.input_channel not in data.keys():
         print(f"Requested input chanel {args.input_channel} not found in input dataset ({args.input_dataset}). Available channels are {data.keys()}. Aborting.")
@@ -107,17 +85,32 @@ def load_from_dataset(args):
 
     if (args.num_clips > signals.shape[0]):
         print(f"Requested number of clips ({args.num_clips}) larger than number of clips in dataset ({signals.shape[0]})! Will use {signals.shape[0]} clips.")
-        NUM_TRAINING_CLIPS = signals.shape[0]
     else:
         signals = signals[0:args.num_clips-args.num_clips%args.batch_size, :]
         sleep_stages = sleep_stages[0:args.num_clips-args.num_clips%args.batch_size, :]
 
-    signals, sleep_stages = reduce_bias(signals, sleep_stages)
-    signals_train, signals_val, sleep_stages_train, sleep_stages_val = trim_clips(args, signals, sleep_stages)
+    # Convert to numpy arrays
+    signals = signals.numpy()
+    sleep_stages = sleep_stages.numpy()
 
-    return signals_train, signals_val, sleep_stages_train, sleep_stages_val, 0
+    # Split into training and validation sets
+    signals_train, signals_val, sleep_stages_train, sleep_stages_val = train_test_split(signals, sleep_stages, test_size=TEST_SET_RATIO, random_state=RANDOM_SEED)
 
-def export_summary(parser, model, accuracy:float, sleep_stages_count_training:list, sleep_stages_count_validation:list, sleep_stages_count_pred:list, num_training_clips:int) -> None:
+    # Undersample clips such that all classes in minority class have same number of clips
+    resampler = RandomUnderSampler(sampling_strategy=args.dataset_resample_strategy, random_state=RANDOM_SEED, replacement=args.dataset_resample_replacement)
+
+    if RESAMPLE_TRAINING_DATASET:
+        signals_train, sleep_stages_train = resampler.fit_resample(signals_train, sleep_stages_train)
+
+    if RESAMPLE_VALIDATION_DATASET:
+        signals_val, sleep_stages_val = resampler.fit_resample(signals_val, sleep_stages_val)
+
+    # Trim clips to be a multiple of batch_size
+    signals_train, signals_val, sleep_stages_train, sleep_stages_val = trim_clips(args, signals_train, signals_val, sleep_stages_train, sleep_stages_val)
+
+    return signals_train, signals_val, sleep_stages_train, sleep_stages_val, resampler, 0
+
+def export_summary(parser, model, fit_history, resampler, accuracy:float, sleep_stages_count_training:list, sleep_stages_count_validation:list, sleep_stages_count_pred:list, completion_time:float) -> None:
     """
     Saves model and training summary to file
     """
@@ -133,11 +126,25 @@ def export_summary(parser, model, accuracy:float, sleep_stages_count_training:li
     num_clips_pred = sum(sleep_stages_count_pred)
 
     log = "VISION TRANSFORMER MODEL TRAINING SUMMARY\n"
-    log += model_summary
-    log += f"\nTest set accuracy: {accuracy:.4f}\n"
     log += f"Git hash: {repo.head.object.hexsha}\n"
-    log += f"Dataset: {parser.input_dataset}\n"
+    log += f"Time to complete: {completion_time:.2f}s\n"
+    log += model_summary
+    log += f"\nDataset: {parser.input_dataset}\n"
     log += f"Channel: {parser.input_channel}\n"
+    log += f"Validation set accuracy: {accuracy:.4f}\n"
+    log += f"Training accuracy: {[round(accuracy, 4) for accuracy in fit_history.history['accuracy']]}\n"
+    log += f"Training loss: {[round(loss, 4) for loss in fit_history.history['loss']]}\n"
+    log += f"Number of epochs: {parser.num_epochs}\n\n"
+
+    log += f"Dataset resample strategy: {parser.dataset_resample_strategy}\n"
+    log += f"Dataset resample replacement: {parser.dataset_resample_replacement}\n"
+    log += f"Dataset resampler: {resampler}\n\n"
+
+    log += f"Requested number of training clips: {int(TEST_SET_RATIO*parser.num_clips)}\n"
+    log += f"Sleep stages count in training data ({num_clips_training}): {sleep_stages_count_training} ({[round(num / num_clips_training, 4) for num in sleep_stages_count_training]})\n"
+    log += f"Sleep stages count in validation set input ({num_clips_validation}): {sleep_stages_count_validation} ({[round(num / num_clips_validation, 4) for num in sleep_stages_count_validation]})\n"
+    log += f"Sleep stages count in validation set prediction ({num_clips_pred}): {sleep_stages_count_pred} ({[round(num / num_clips_pred, 4) for num in sleep_stages_count_pred]})\n\n"
+
     log += f"CLIP_LENGTH (s): {parser.clip_length_s}\n"
     log += f"NUM_SLEEP_STAGES (includes unknown): {NUM_SLEEP_STAGES}\n"
     log += f"DATA_TYPE: {DATA_TYPE}\n"
@@ -147,17 +154,58 @@ def export_summary(parser, model, accuracy:float, sleep_stages_count_training:li
     log += f"NUM_LAYERS: {parser.num_layers}\n"
     log += f"MLP_DIMENSION: {parser.mlp_dim}\n"
     log += f"DROPOUT_RATE: {DROPOUT_RATE}\n"
-    log += f"Sleep stages count in training data: {sleep_stages_count_training} ({[round(num / num_clips_training, 4) for num in sleep_stages_count_training]})\n"
-    log += f"Sleep stages count in validation data: {sleep_stages_count_validation} ({[round(num / num_clips_validation, 4) for num in sleep_stages_count_validation]})\n"
-    log += f"Sleep stages count in prediction data: {sleep_stages_count_pred} ({[round(num / num_clips_pred, 4) for num in sleep_stages_count_pred]})\n"
-    log += f"Number of training clips used: {num_training_clips}\n"
-    log += f"Number of epochs: {parser.num_epochs}\n"
-    log += f"Learning rate: {parser.learning_rate:.6f}\n"
+    log += f"INITIAL_LEARNING_RATE: {parser.learning_rate:.6f}\n"
+    log += f"RESAMPLE_TRAINING_DATASET: {RESAMPLE_TRAINING_DATASET}\n"
+    log += f"RESAMPLE_VALIDATION_DATASET: {RESAMPLE_VALIDATION_DATASET}\n"
+    log += f"RANDOM_SEED: {RANDOM_SEED}\n"
 
-    output_log_filename = os.getcwd() + "/python_prototype/results/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_vision.txt"
+    log += f"Model loss: {model.loss.name}\n"
+    log += f"Model optimizer: {model.optimizer.name} (beta_1: {model.optimizer.beta_1}, beta_2: {model.optimizer.beta_2}, epsilon: {model.optimizer.epsilon})\n"
+
+    # Check whether files with the same name already exist and append counter if necessary
+    output_log_filename = "/home/trobitaille/engsci-thesis/python_prototype/results/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_vision.txt"
+    existing_output_log_filenames = glob.glob("/home/trobitaille/engsci-thesis/python_prototype/results/*")
+
+    if (output_log_filename in existing_output_log_filenames):
+        counter = 2
+        output_log_filename = output_log_filename[:-4] + f"_{counter}.txt"
+        while output_log_filename in existing_output_log_filenames:
+            counter += 1
+            output_log_filename = output_log_filename[:-6] + f"_{counter}.txt"
+    
+    # Save to file
 
     with open(output_log_filename, 'w') as file:
         file.write(log)
+
+def parse_arguments():
+    """"
+    Parses command line arguments and return parser object
+    """
+
+    parser = ArgumentParser(description='Transformer model Tensorflow prototype.')
+    parser.add_argument('--num_clips', help='Number of clips to use for training + validation. Defaults to 3000.', default=3000, type=int)
+    parser.add_argument('--input_dataset', help='Filepath of the dataset used for training and validation.')
+    parser.add_argument('--input_channel', help='Name of the channel to use for training and validation.')
+    parser.add_argument('--clip_length_s', help='Clip length (in sec). Must match input dataset clip length. Must be one of 3.25, 5, 7.5, 10, 15, 30. Defaults to 15s.', default=15, type=float)
+    parser.add_argument('--patch_length_s', help='Patch length (in sec). Must be integer multiple of clip_length_s. Defaults to 0.5s.', default=0.5, type=float)
+    parser.add_argument('--num_layers', help='Number of encoder layer. Defaults to 8.', default=8, type=int)
+    parser.add_argument('--embedding_depth', help='Depth of the embedding layer. Defaults to 32.', default=32, type=int)
+    parser.add_argument('--num_heads', help='Number of multi-attention heads. Defaults to 8.', default=8, type=int)
+    parser.add_argument('--mlp_dim', help='Dimension of the MLP layer. Defaults to 32.', default=32, type=int)
+    parser.add_argument('--num_epochs', help='Number of training epochs. Defaults to 25.', default=25, type=int)
+    parser.add_argument('--batch_size', help='Batch size for training. Defaults to 8.', default=8, type=int)
+    parser.add_argument('--learning_rate', help='Learning rate for training. Defaults to 1e-4.', default=1e-4, type=float)
+    parser.add_argument('--dataset_resample_strategy', help='Defines which strategy to use when resampling dataset with RandomUnderSampler(). Defaults to "auto"', choices=['majority', 'not minority', 'not majority', 'all', 'auto'], default='auto', type=str)
+    parser.add_argument('--dataset_resample_replacement', help='Whether replacement is allowed when resampling dataset with RandomUnderSampler(). Defaults to false', default=False, type=bool)
+
+    args = parser.parse_args()
+
+    # Check validity of arguments
+    if args.clip_length_s % args.patch_length_s != 0:
+        raise ValueError(f"patch_length_s ({args.patch_length_s}s) should be an integer multiple of clip_length_s ({args.clip_length_s}s))")
+
+    return args
 
 #--- Multi-Head Attention ---#
 class MultiHeadSelfAttention(tf.keras.layers.Layer):
@@ -222,7 +270,6 @@ class Encoder(tf.keras.layers.Layer):
         self.layernorm1 = LayerNormalization(epsilon=1e-6)
         self.mhsa = MultiHeadSelfAttention(self.embedding_depth, self.num_heads)
         self.dropout1 = Dropout(self.dropout_rate)
-        self.add = Add()
 
         self.layernorm2 = LayerNormalization(epsilon=1e-6)
         self.mlp = tf.keras.Sequential([
@@ -237,12 +284,12 @@ class Encoder(tf.keras.layers.Layer):
         inputs_norm = self.layernorm1(inputs)
         attn_output = self.mhsa(inputs_norm)
         attn_output = self.dropout1(attn_output, training=training)
-        out1 = self.add([attn_output, inputs])
+        out1 = attn_output + inputs
 
         out1_norm = self.layernorm2(out1)
         mlp_output = self.mlp(out1_norm)
         mlp_output = self.dropout2(mlp_output, training=training)
-        return self.add([mlp_output, out1])
+        return mlp_output + out1
 
 #--- Vision Transformer ---#
 class VisionTransformer(tf.keras.Model):
@@ -265,7 +312,6 @@ class VisionTransformer(tf.keras.Model):
         self.patch_projection = Dense(self.embedding_depth)
         self.positional_embedding = self.add_weight("pos_emb", shape=(1, self.num_patches+1, self.embedding_depth)) #+1 is for the trainable classification token prepended to input sequence of patches
         self.class_embedding = self.add_weight("class_emb", shape=(1, 1, self.embedding_depth))
-        self.add = tf.keras.layers.Add()
         self.encoder_layers = [Encoder(embedding_depth=self.embedding_depth, num_heads=self.num_heads, mlp_dim=self.mlp_dim, dropout_rate=self.dropout_rate) for _ in range(self.num_layers)]
         self.mlp_head = tf.keras.Sequential([
             LayerNormalization(epsilon=1e-6),
@@ -295,6 +341,7 @@ class VisionTransformer(tf.keras.Model):
 
         # Construct sequence
         clip = tf.concat([class_embedding, clip], axis=1)
+
         clip = clip + self.positional_embedding
 
         # Go through encoder
@@ -324,31 +371,18 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
     return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
 
 def main():
-    # Parse arguments
-    parser = ArgumentParser(description='Transformer model Tensorflow prototype.')
-    parser.add_argument('--num_clips', help='Number of clips to use for training + validation. Defaults to 3000.', default=3000, type=int)
-    parser.add_argument('--input_dataset', help='Filepath of the dataset used for training and validation.')
-    parser.add_argument('--input_channel', help='Name of the channel to use for training and validation.')
-    parser.add_argument('--clip_length_s', help='Clip length (in sec). Must match input dataset clip length. Must be one of 3.25, 5, 7.5, 10, 15, 30. Defaults to 15s.', default=15, type=float)
-    parser.add_argument('--patch_length_s', help='Patch length (in sec). Must be integer multiple of clip_length_s. Defaults to 0.5s.', default=0.5, type=float)
-    parser.add_argument('--num_layers', help='Number of encoder layer. Defaults to 8.', default=8, type=int)
-    parser.add_argument('--embedding_depth', help='Depth of the embedding layer. Defaults to 32.', default=32, type=int)
-    parser.add_argument('--num_heads', help='Number of multi-attention heads. Defaults to 8.', default=8, type=int)
-    parser.add_argument('--mlp_dim', help='Dimension of the MLP layer. Defaults to 32.', default=32, type=int)
-    parser.add_argument('--num_epochs', help='Number of training epochs. Defaults to 25.', default=25, type=int)
-    parser.add_argument('--batch_size', help='Batch size for training. Defaults to 8.', default=8, type=int)
-    parser.add_argument('--learning_rate', help='Learning rate for training. Defaults to 1e-4.', default=1e-4, type=float)
+    # Start clock
+    start_time = time.time()
 
-    args = parser.parse_args()
-    if args.clip_length_s % args.patch_length_s != 0:
-        raise ValueError(f"patch_length_s ({args.patch_length_s}s) should be an integer multiple of clip_length_s ({args.clip_length_s}s))")
+    # Parse arguments
+    args = parse_arguments()
 
     # Hyperparameters
     clip_length_num_samples = int(args.clip_length_s * SAMPLING_FREQUENCY_HZ)
     patch_length_num_samples = int(args.patch_length_s * SAMPLING_FREQUENCY_HZ)
 
     # Load data
-    signals_train, signals_val, sleep_stages_train, sleep_stages_val, success = load_from_dataset(args=args)
+    signals_train, signals_val, sleep_stages_train, sleep_stages_val, resampler, success = load_from_dataset(args=args)
     if (success == -1): return
 
     # Train model
@@ -365,29 +399,39 @@ def main():
     tensorboard_log_dir = "logs/fit/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=tensorboard_log_dir, histogram_freq=1)
 
-    model.fit(x=signals_train, y=sleep_stages_train, epochs=int(args.num_epochs), batch_size=args.batch_size, callbacks=[tensorboard_callback], )
+    fit_history = model.fit(x=signals_train, y=sleep_stages_train, epochs=int(args.num_epochs), batch_size=args.batch_size, callbacks=[tensorboard_callback], )
 
     # Manual validation
     total_correct = 0
     total = 0
-    sleep_stages_count_pred = [0, 0, 0, 0, 0, 0]
+    sleep_stages_count_pred = [0 for _ in range(NUM_SLEEP_STAGES)]
 
     print(f"Now commencing manual validation with {signals_val.shape[0]} clips")
-    for x,y in zip(signals_val, sleep_stages_val):
-        x = tf.reshape(x, shape=[1, x.shape[0]])
-        sleep_stage = model.call(x, training=False)
-        sleep_stage = tf.argmax(sleep_stage[0])
-        total += 1
-        if (sleep_stage) == tf.cast(y, dtype=tf.int64): total_correct += 1
-        if (VERBOSITY == 'Normal'): print(f"Ground truth: {y}, sleep stage pred: {sleep_stage}, accuracy: {total_correct/total:.4f}")
-        sleep_stages_count_pred[int(sleep_stage)] += 1
+
+    # Make batches
+    signals_val_batches = [signals_val[i:i + args.batch_size] for i in range(0, len(signals_val), args.batch_size)]
+    sleep_stages_val_batches = [sleep_stages_val[i:i + args.batch_size] for i in range(0, len(sleep_stages_val), args.batch_size)]
+
+    for x_batch, y_batch in zip(signals_val_batches, sleep_stages_val_batches):
+        sleep_stages = model(x_batch, training=False)
+        sleep_stages = tf.argmax(sleep_stages, axis=1).numpy()
+
+        for i in range(args.batch_size): total_correct += (sleep_stages[i] == y_batch[i,0])
+        total += len(y_batch)
+
+        if (VERBOSITY == 'Normal'): print(f"Ground truth: {y_batch}, sleep stage pred: {sleep_stages}, accuracy: {total_correct/total:.4f}")
+        for sleep_stage in sleep_stages:
+            sleep_stages_count_pred[int(sleep_stage)] += 1
 
     # Count sleep stages in training and validation datasets
     sleep_stages_count_training = utilities.count_sleep_stages(sleep_stages_train, NUM_SLEEP_STAGES)
     sleep_stages_count_validation = utilities.count_sleep_stages(sleep_stages_val, NUM_SLEEP_STAGES)
 
     # Save accuracy and model details to log file
-    export_summary(args, model, total_correct/total, sleep_stages_count_training, sleep_stages_count_validation, sleep_stages_count_pred, num_training_clips=int(signals_train.shape[0]))
+    completion_time = start_time - time.time()
+
+    export_summary(args, model, fit_history, resampler, total_correct/total, sleep_stages_count_training,
+                   sleep_stages_count_validation, sleep_stages_count_pred, completion_time=completion_time)
 
     print("Done. Good bye.")
 

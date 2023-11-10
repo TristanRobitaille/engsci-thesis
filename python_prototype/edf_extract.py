@@ -23,8 +23,19 @@ SLEEP_STAGE_ANNOTATONS_CHANNEL = 2 #Channel of sleep stages in annotations file
 NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE = 5000 #Number of pseudo-random clips to generate for each sleep stage
 MAX_VOLTAGE = 2**15 - 1
 MIN_VOLTAGE = 0
-NUM_SLEEP_STAGES = 5 #Excluding 'unknown'
+NUM_SLEEP_STAGES = 6 #Excluding 'unknown'
 ONE_HOT_OUTPUT = False #If true, sleep stages are exported as their one-hot classes tensor, else they are reported as a scalar
+
+sleep_stage_annotation_to_int = { #Note: Stages 3 and 4 are combined and '0' is reserved for unknown
+                                    "Sleep stage 1": 1,
+                                    "Sleep stage 2": 2,
+                                    "Sleep stage 3": 3,
+                                    "Sleep stage 4": 4,
+                                    "Sleep stage R": 5,
+                                    "Sleep stage W": 6,
+                                    "Sleep stage ?": -1}
+sleep_stage_unknown = -1
+
 
 def signals_processing(signals:List) -> List:
     """
@@ -95,20 +106,20 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
         -Annotation resolution, is 30s
     """
 
-    sleep_stage_annotation_to_int = { #Note: Stages 3 and 4 are combined and '0' is reserved to be a padding mask
-                                     "Sleep stage 1": 1,
-                                     "Sleep stage 2": 2,
-                                     "Sleep stage 3": 3,
-                                     "Sleep stage 4": 3,
-                                     "Sleep stage R": 4,
-                                     "Sleep stage W": 5,
-                                     "Sleep stage ?": -1}
-    sleep_stage_unknown = -1
-
     # Load data
-    sleep_stages = list(EdfReader(annotations_filepath).readAnnotations()[SLEEP_STAGE_ANNOTATONS_CHANNEL])
+    try: sleep_stages = EdfReader(annotations_filepath)
+    except:
+        print(f"Could not read file '{annotations_filepath}'! Skipping file.")
+        return -1
+    
+    sleep_stages = list(sleep_stages.readAnnotations()[SLEEP_STAGE_ANNOTATONS_CHANNEL])
     sleep_stages = [sleep_stage_annotation_to_int[item] for item in sleep_stages]
-    signal_reader = EdfReader(psg_filepath)
+    
+    try: signal_reader = EdfReader(psg_filepath)
+    except:
+        print(f"Could not read file '{psg_filepath}'! Skipping file.")
+        return -1
+    
     signals = list()
     channels = list(signal_reader.getSignalLabels())
 
@@ -237,7 +248,7 @@ def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:t
         print(f"Did not find the requested number of files ({args.num_files}). Will use {len(PSG_file_list)} files instead.")    
         num_files = len(PSG_file_list)
 
-    labels_file_list = [file.replace("PSG", "Base") for file in PSG_file_list]
+    labels_file_list = [f"{args.directory_labels}/{os.path.basename(psg_file).replace('PSG', 'Base')}" for psg_file in PSG_file_list]
 
     # Prepare for multiprocessing
     num_cpus = mp.cpu_count() - 2 # Leave two CPUs
@@ -308,11 +319,11 @@ def main():
 
         # Make dataset filepath
         if args.type == 'pseudo_random':
-            ds_filepath = f"{args.export_directory}/Pseudo_Random_Tensorized_{args.clip_length_s}s"
+            ds_filepath = f"{args.export_directory}/Pseudo_Random_Tensorized_{NUM_SLEEP_STAGES}-stg_{args.clip_length_s}s"
         elif "filter" in os.path.basename(args.directory_psg):
-            ds_filepath = f"{args.export_directory}/SS3_EDF_filtered_Tensorized_{args.clip_length_s}s"
+            ds_filepath = f"{args.export_directory}/SS3_EDF_filtered_Tensorized_{NUM_SLEEP_STAGES}-stg_{args.clip_length_s}s"
         else:
-            ds_filepath = f"{args.export_directory}/SS3_EDF_Tensorized_{args.clip_length_s}s"
+            ds_filepath = f"{args.export_directory}/SS3_EDF_Tensorized_{NUM_SLEEP_STAGES}-stg_{args.clip_length_s}s"
 
         if ONE_HOT_OUTPUT: ds_filepath = ds_filepath + '_one-hot'
         if args.equal_num_sleep_stages: ds_filepath = ds_filepath + '_equal-sleep-stages'

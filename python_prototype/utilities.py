@@ -49,8 +49,7 @@ def random_dataset(clip_length_num_samples:int, max_min:tuple, num_clips:int=100
     return input_dataset, sleep_stage_dataset
 
 def count_sleep_stages(sleep_stages, num_sleep_stages) -> list:
-    sleep_stages_count = []
-    for _ in range(num_sleep_stages): sleep_stages_count.append(0)
+    sleep_stages_count = [0 for _ in range(num_sleep_stages)]
 
     for sleep_stage_number in range(len(sleep_stages)):
         sleep_stages_count[int(sleep_stages[sleep_stage_number])] += 1
