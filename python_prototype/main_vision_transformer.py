@@ -2,10 +2,9 @@ import datetime
 import pkg_resources
 import git
 import sys
-import os
 import time
-import glob
 
+import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
 
@@ -23,7 +22,7 @@ MAX_VOLTAGE = 2**16-1 #Maximum ADC code output
 DEFAULT_CLIP_LENGTH_S = int(30)
 SAMPLING_FREQUENCY_HZ = int(256)
 DEFAULT_CLIP_LENGTH_NUM_SAMPLES = DEFAULT_CLIP_LENGTH_S * SAMPLING_FREQUENCY_HZ
-NUM_SLEEP_STAGES = 5 + 1 # 'unknown'
+NUM_SLEEP_STAGES = 5 + 1 #Includes 'unknown'
 DROPOUT_RATE = 0.1
 DATA_TYPE = tf.float32
 TEST_SET_RATIO = 0.1 #Percentage of training data reserved for validation
@@ -62,7 +61,7 @@ def load_from_dataset(args):
     """
     Loads data from dataset and returns batched, shuffled dataset of correct channel
     """
-            
+
     global NUM_SLEEP_STAGES
 
     if (pkg_resources.get_distribution("tensorflow").version == "2.8.0+computecanada"):
@@ -70,7 +69,7 @@ def load_from_dataset(args):
     else:
         data = tf.data.Dataset.load(args.input_dataset)
 
-    data = (data.cache().shuffle(args.num_clips).prefetch(AUTOTUNE))
+    # data = (data.cache().shuffle(args.num_clips).prefetch(AUTOTUNE))
     data = next(iter(data))
 
     sleep_stages = data['sleep_stage']
@@ -78,8 +77,7 @@ def load_from_dataset(args):
     
     # Check corner cases
     if args.input_channel not in data.keys():
-        print(f"Requested input chanel {args.input_channel} not found in input dataset ({args.input_dataset}). Available channels are {data.keys()}. Aborting.")
-        return 0, 0, 0, 0, -1
+        raise ValueError(f"Requested input channel {args.input_channel} not found in input dataset ({args.input_dataset}).\nAvailable channels are {data.keys()}.\nAborting.")
     else:
         signals = data[args.input_channel]
 
@@ -89,9 +87,12 @@ def load_from_dataset(args):
         signals = signals[0:args.num_clips-args.num_clips%args.batch_size, :]
         sleep_stages = sleep_stages[0:args.num_clips-args.num_clips%args.batch_size, :]
 
-    # Convert to numpy arrays
+    # Convert to numpy arrays and shuffle
     signals = signals.numpy()
     sleep_stages = sleep_stages.numpy()
+    indices = np.random.permutation(len(signals))
+    signals = signals[indices]
+    sleep_stages = sleep_stages[indices]
 
     # Split into training and validation sets
     signals_train, signals_val, sleep_stages_train, sleep_stages_val = train_test_split(signals, sleep_stages, test_size=TEST_SET_RATIO, random_state=RANDOM_SEED)
@@ -108,82 +109,79 @@ def load_from_dataset(args):
     # Trim clips to be a multiple of batch_size
     signals_train, signals_val, sleep_stages_train, sleep_stages_val = trim_clips(args, signals_train, signals_val, sleep_stages_train, sleep_stages_val)
 
-    return signals_train, signals_val, sleep_stages_train, sleep_stages_val, resampler, 0
+    return signals_train, signals_val, sleep_stages_train, sleep_stages_val, resampler
 
 def export_summary(parser, model, fit_history, resampler, accuracy:float, sleep_stages_count_training:list, sleep_stages_count_validation:list, sleep_stages_count_pred:list, completion_time:float) -> None:
     """
     Saves model and training summary to file
     """
-    with Capturing() as model_summary:
-        model.summary()
-    model_summary = "\n".join(model_summary)
+    try:
+        with Capturing() as model_summary:
+            model.summary()
+        model_summary = "\n".join(model_summary)
 
-    repo = git.Repo(search_parent_directories=True)
+        repo = git.Repo(search_parent_directories=True)
 
-    # Count relative number of stages
-    num_clips_training = sum(sleep_stages_count_training)
-    num_clips_validation = sum(sleep_stages_count_validation)
-    num_clips_pred = sum(sleep_stages_count_pred)
+        # Count relative number of stages
+        num_clips_training = sum(sleep_stages_count_training)
+        num_clips_validation = sum(sleep_stages_count_validation)
+        num_clips_pred = sum(sleep_stages_count_pred)
 
-    log = "VISION TRANSFORMER MODEL TRAINING SUMMARY\n"
-    log += f"Git hash: {repo.head.object.hexsha}\n"
-    log += f"Time to complete: {completion_time:.2f}s\n"
-    log += model_summary
-    log += f"\nDataset: {parser.input_dataset}\n"
-    log += f"Channel: {parser.input_channel}\n"
-    log += f"Validation set accuracy: {accuracy:.4f}\n"
-    log += f"Training accuracy: {[round(accuracy, 4) for accuracy in fit_history.history['accuracy']]}\n"
-    log += f"Training loss: {[round(loss, 4) for loss in fit_history.history['loss']]}\n"
-    log += f"Number of epochs: {parser.num_epochs}\n\n"
+        log = "VISION TRANSFORMER MODEL TRAINING SUMMARY\n"
+        log += f"Git hash: {repo.head.object.hexsha}\n"
+        log += f"Time to complete: {completion_time:.2f}s\n"
+        log += model_summary
+        log += f"\nDataset: {parser.input_dataset}\n"
+        log += f"Channel: {parser.input_channel}\n"
+        log += f"Validation set accuracy: {accuracy:.4f}\n"
+        log += f"Training accuracy: {[round(accuracy, 4) for accuracy in fit_history.history['accuracy']]}\n"
+        log += f"Training loss: {[round(loss, 4) for loss in fit_history.history['loss']]}\n"
+        log += f"Number of epochs: {parser.num_epochs}\n\n"
 
-    log += f"Dataset resample strategy: {parser.dataset_resample_strategy}\n"
-    log += f"Dataset resample replacement: {parser.dataset_resample_replacement}\n"
-    log += f"Dataset resampler: {resampler}\n\n"
+        log += f"Dataset resample strategy: {parser.dataset_resample_strategy}\n"
+        log += f"Dataset resample replacement: {parser.dataset_resample_replacement}\n"
+        log += f"Dataset resampler: {resampler}\n\n"
 
-    log += f"Requested number of training clips: {int(TEST_SET_RATIO*parser.num_clips)}\n"
-    log += f"Sleep stages count in training data ({num_clips_training}): {sleep_stages_count_training} ({[round(num / num_clips_training, 4) for num in sleep_stages_count_training]})\n"
-    log += f"Sleep stages count in validation set input ({num_clips_validation}): {sleep_stages_count_validation} ({[round(num / num_clips_validation, 4) for num in sleep_stages_count_validation]})\n"
-    log += f"Sleep stages count in validation set prediction ({num_clips_pred}): {sleep_stages_count_pred} ({[round(num / num_clips_pred, 4) for num in sleep_stages_count_pred]})\n\n"
+        log += f"Requested number of training clips: {int(TEST_SET_RATIO*parser.num_clips)}\n"
+        log += f"Sleep stages count in training data ({num_clips_training}): {sleep_stages_count_training} ({[round(num / num_clips_training, 4) for num in sleep_stages_count_training]})\n"
+        log += f"Sleep stages count in validation set input ({num_clips_validation}): {sleep_stages_count_validation} ({[round(num / num_clips_validation, 4) for num in sleep_stages_count_validation]})\n"
+        log += f"Sleep stages count in validation set prediction ({num_clips_pred}): {sleep_stages_count_pred} ({[round(num / num_clips_pred, 4) for num in sleep_stages_count_pred]})\n\n"
 
-    log += f"CLIP_LENGTH (s): {parser.clip_length_s}\n"
-    log += f"NUM_SLEEP_STAGES (includes unknown): {NUM_SLEEP_STAGES}\n"
-    log += f"DATA_TYPE: {DATA_TYPE}\n"
-    log += f"VOLTAGE_EMBEDDING_DEPTH: {parser.embedding_depth}\n"
-    log += f"BATCH_SIZE: {parser.batch_size}\n"
-    log += f"MHA_NUM_HEADS: {parser.num_heads}\n"
-    log += f"NUM_LAYERS: {parser.num_layers}\n"
-    log += f"MLP_DIMENSION: {parser.mlp_dim}\n"
-    log += f"DROPOUT_RATE: {DROPOUT_RATE}\n"
-    log += f"INITIAL_LEARNING_RATE: {parser.learning_rate:.6f}\n"
-    log += f"RESAMPLE_TRAINING_DATASET: {RESAMPLE_TRAINING_DATASET}\n"
-    log += f"RESAMPLE_VALIDATION_DATASET: {RESAMPLE_VALIDATION_DATASET}\n"
-    log += f"RANDOM_SEED: {RANDOM_SEED}\n"
+        log += f"CLIP_LENGTH (s): {parser.clip_length_s}\n"
+        log += f"NUM_SLEEP_STAGES (includes unknown): {NUM_SLEEP_STAGES}\n"
+        log += f"DATA_TYPE: {DATA_TYPE}\n"
+        log += f"VOLTAGE_EMBEDDING_DEPTH: {parser.embedding_depth}\n"
+        log += f"BATCH_SIZE: {parser.batch_size}\n"
+        log += f"MHA_NUM_HEADS: {parser.num_heads}\n"
+        log += f"NUM_LAYERS: {parser.num_layers}\n"
+        log += f"MLP_DIMENSION: {parser.mlp_dim}\n"
+        log += f"DROPOUT_RATE: {DROPOUT_RATE}\n"
+        log += f"INITIAL_LEARNING_RATE: {parser.learning_rate:.6f}\n"
+        log += f"RESAMPLE_TRAINING_DATASET: {RESAMPLE_TRAINING_DATASET}\n"
+        log += f"RESAMPLE_VALIDATION_DATASET: {RESAMPLE_VALIDATION_DATASET}\n"
+        log += f"RANDOM_SEED: {RANDOM_SEED}\n"
 
-    log += f"Model loss: {model.loss.name}\n"
-    log += f"Model optimizer: {model.optimizer.name} (beta_1: {model.optimizer.beta_1}, beta_2: {model.optimizer.beta_2}, epsilon: {model.optimizer.epsilon})\n"
+        log += f"Model loss: {model.loss.name}\n"
+        log += f"Model optimizer: {model.optimizer.name} (beta_1: {model.optimizer.beta_1}, beta_2: {model.optimizer.beta_2}, epsilon: {model.optimizer.epsilon})\n"
 
-    # Check whether files with the same name already exist and append counter if necessary
-    output_log_filename = "/home/trobitaille/engsci-thesis/python_prototype/results/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_vision.txt"
-    existing_output_log_filenames = glob.glob("/home/trobitaille/engsci-thesis/python_prototype/results/*")
-
-    if (output_log_filename in existing_output_log_filenames):
-        counter = 2
-        output_log_filename = output_log_filename[:-4] + f"_{counter}.txt"
-        while output_log_filename in existing_output_log_filenames:
-            counter += 1
-            output_log_filename = output_log_filename[:-6] + f"_{counter}.txt"
-    
-    # Save to file
-
-    with open(output_log_filename, 'w') as file:
-        file.write(log)
+        # Check whether files with the same name already exist and append counter if necessary
+        candidate_file_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_vision.txt"
+        output_log_filename = utilities.find_file_name(candidate_file_name, "/home/trobitaille/engsci-thesis/python_prototype/results/")
+        
+        # Save to file
+        with open(output_log_filename, 'w') as file:
+            file.write(log)
+    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to export summary.")
 
 def parse_arguments():
     """"
     Parses command line arguments and return parser object
     """
 
-    parser = ArgumentParser(description='Transformer model Tensorflow prototype.')
+    # Resampling documentation: https://imbalanced-learn.org/stable/introduction.html
+    resampling_type_choices = ['RandomOverSampler', 'SMOTE', 'ADASYN', 'BorderlineSMOTE', 'SMOTENC', 'SMOTEN', 'KMeansSMOTE', 'SVMSMOTE', 'ClusterCentroids', 'RandomUnderSampler', 'TomekLinks']
+
+    parser = utilities.ArgumentParserWithError(description='Transformer model Tensorflow prototype.')
     parser.add_argument('--num_clips', help='Number of clips to use for training + validation. Defaults to 3000.', default=3000, type=int)
     parser.add_argument('--input_dataset', help='Filepath of the dataset used for training and validation.')
     parser.add_argument('--input_channel', help='Name of the channel to use for training and validation.')
@@ -196,15 +194,24 @@ def parse_arguments():
     parser.add_argument('--num_epochs', help='Number of training epochs. Defaults to 25.', default=25, type=int)
     parser.add_argument('--batch_size', help='Batch size for training. Defaults to 8.', default=8, type=int)
     parser.add_argument('--learning_rate', help='Learning rate for training. Defaults to 1e-4.', default=1e-4, type=float)
+    parser.add_argument('--class_weights', help='List of weights to apply in loss calculation.', nargs='+', default=[1, 1, 1, 1, 1, 1], type=float)
+    parser.add_argument('--dataset_resample_algo', help="Which dataset resampling algorithm to use. Currently using 'imblearn' package.", choices='RandomUnderSampler', default='', type=str)
     parser.add_argument('--dataset_resample_strategy', help='Defines which strategy to use when resampling dataset with RandomUnderSampler(). Defaults to "auto"', choices=['majority', 'not minority', 'not majority', 'all', 'auto'], default='auto', type=str)
     parser.add_argument('--dataset_resample_replacement', help='Whether replacement is allowed when resampling dataset with RandomUnderSampler(). Defaults to false', default=False, type=bool)
 
-    args = parser.parse_args()
+    # Parse arguments
+    try:
+        args = parser.parse_args()
+    except Exception as e:
+        utilities.log_error_and_exit(e)
 
     # Check validity of arguments
     if args.clip_length_s % args.patch_length_s != 0:
         raise ValueError(f"patch_length_s ({args.patch_length_s}s) should be an integer multiple of clip_length_s ({args.clip_length_s}s))")
 
+    if len(args.class_weights) != NUM_SLEEP_STAGES:
+        raise ValueError(f"Number of class weights ({len(args.class_weights)}) should be equal to number of sleep stages ({NUM_SLEEP_STAGES})")
+    
     return args
 
 #--- Multi-Head Attention ---#
@@ -382,24 +389,29 @@ def main():
     patch_length_num_samples = int(args.patch_length_s * SAMPLING_FREQUENCY_HZ)
 
     # Load data
-    signals_train, signals_val, sleep_stages_train, sleep_stages_val, resampler, success = load_from_dataset(args=args)
-    if (success == -1): return
+    try: signals_train, signals_val, sleep_stages_train, sleep_stages_val, resampler = load_from_dataset(args=args)
+    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to load data from dataset.")
 
     # Train model
     print(f"Starting training with {int((1 - TEST_SET_RATIO)*signals_train.shape[0])} clips")
-    model = VisionTransformer(clip_length_num_samples=clip_length_num_samples, patch_length_num_samples=patch_length_num_samples, num_layers=args.num_layers, num_classes=NUM_SLEEP_STAGES,
-                                embedding_depth=args.embedding_depth, num_heads=args.num_heads, mlp_dim=args.mlp_dim, dropout_rate=DROPOUT_RATE)
+    try:
+        model = VisionTransformer(clip_length_num_samples=clip_length_num_samples, patch_length_num_samples=patch_length_num_samples, num_layers=args.num_layers, num_classes=NUM_SLEEP_STAGES,
+                                  embedding_depth=args.embedding_depth, num_heads=args.num_heads, mlp_dim=args.mlp_dim, dropout_rate=DROPOUT_RATE)
+    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to initialize model.")
 
-    model.compile(
-        loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False),
-        optimizer=tf.keras.optimizers.Adam(CustomSchedule(args.embedding_depth), beta_1=0.9, beta_2=0.98, epsilon=1e-9),
-        metrics=["accuracy"],
-    )
+    try:
+        model.compile(
+            loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False),
+            optimizer=tf.keras.optimizers.Adam(CustomSchedule(args.embedding_depth), beta_1=0.9, beta_2=0.98, epsilon=1e-9),
+            metrics=["accuracy"],
+        )
+    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to compile model.")
 
     tensorboard_log_dir = "logs/fit/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=tensorboard_log_dir, histogram_freq=1)
 
-    fit_history = model.fit(x=signals_train, y=sleep_stages_train, epochs=int(args.num_epochs), batch_size=args.batch_size, callbacks=[tensorboard_callback], )
+    try: fit_history = model.fit(x=signals_train, y=sleep_stages_train, epochs=int(args.num_epochs), batch_size=args.batch_size, callbacks=[tensorboard_callback], class_weight=args.class_weights)
+    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to fit model.")
 
     # Manual validation
     total_correct = 0
@@ -411,24 +423,25 @@ def main():
     # Make batches
     signals_val_batches = [signals_val[i:i + args.batch_size] for i in range(0, len(signals_val), args.batch_size)]
     sleep_stages_val_batches = [sleep_stages_val[i:i + args.batch_size] for i in range(0, len(sleep_stages_val), args.batch_size)]
+    try:
+        for x_batch, y_batch in zip(signals_val_batches, sleep_stages_val_batches):
+            sleep_stages = model(x_batch, training=False)
+            sleep_stages = tf.argmax(sleep_stages, axis=1).numpy()
 
-    for x_batch, y_batch in zip(signals_val_batches, sleep_stages_val_batches):
-        sleep_stages = model(x_batch, training=False)
-        sleep_stages = tf.argmax(sleep_stages, axis=1).numpy()
+            for i in range(args.batch_size): total_correct += (sleep_stages[i] == y_batch[i,0])
+            total += len(y_batch)
 
-        for i in range(args.batch_size): total_correct += (sleep_stages[i] == y_batch[i,0])
-        total += len(y_batch)
-
-        if (VERBOSITY == 'Normal'): print(f"Ground truth: {y_batch}, sleep stage pred: {sleep_stages}, accuracy: {total_correct/total:.4f}")
-        for sleep_stage in sleep_stages:
-            sleep_stages_count_pred[int(sleep_stage)] += 1
+            if (VERBOSITY == 'Normal'): print(f"Ground truth: {y_batch}, sleep stage pred: {sleep_stages}, accuracy: {total_correct/total:.4f}")
+            for sleep_stage in sleep_stages:
+                sleep_stages_count_pred[int(sleep_stage)] += 1
+    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to manually validate model.")
 
     # Count sleep stages in training and validation datasets
     sleep_stages_count_training = utilities.count_sleep_stages(sleep_stages_train, NUM_SLEEP_STAGES)
     sleep_stages_count_validation = utilities.count_sleep_stages(sleep_stages_val, NUM_SLEEP_STAGES)
 
     # Save accuracy and model details to log file
-    completion_time = start_time - time.time()
+    completion_time = time.time() - start_time
 
     export_summary(args, model, fit_history, resampler, total_correct/total, sleep_stages_count_training,
                    sleep_stages_count_validation, sleep_stages_count_pred, completion_time=completion_time)

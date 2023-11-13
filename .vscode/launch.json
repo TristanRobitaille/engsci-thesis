@@ -22,7 +22,7 @@
             "justMyCode": true,
             "args": ["--clip_length_s=15", "--dataset_resample_strategy=auto", "--dataset_resample_replacement=True", "--batch_size=16", "--learning_rate=3e-3", "--num_epochs=20", 
                      "--input_channel=EEG Pz-LER", "--num_clips=100000", "--embedding_depth=128", "--num_layers=16", "--num_heads=8", "--mlp_dim=32",
-                     "--input_dataset=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF_filtered_Tensorized_6-stg_15s"]
+                     "--input_dataset=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF_filtered_Tensorized_6-stg_15s", "--class_weights", "0.1", "0.1", "0.1", "0.1", "0.1", "0.5"]
         },
         {
             "name": "EDF Extract",

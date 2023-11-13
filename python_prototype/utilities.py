@@ -1,11 +1,21 @@
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import numpy as np
+import glob as glob
+import datetime
+import argparse
+import sys
 
 """
 Some utility functions used by models.
 """
 
+#--- CLASSES ---#
+class ArgumentParserWithError(argparse.ArgumentParser):
+    def error(self, message):
+        raise Exception(message)
+
+#--- FUNCTIONS ---#
 def plot_1D_tensor(input_tensor: tf.Tensor):
     """
     Simply plots a given tensor and prints its min, max and dimensions.
@@ -47,6 +57,35 @@ def random_dataset(clip_length_num_samples:int, max_min:tuple, num_clips:int=100
         input_dataset = tf.concat([input_dataset, new_input_sequence], axis=0)
 
     return input_dataset, sleep_stage_dataset
+
+def find_file_name(candidate_file_name:str, directory:str) -> str:
+    """
+    Finds a file name that does not already exist in the given directory.
+    If the candidate file name already exists, a number is appended to the end of the file name.
+    """
+
+    output_log_filename = directory + candidate_file_name
+    existing_output_log_filenames = glob.glob("/home/trobitaille/engsci-thesis/python_prototype/error_logs/*")
+
+    if (output_log_filename in existing_output_log_filenames):
+        counter = 2
+        output_log_filename = output_log_filename[:-4] + f"_{counter}.txt"
+        while output_log_filename in existing_output_log_filenames:
+            counter += 1
+            output_log_filename = output_log_filename[:-6] + f"_{counter}.txt"
+
+    return output_log_filename
+
+def log_error_and_exit(exception, manual_description:str="", additional_msg:str="") -> None:
+    error_log = find_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/home/trobitaille/engsci-thesis/python_prototype/error_logs/")
+
+    print(f"Receiving error: {exception}")
+
+    with open(error_log, 'w') as f:
+        f.write(manual_description)
+        f.write(f"Exception: {str(exception)}")
+        f.write(additional_msg)
+    exit()
 
 def count_sleep_stages(sleep_stages, num_sleep_stages) -> list:
     sleep_stages_count = [0 for _ in range(num_sleep_stages)]

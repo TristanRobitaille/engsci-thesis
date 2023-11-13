@@ -23,16 +23,16 @@ SLEEP_STAGE_ANNOTATONS_CHANNEL = 2 #Channel of sleep stages in annotations file
 NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE = 5000 #Number of pseudo-random clips to generate for each sleep stage
 MAX_VOLTAGE = 2**15 - 1
 MIN_VOLTAGE = 0
-NUM_SLEEP_STAGES = 6 #Excluding 'unknown'
+NUM_SLEEP_STAGES = 5 #Excluding 'unknown'
 ONE_HOT_OUTPUT = False #If true, sleep stages are exported as their one-hot classes tensor, else they are reported as a scalar
 
 sleep_stage_annotation_to_int = { #Note: Stages 3 and 4 are combined and '0' is reserved for unknown
                                     "Sleep stage 1": 1,
                                     "Sleep stage 2": 2,
                                     "Sleep stage 3": 3,
-                                    "Sleep stage 4": 4,
-                                    "Sleep stage R": 5,
-                                    "Sleep stage W": 6,
+                                    "Sleep stage 4": 3,
+                                    "Sleep stage R": 4,
+                                    "Sleep stage W": 5,
                                     "Sleep stage ?": -1}
 sleep_stage_unknown = -1
 
@@ -251,7 +251,7 @@ def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:t
     labels_file_list = [f"{args.directory_labels}/{os.path.basename(psg_file).replace('PSG', 'Base')}" for psg_file in PSG_file_list]
 
     # Prepare for multiprocessing
-    num_cpus = mp.cpu_count() - 2 # Leave two CPUs
+    num_cpus = mp.cpu_count() - 2 # Leave 2 CPUs
     processes = []
     result_queue = mp.SimpleQueue()
 
@@ -306,7 +306,9 @@ def main():
 
     elif args.type == "EDF":
         # Load data
-        channels_to_read = ["EEG Pz-LER", "EEG T6-LER", "EEG Fp1-LER", "EEG T3-LER", "EEG Cz-LER"]
+        # channels_to_read = ["EEG Pz-LER", "EEG T6-LER", "EEG Fp1-LER", "EEG T3-LER", "EEG Cz-LER", "EEG Fp2-LER", "EEG F7-LER", "EEG T5-LER", "EEG F8-LER", "EEG F3-LER", "EEG F4-LER", "EEG T4-LER", "EEG C3-LER", "EEG C4-LER", "EEG P3-LER", "EEG P4-LER", "EEG O1-LER", "EEG O2-LER", "EEG Fz-LER", "EEG Pz-LER", "EEG Oz-LER"]
+        channels_to_read = ["EEG F8-LER", "EEG F3-LER", "EEG F4-LER", "EEG T4-LER", "EEG C3-LER", "EEG C4-LER", "EEG P3-LER"]
+
         print(f"Will read the following channels: {channels_to_read}")
         print(f"PSG file directory: {args.directory_psg}")
         print(f"Labels file directory: {args.directory_labels}")
@@ -327,6 +329,7 @@ def main():
 
         if ONE_HOT_OUTPUT: ds_filepath = ds_filepath + '_one-hot'
         if args.equal_num_sleep_stages: ds_filepath = ds_filepath + '_equal-sleep-stages'
+        if len(channels_to_read) == 1: ds_filepath = ds_filepath + f"_{channels_to_read[0]}"
         ds_filepath = ds_filepath.replace('.', '-')
 
         # Save dataset
