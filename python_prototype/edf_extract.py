@@ -215,7 +215,16 @@ def process_dispatch(args, PSG_file_list, labels_file_list, channels_to_read, da
             print(f"Process ID {os.getpid()} processing: {os.path.basename(PSG_file)} with {os.path.basename(labels_file)}")
 
             output_one_night = read_single_whole_night(args, PSG_file, labels_file, channels_to_read, data_type)
-            if output_one_night == -1: continue #Skip this file
+            if output_one_night == -1:
+                print(f"""Received failure code {output_one_night} from read_single_whole_night. Skipping night.\n
+                    PSG_file: {PSG_file}\n
+                    sleep_stage_file: {labels_file}\n
+                    channels_to_read: {channels_to_read}\n
+                    clip_duration_sec: {args.clip_duration_sec}\n
+                    equal_num_sleep_stages: {args.equal_num_sleep_stages}\n
+                    data_type: {data_type}\n
+                    multiprocessing: {args.multiprocessing}""")
+                continue #Skip this file
 
             output_all_nights = insert_into_all_night_dict(output_all_nights, output_one_night, channels_to_read)
 
@@ -250,35 +259,56 @@ def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:t
 
     labels_file_list = [f"{args.directory_labels}/{os.path.basename(psg_file).replace('PSG', 'Base')}" for psg_file in PSG_file_list]
 
-    # Prepare for multiprocessing
-    num_cpus = mp.cpu_count() - 2 # Leave 2 CPUs
-    processes = []
-    result_queue = mp.SimpleQueue()
+    if args.multiprocessing: # Use multiprocessing
+        # Prepare for multiprocessing
+        num_cpus = mp.cpu_count() - 2 # Leave 2 CPUs
+        processes = []
+        result_queue = mp.SimpleQueue()
 
-    file_PSG_assignment, file_labels_assignment = [list() for _ in range(num_cpus)], [list() for _ in range(num_cpus)]
-    for i in range(num_files):
-        file_PSG_assignment[i%num_cpus].append(PSG_file_list[i])
-        file_labels_assignment[i%num_cpus].append(labels_file_list[i])
+        file_PSG_assignment, file_labels_assignment = [list() for _ in range(num_cpus)], [list() for _ in range(num_cpus)]
+        for i in range(num_files):
+            file_PSG_assignment[i%num_cpus].append(PSG_file_list[i])
+            file_labels_assignment[i%num_cpus].append(labels_file_list[i])
 
-    # Start processes
-    for i in range(num_cpus):
-        if not file_PSG_assignment[i] == []:
-            process = mp.Process(target=process_dispatch, args=(args, file_PSG_assignment[i], file_labels_assignment[i], channels_to_read, data_type, result_queue))
-            processes.append(process)
-            process.start()
+        # Start processes
+        for i in range(num_cpus):
+            if not file_PSG_assignment[i] == []:
+                process = mp.Process(target=process_dispatch, args=(args, file_PSG_assignment[i], file_labels_assignment[i], channels_to_read, data_type, result_queue))
+                processes.append(process)
+                process.start()
 
-    # Collect results
-    children_outputs = [result_queue.get() for _ in range(len(processes))] # Need to do this before .join() because processes don't exit until their data has been .get() from the queue
+        # Collect results
+        children_outputs = [result_queue.get() for _ in range(len(processes))] # Need to do this before .join() because processes don't exit until their data has been .get() from the queue
 
-    # Wait for children to die
-    for process in processes:
-        process.join()
+        # Wait for children to die
+        for process in processes:
+            process.join()
 
-    # Concatenate nights from all processes
-    output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"]}
-    for output in children_outputs:
-        if output == -1: continue # No files processed
-        output_all_nights = insert_into_all_night_dict(output_all_nights, output, channels_to_read)
+        # Concatenate nights from all processes
+        output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"]}
+        for output in children_outputs:
+            if output == -1: continue # No files processed
+            output_all_nights = insert_into_all_night_dict(output_all_nights, output, channels_to_read)
+
+    else: # No multiprocessing
+        output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"]}
+
+        for PSG_file, labels_file in zip(PSG_file_list, labels_file_list):
+            print(f"Processing: {os.path.basename(PSG_file)} with {os.path.basename(labels_file)}")
+
+            output_one_night = read_single_whole_night(args, PSG_file, labels_file, channels_to_read, data_type)
+            if output_one_night == -1:
+                print(f"""Received failure code {output_one_night} from read_single_whole_night. Skipping night.\n
+                    PSG_file: {PSG_file}\n
+                    sleep_stage_file: {labels_file}\n
+                    channels_to_read: {channels_to_read}\n
+                    clip_duration_sec: {args.clip_duration_sec}\n
+                    equal_num_sleep_stages: {args.equal_num_sleep_stages}\n
+                    data_type: {data_type}\n
+                    multiprocessing: {args.multiprocessing}""")
+                continue #Skip this file
+
+            output_all_nights = insert_into_all_night_dict(output_all_nights, output_one_night, channels_to_read)
 
     return output_all_nights, 0
 
@@ -292,6 +322,7 @@ def main():
     parser.add_argument('--export_directory', help='Location to export dataset. Defaults to cwd.', default="")
     parser.add_argument('--num_files', help='Number of files to parse. Parsed in alphabetical order. Defaults to 5 files.', type=int, default=5)
     parser.add_argument('--equal_num_sleep_stages', help='If True, exports the same number of example tensors for each sleep stage to avoid bias in dataset. Defaults to False.', type=bool, default=False)
+    parser.add_argument('--multiprocessing', help='If set to True, enables multiprocessing of data. Defaults to False.', type=bool, default=False)
 
     # Parse arguments
     args = parser.parse_args()
@@ -306,8 +337,7 @@ def main():
 
     elif args.type == "EDF":
         # Load data
-        # channels_to_read = ["EEG Pz-LER", "EEG T6-LER", "EEG Fp1-LER", "EEG T3-LER", "EEG Cz-LER", "EEG Fp2-LER", "EEG F7-LER", "EEG T5-LER", "EEG F8-LER", "EEG F3-LER", "EEG F4-LER", "EEG T4-LER", "EEG C3-LER", "EEG C4-LER", "EEG P3-LER", "EEG P4-LER", "EEG O1-LER", "EEG O2-LER", "EEG Fz-LER", "EEG Pz-LER", "EEG Oz-LER"]
-        channels_to_read = ["EEG F8-LER", "EEG F3-LER", "EEG F4-LER", "EEG T4-LER", "EEG C3-LER", "EEG C4-LER", "EEG P3-LER"]
+        channels_to_read = ["EEG C4-LER", "EEG Fp1-LER", "EEG Cz-LER", "EEG Fz-LER", "EEG F4-LER"]
 
         print(f"Will read the following channels: {channels_to_read}")
         print(f"PSG file directory: {args.directory_psg}")
