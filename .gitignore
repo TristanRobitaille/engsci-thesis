@@ -35,3 +35,4 @@ python_prototype/results/*
 python_prototype/SS3_EDF_*
 python_prototype/__pycache__/*
 python_prototype/error_logs/*
+python_prototype/*.zip
