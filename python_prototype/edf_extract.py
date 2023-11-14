@@ -363,10 +363,7 @@ def main():
         ds_filepath = ds_filepath.replace('.', '-')
 
         # Save dataset
-        if get_distribution("tensorflow").version == '2.8.0+computecanada': #Tensorflow 2.8.0 does not support .save()
-            tf.data.experimental.save(ds, compression=None, path=ds_filepath)
-        else:
-            tf.data.Dataset.save(ds, compression=None, path=ds_filepath)
+        tf.data.experimental.save(ds, compression=None, path=ds_filepath)
 
         print(f"Dataset saved at: {ds_filepath}. It contains {output['sleep_stage'].shape[0]} clips.")
     

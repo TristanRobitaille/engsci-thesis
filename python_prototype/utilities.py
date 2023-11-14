@@ -87,10 +87,8 @@ def log_error_and_exit(exception, manual_description:str="", additional_msg:str=
         f.write(additional_msg)
     exit()
 
-def count_sleep_stages(sleep_stages, num_sleep_stages) -> list:
-    sleep_stages_count = [0 for _ in range(num_sleep_stages)]
-
-    for sleep_stage_number in range(len(sleep_stages)):
-        sleep_stages_count[int(sleep_stages[sleep_stage_number])] += 1
-
-    return sleep_stages_count
+def count_instances_per_class(input, num_classes) -> list:
+    count = [0 for _ in range(num_classes)]
+    for elem in input:
+        count[int(elem)] += 1
+    return count

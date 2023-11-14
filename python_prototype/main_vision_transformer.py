@@ -13,6 +13,7 @@ from argparse import ArgumentParser
 from tensorflow.keras.layers import Dense, Dropout, LayerNormalization, Add
 from tensorflow.keras.layers.experimental.preprocessing import Rescaling
 from imblearn.under_sampling import RandomUnderSampler
+from collections import Counter
 from sklearn.model_selection import train_test_split
 
 import utilities
@@ -64,12 +65,7 @@ def load_from_dataset(args):
 
     global NUM_SLEEP_STAGES
 
-    if (pkg_resources.get_distribution("tensorflow").version == "2.8.0+computecanada"):
-        data = tf.data.experimental.load(args.input_dataset)
-    else:
-        data = tf.data.Dataset.load(args.input_dataset)
-
-    # data = (data.cache().shuffle(args.num_clips).prefetch(AUTOTUNE))
+    data = tf.data.experimental.load(args.input_dataset)
     data = next(iter(data))
 
     sleep_stages = data['sleep_stage']
@@ -98,13 +94,17 @@ def load_from_dataset(args):
     signals_train, signals_val, sleep_stages_train, sleep_stages_val = train_test_split(signals, sleep_stages, test_size=TEST_SET_RATIO, random_state=RANDOM_SEED)
 
     # Undersample clips such that all classes in minority class have same number of clips
-    resampler = RandomUnderSampler(sampling_strategy=args.dataset_resample_strategy, random_state=RANDOM_SEED, replacement=args.dataset_resample_replacement)
-
     if RESAMPLE_TRAINING_DATASET:
+        training_target_count = {1: 3500, 2: 5000, 3: 4000, 4: 4250, 5: 3750}
+        resampler = RandomUnderSampler(sampling_strategy=training_target_count)
         signals_train, sleep_stages_train = resampler.fit_resample(signals_train, sleep_stages_train)
 
     if RESAMPLE_VALIDATION_DATASET:
+        target_val_count = {1: 350, 2: 500, 3: 400, 4: 425, 5: 375}
+        resampler = RandomUnderSampler(sampling_strategy=target_val_count)
         signals_val, sleep_stages_val = resampler.fit_resample(signals_val, sleep_stages_val)
+
+        # signals_val, sleep_stages_val = resampler.fit_resample(signals_val, sleep_stages_val)
 
     # Trim clips to be a multiple of batch_size
     signals_train, signals_val, sleep_stages_train, sleep_stages_val = trim_clips(args, signals_train, signals_val, sleep_stages_train, sleep_stages_val)
@@ -156,6 +156,7 @@ def export_summary(parser, model, fit_history, resampler, accuracy:float, sleep_
         log += f"NUM_LAYERS: {parser.num_layers}\n"
         log += f"MLP_DIMENSION: {parser.mlp_dim}\n"
         log += f"DROPOUT_RATE: {DROPOUT_RATE}\n"
+        log += f"CLASS WEIGHTS: {parser.class_weights}\n"
         log += f"INITIAL_LEARNING_RATE: {parser.learning_rate:.6f}\n"
         log += f"RESAMPLE_TRAINING_DATASET: {RESAMPLE_TRAINING_DATASET}\n"
         log += f"RESAMPLE_VALIDATION_DATASET: {RESAMPLE_VALIDATION_DATASET}\n"
@@ -410,6 +411,7 @@ def main():
     tensorboard_log_dir = "logs/fit/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=tensorboard_log_dir, histogram_freq=1)
 
+    args.class_weights = {i: weight for i, weight in enumerate(args.class_weights)}
     try: fit_history = model.fit(x=signals_train, y=sleep_stages_train, epochs=int(args.num_epochs), batch_size=args.batch_size, callbacks=[tensorboard_callback], class_weight=args.class_weights)
     except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to fit model.")
 

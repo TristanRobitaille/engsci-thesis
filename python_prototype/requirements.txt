@@ -1,5 +1,5 @@
-tensorflow>=2.8.0
-tensorrt>=8.6.1
+tensorflow==2.8.0
+tensorrt==8.5.1.7
 numpy>=1.24.0
 matplotlib>=3.8.0
 six>=1.16.0
@@ -9,4 +9,4 @@ matplotlib>=3.8.0
 pyedflib>=0.1.34
 multiprocess>=0.70.15
 GitPython>=3.1.40
-tensorflow-addons>=0.22.0
+tensorflow-addons==0.16.1
