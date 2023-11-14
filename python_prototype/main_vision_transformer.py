@@ -412,7 +412,7 @@ def main():
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=tensorboard_log_dir, histogram_freq=1)
 
     args.class_weights = {i: weight for i, weight in enumerate(args.class_weights)}
-    try: fit_history = model.fit(x=signals_train, y=sleep_stages_train, epochs=int(args.num_epochs), batch_size=args.batch_size, callbacks=[tensorboard_callback], class_weight=args.class_weights)
+    try: fit_history = model.fit(x=signals_train, y=sleep_stages_train, epochs=int(args.num_epochs), batch_size=args.batch_size, callbacks=[tensorboard_callback], class_weight=args.class_weights, verbose=2)
     except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to fit model.")
 
     # Manual validation
@@ -439,8 +439,8 @@ def main():
     except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to manually validate model.")
 
     # Count sleep stages in training and validation datasets
-    sleep_stages_count_training = utilities.count_sleep_stages(sleep_stages_train, NUM_SLEEP_STAGES)
-    sleep_stages_count_validation = utilities.count_sleep_stages(sleep_stages_val, NUM_SLEEP_STAGES)
+    sleep_stages_count_training = utilities.count_instances_per_class(sleep_stages_train, NUM_SLEEP_STAGES)
+    sleep_stages_count_validation = utilities.count_instances_per_class(sleep_stages_val, NUM_SLEEP_STAGES)
 
     # Save accuracy and model details to log file
     completion_time = time.time() - start_time
