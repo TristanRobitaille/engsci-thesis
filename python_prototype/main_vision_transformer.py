@@ -1,19 +1,17 @@
-import datetime
-import pkg_resources
 import git
 import sys
 import time
+import socket
+import imblearn
+import datetime
 
 import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
 
 from io import StringIO
-from argparse import ArgumentParser
-from tensorflow.keras.layers import Dense, Dropout, LayerNormalization, Add
+from tensorflow.keras.layers import Dense, Dropout, LayerNormalization
 from tensorflow.keras.layers.experimental.preprocessing import Rescaling
-from imblearn.under_sampling import RandomUnderSampler
-from collections import Counter
 from sklearn.model_selection import train_test_split
 
 import utilities
@@ -29,9 +27,7 @@ DATA_TYPE = tf.float32
 TEST_SET_RATIO = 0.1 #Percentage of training data reserved for validation
 RANDOM_SEED = 42
 VERBOSITY = 'QUIET' #'QUIET', 'NORMAL', 'DETAILED'
-AUTOTUNE = tf.data.experimental.AUTOTUNE
 RESAMPLE_TRAINING_DATASET = True
-RESAMPLE_VALIDATION_DATASET = False
 
 #--- Helpers ---#
 class Capturing(list):
@@ -57,6 +53,57 @@ def trim_clips(args, signals_train:tf.Tensor, signals_val:tf.Tensor, sleep_stage
         sleep_stages_val = sleep_stages_val[0:max_validation_length]
 
     return signals_train, signals_val, sleep_stages_train, sleep_stages_val
+
+def resample_clips(args, signals_train, labels_train):
+    args.training_set_target_count = {i+1: weight for i, weight in enumerate(args.training_set_target_count)}
+
+    original_sleep_stage_count = utilities.count_instances_per_class(labels_train, NUM_SLEEP_STAGES)
+
+    #Undersampling
+    if args.dataset_resample_algo == 'RandomUnderSampler':
+        resampler = imblearn.under_sampling.RandomUnderSampler(sampling_strategy=args.training_set_target_count, replacement=args.dataset_resample_replacement)
+    
+    elif args.dataset_resample_algo == 'TomekLinks':
+        resampler = imblearn.under_sampling.TomekLinks(sampling_strategy=args.training_set_target_count)
+
+    elif args.dataset_resample_algo == 'ClusterCentroids':
+        resampler = imblearn.under_sampling.ClusterCentroids(sampling_strategy=args.training_set_target_count)
+
+    #Oversampling
+    elif args.dataset_resample_algo == 'SMOTE':
+        resampler = imblearn.over_sampling.SMOTE(sampling_strategy=args.training_set_target_count)
+
+    elif args.dataset_resample_algo == 'SMOTENC':
+        resampler = imblearn.over_sampling.SMOTENC(sampling_strategy=args.training_set_target_count)
+
+    elif args.dataset_resample_algo == 'SMOTEN':
+        resampler = imblearn.over_sampling.SMOTEN(sampling_strategy=args.training_set_target_count)
+
+    elif args.dataset_resample_algo == 'ADASYN':
+        resampler = imblearn.over_sampling.ADASYN(sampling_strategy=args.training_set_target_count)
+
+    elif args.dataset_resample_algo == 'BorderlineSMOTE':
+        resampler = imblearn.over_sampling.BorderlineSMOTE(sampling_strategy=args.training_set_target_count)
+
+    elif args.dataset_resample_algo == 'KMeansSMOTE':
+        resampler = imblearn.over_sampling.KMeansSMOTE(sampling_strategy=args.training_set_target_count)
+
+    elif args.dataset_resample_algo == 'SVMSMOTE':
+        resampler = imblearn.over_sampling.SVMSMOTE(sampling_strategy=args.training_set_target_count)
+
+    elif args.dataset_resample_algo == 'RandomOverSampler':
+        resampler = imblearn.over_sampling.RandomOverSampler(sampling_strategy=args.training_set_target_count)
+
+    #Combination of undersampling and oversampling
+    elif args.dataset_resample_algo == 'SMOTEENN':
+        resampler = imblearn.combine.SMOTEENN(sampling_strategy=args.training_set_target_count)
+
+    elif args.dataset_resample_algo == 'SMOTETomek':
+        resampler = imblearn.combine.SMOTETomek(sampling_strategy=args.training_set_target_count)
+
+    signals_train, labels_train = resampler.fit_resample(signals_train, labels_train)
+
+    return signals_train, labels_train, resampler, original_sleep_stage_count
 
 def load_from_dataset(args):
     """
@@ -93,25 +140,16 @@ def load_from_dataset(args):
     # Split into training and validation sets
     signals_train, signals_val, sleep_stages_train, sleep_stages_val = train_test_split(signals, sleep_stages, test_size=TEST_SET_RATIO, random_state=RANDOM_SEED)
 
-    # Undersample clips such that all classes in minority class have same number of clips
+    # Resamples clips from the training dataset
     if RESAMPLE_TRAINING_DATASET:
-        training_target_count = {1: 3500, 2: 5000, 3: 4000, 4: 4250, 5: 3750}
-        resampler = RandomUnderSampler(sampling_strategy=training_target_count)
-        signals_train, sleep_stages_train = resampler.fit_resample(signals_train, sleep_stages_train)
-
-    if RESAMPLE_VALIDATION_DATASET:
-        target_val_count = {1: 350, 2: 500, 3: 400, 4: 425, 5: 375}
-        resampler = RandomUnderSampler(sampling_strategy=target_val_count)
-        signals_val, sleep_stages_val = resampler.fit_resample(signals_val, sleep_stages_val)
-
-        # signals_val, sleep_stages_val = resampler.fit_resample(signals_val, sleep_stages_val)
+        signals_train, sleep_stages_train, resampler, original_sleep_stage_count = resample_clips(args, signals_train, sleep_stages_train)
 
     # Trim clips to be a multiple of batch_size
     signals_train, signals_val, sleep_stages_train, sleep_stages_val = trim_clips(args, signals_train, signals_val, sleep_stages_train, sleep_stages_val)
 
-    return signals_train, signals_val, sleep_stages_train, sleep_stages_val, resampler
+    return signals_train, signals_val, sleep_stages_train, sleep_stages_val, resampler, original_sleep_stage_count
 
-def export_summary(parser, model, fit_history, resampler, accuracy:float, sleep_stages_count_training:list, sleep_stages_count_validation:list, sleep_stages_count_pred:list, completion_time:float) -> None:
+def export_summary(parser, model, fit_history, resampler, accuracy:float, original_sleep_stage_count:list, sleep_stages_count_training:list, sleep_stages_count_validation:list, sleep_stages_count_pred:list, completion_time:float) -> None:
     """
     Saves model and training summary to file
     """
@@ -123,9 +161,9 @@ def export_summary(parser, model, fit_history, resampler, accuracy:float, sleep_
         repo = git.Repo(search_parent_directories=True)
 
         # Count relative number of stages
+        num_clips_original_dataset = sum(original_sleep_stage_count)
         num_clips_training = sum(sleep_stages_count_training)
         num_clips_validation = sum(sleep_stages_count_validation)
-        num_clips_pred = sum(sleep_stages_count_pred)
 
         log = "VISION TRANSFORMER MODEL TRAINING SUMMARY\n"
         log += f"Git hash: {repo.head.object.hexsha}\n"
@@ -138,37 +176,43 @@ def export_summary(parser, model, fit_history, resampler, accuracy:float, sleep_
         log += f"Training loss: {[round(loss, 4) for loss in fit_history.history['loss']]}\n"
         log += f"Number of epochs: {parser.num_epochs}\n\n"
 
-        log += f"Dataset resample strategy: {parser.dataset_resample_strategy}\n"
-        log += f"Dataset resample replacement: {parser.dataset_resample_replacement}\n"
-        log += f"Dataset resampler: {resampler}\n\n"
+        log += f"Training set resampling: {RESAMPLE_TRAINING_DATASET}\n"
+        log += f"Training set resampling strategy: {parser.dataset_resample_strategy}\n"
+        log += f"Training set resampling replacement: {parser.dataset_resample_replacement}\n"
+        log += f"Training set resampler: {resampler}\n\n"
+        log += f"Training set target count: {parser.training_set_target_count}\n"
+        log += f"Dataset split random seed: {RANDOM_SEED}\n"
 
         log += f"Requested number of training clips: {int(TEST_SET_RATIO*parser.num_clips)}\n"
+        log += f"Sleep stages count in original dataset ({num_clips_original_dataset}): {original_sleep_stage_count} ({[round(num / num_clips_training, 4) for num in original_sleep_stage_count]})\n"
         log += f"Sleep stages count in training data ({num_clips_training}): {sleep_stages_count_training} ({[round(num / num_clips_training, 4) for num in sleep_stages_count_training]})\n"
         log += f"Sleep stages count in validation set input ({num_clips_validation}): {sleep_stages_count_validation} ({[round(num / num_clips_validation, 4) for num in sleep_stages_count_validation]})\n"
-        log += f"Sleep stages count in validation set prediction ({num_clips_pred}): {sleep_stages_count_pred} ({[round(num / num_clips_pred, 4) for num in sleep_stages_count_pred]})\n\n"
+        log += f"Sleep stages count in validation set prediction ({num_clips_validation}): {sleep_stages_count_pred} ({[round(num / num_clips_validation, 4) for num in sleep_stages_count_pred]})\n\n"
 
-        log += f"CLIP_LENGTH (s): {parser.clip_length_s}\n"
-        log += f"NUM_SLEEP_STAGES (includes unknown): {NUM_SLEEP_STAGES}\n"
-        log += f"DATA_TYPE: {DATA_TYPE}\n"
-        log += f"VOLTAGE_EMBEDDING_DEPTH: {parser.embedding_depth}\n"
-        log += f"BATCH_SIZE: {parser.batch_size}\n"
-        log += f"MHA_NUM_HEADS: {parser.num_heads}\n"
-        log += f"NUM_LAYERS: {parser.num_layers}\n"
-        log += f"MLP_DIMENSION: {parser.mlp_dim}\n"
-        log += f"DROPOUT_RATE: {DROPOUT_RATE}\n"
-        log += f"CLASS WEIGHTS: {parser.class_weights}\n"
-        log += f"INITIAL_LEARNING_RATE: {parser.learning_rate:.6f}\n"
-        log += f"RESAMPLE_TRAINING_DATASET: {RESAMPLE_TRAINING_DATASET}\n"
-        log += f"RESAMPLE_VALIDATION_DATASET: {RESAMPLE_VALIDATION_DATASET}\n"
-        log += f"RANDOM_SEED: {RANDOM_SEED}\n"
+        log += f"Clip length (s): {parser.clip_length_s}\n"
+        log += f"Number of sleep stages (includes unknown): {NUM_SLEEP_STAGES}\n"
+        log += f"Data type: {DATA_TYPE}\n"
+        log += f"Batch size: {parser.batch_size}\n"
+        log += f"Embedding depth: {parser.embedding_depth}\n"
+        log += f"MHA number of heads: {parser.num_heads}\n"
+        log += f"Number of layers: {parser.num_layers}\n"
+        log += f"MLP dimensions: {parser.mlp_dim}\n"
+        log += f"Dropout rate: {DROPOUT_RATE}\n"
+        log += f"Class training weights: {parser.class_weights}\n"
+        log += f"Initial learning rate: {parser.learning_rate:.6f}\n"
 
         log += f"Model loss: {model.loss.name}\n"
-        log += f"Model optimizer: {model.optimizer.name} (beta_1: {model.optimizer.beta_1}, beta_2: {model.optimizer.beta_2}, epsilon: {model.optimizer.epsilon})\n"
 
         # Check whether files with the same name already exist and append counter if necessary
         candidate_file_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_vision.txt"
-        output_log_filename = utilities.find_file_name(candidate_file_name, "/home/trobitaille/engsci-thesis/python_prototype/results/")
-        
+
+        if socket.gethostname() == "claude-ryzen":
+            output_log_filename = utilities.find_file_name(candidate_file_name, "/home/trobitaille/engsci-thesis/python_prototype/results/")
+        elif socket.gethostname() == "MBP_Tristan":
+            output_log_filename = utilities.find_file_name(candidate_file_name, "/Users/tristan/Desktop/engsci-thesis/python_prototype/results/")
+        elif "cedar.computecanada.ca" in socket.gethostname():
+            output_log_filename = utilities.find_file_name(candidate_file_name, "/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/results/")
+
         # Save to file
         with open(output_log_filename, 'w') as file:
             file.write(log)
@@ -180,7 +224,7 @@ def parse_arguments():
     """
 
     # Resampling documentation: https://imbalanced-learn.org/stable/introduction.html
-    resampling_type_choices = ['RandomOverSampler', 'SMOTE', 'ADASYN', 'BorderlineSMOTE', 'SMOTENC', 'SMOTEN', 'KMeansSMOTE', 'SVMSMOTE', 'ClusterCentroids', 'RandomUnderSampler', 'TomekLinks']
+    resampling_type_choices = ['RandomOverSampler', 'SMOTE', 'ADASYN', 'BorderlineSMOTE', 'SMOTENC', 'SMOTEN', 'KMeansSMOTE', 'SVMSMOTE', 'ClusterCentroids', 'RandomUnderSampler', 'TomekLinks', 'SMOTEENN', 'SMOTETomek']
 
     parser = utilities.ArgumentParserWithError(description='Transformer model Tensorflow prototype.')
     parser.add_argument('--num_clips', help='Number of clips to use for training + validation. Defaults to 3000.', default=3000, type=int)
@@ -196,9 +240,10 @@ def parse_arguments():
     parser.add_argument('--batch_size', help='Batch size for training. Defaults to 8.', default=8, type=int)
     parser.add_argument('--learning_rate', help='Learning rate for training. Defaults to 1e-4.', default=1e-4, type=float)
     parser.add_argument('--class_weights', help='List of weights to apply in loss calculation.', nargs='+', default=[1, 1, 1, 1, 1, 1], type=float)
-    parser.add_argument('--dataset_resample_algo', help="Which dataset resampling algorithm to use. Currently using 'imblearn' package.", choices='RandomUnderSampler', default='', type=str)
-    parser.add_argument('--dataset_resample_strategy', help='Defines which strategy to use when resampling dataset with RandomUnderSampler(). Defaults to "auto"', choices=['majority', 'not minority', 'not majority', 'all', 'auto'], default='auto', type=str)
-    parser.add_argument('--dataset_resample_replacement', help='Whether replacement is allowed when resampling dataset with RandomUnderSampler(). Defaults to false', default=False, type=bool)
+    parser.add_argument('--dataset_resample_algo', help="Which dataset resampling algorithm to use. Currently using 'imblearn' package.", choices=resampling_type_choices, default='RandomUnderSampler', type=str)
+    parser.add_argument('--dataset_resample_strategy', help='Defines which strategy to use when resampling dataset. Defaults to "auto"', choices=['majority', 'not minority', 'not majority', 'all', 'auto'], default='auto', type=str)
+    parser.add_argument('--dataset_resample_replacement', help='Whether replacement is allowed when resampling dataset. Defaults to False', default=False, type=bool)
+    parser.add_argument('--training_set_target_count', help='Target number of clips per class in training set. Defaults to [3500, 5000, 4000, 4250, 3750].', nargs='+', default=[3500, 5000, 4000, 4250, 3750], type=int)
 
     # Parse arguments
     try:
@@ -390,7 +435,7 @@ def main():
     patch_length_num_samples = int(args.patch_length_s * SAMPLING_FREQUENCY_HZ)
 
     # Load data
-    try: signals_train, signals_val, sleep_stages_train, sleep_stages_val, resampler = load_from_dataset(args=args)
+    try: signals_train, signals_val, sleep_stages_train, sleep_stages_val, resampler, original_sleep_stage_count = load_from_dataset(args=args)
     except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to load data from dataset.")
 
     # Train model
@@ -445,7 +490,7 @@ def main():
     # Save accuracy and model details to log file
     completion_time = time.time() - start_time
 
-    export_summary(args, model, fit_history, resampler, total_correct/total, sleep_stages_count_training,
+    export_summary(args, model, fit_history, resampler, total_correct/total, original_sleep_stage_count, sleep_stages_count_training, 
                    sleep_stages_count_validation, sleep_stages_count_pred, completion_time=completion_time)
 
     print("Done. Good bye.")

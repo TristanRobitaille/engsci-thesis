@@ -4,7 +4,7 @@ import numpy as np
 import glob as glob
 import datetime
 import argparse
-import sys
+import socket
 
 """
 Some utility functions used by models.
@@ -64,22 +64,27 @@ def find_file_name(candidate_file_name:str, directory:str) -> str:
     If the candidate file name already exists, a number is appended to the end of the file name.
     """
 
-    output_log_filename = directory + candidate_file_name
-    existing_output_log_filenames = glob.glob("/home/trobitaille/engsci-thesis/python_prototype/error_logs/*")
+    candidate_filepath = directory + candidate_file_name
+    existing_filepaths = glob.glob(directory+"/*")
 
-    if (output_log_filename in existing_output_log_filenames):
+    if (candidate_filepath in existing_filepaths):
         counter = 2
-        output_log_filename = output_log_filename[:-4] + f"_{counter}.txt"
-        while output_log_filename in existing_output_log_filenames:
+        candidate_filepath = candidate_filepath[:-4] + f"_{counter}.txt"
+        while candidate_filepath in existing_filepaths:
             counter += 1
-            output_log_filename = output_log_filename[:-6] + f"_{counter}.txt"
+            candidate_filepath = candidate_filepath[:-6] + f"_{counter}.txt"
 
-    return output_log_filename
+    return candidate_filepath
 
 def log_error_and_exit(exception, manual_description:str="", additional_msg:str="") -> None:
-    error_log = find_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/home/trobitaille/engsci-thesis/python_prototype/error_logs/")
+    if socket.gethostname() == "claude-ryzen":
+        error_log = find_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/home/trobitaille/engsci-thesis/python_prototype/error_logs/*")
+    elif socket.gethostname() == "MBP_Tristan":
+        error_log = find_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/Users/tristan/Desktop/engsci-thesis/python_prototype/error_logs/*")
+    elif "cedar.computecanada.ca" in socket.gethostname():
+        error_log = find_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/error_logs/*")
 
-    print(f"Receiving error: {exception}")
+    print(f"Received error: {exception}")
 
     with open(error_log, 'w') as f:
         f.write(manual_description)
