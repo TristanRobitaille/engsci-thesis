@@ -1,9 +1,10 @@
 """
 Methods to extract data from EDF files and generate pseudo-random data.
 """
+import time
+start_time = time.time()
 
 import os
-import sys
 import glob
 import math
 
@@ -135,7 +136,7 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
         temp_clip = list()
         channel_number = channels.index(channel)
 
-        for clip_number in range(total_raw_clips): #Split measurement list into clips of clip_duration_sec duration
+        for clip_number in range(total_raw_clips): #Split measurement list into clips of clip_length_s duration
             measurement = signal_reader.readSignal(channel_number, start=clip_duration_samples*clip_number, n=clip_duration_samples, digital=True)
             measurement = signals_processing(measurement)
             temp_clip.append(measurement)
@@ -212,7 +213,7 @@ def process_dispatch(args, PSG_file_list, labels_file_list, channels_to_read, da
         output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"]}
 
         for PSG_file, labels_file in zip(PSG_file_list, labels_file_list):
-            print(f"Process ID {os.getpid()} processing: {os.path.basename(PSG_file)} with {os.path.basename(labels_file)}")
+            print(f"[{(time.time()-start_time):.2f}s] Process ID {os.getpid()} processing: {os.path.basename(PSG_file)} with {os.path.basename(labels_file)}")
 
             output_one_night = read_single_whole_night(args, PSG_file, labels_file, channels_to_read, data_type)
             if output_one_night == -1:
@@ -220,7 +221,7 @@ def process_dispatch(args, PSG_file_list, labels_file_list, channels_to_read, da
                     PSG_file: {PSG_file}\n
                     sleep_stage_file: {labels_file}\n
                     channels_to_read: {channels_to_read}\n
-                    clip_duration_sec: {args.clip_duration_sec}\n
+                    clip_length_s: {args.clip_length_s}\n
                     equal_num_sleep_stages: {args.equal_num_sleep_stages}\n
                     data_type: {data_type}\n
                     multiprocessing: {args.multiprocessing}""")
@@ -229,7 +230,7 @@ def process_dispatch(args, PSG_file_list, labels_file_list, channels_to_read, da
             output_all_nights = insert_into_all_night_dict(output_all_nights, output_one_night, channels_to_read)
 
         result_queue.put(output_all_nights)
-        print(f"Process ID {os.getpid()} completed reading its files.")
+        print(f"[{(time.time()-start_time):.2f}s] Process ID {os.getpid()} completed reading its files.")
 
     except Exception as e:
         print(f"Error in child process {os.getpid()}: {e}")
@@ -255,18 +256,18 @@ def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:t
 
     if (len(PSG_file_list) < args.num_files):
         print(f"Did not find the requested number of files ({args.num_files}). Will use {len(PSG_file_list)} files instead.")    
-        num_files = len(PSG_file_list)
+        args.num_files = len(PSG_file_list)
 
     labels_file_list = [f"{args.directory_labels}/{os.path.basename(psg_file).replace('PSG', 'Base')}" for psg_file in PSG_file_list]
 
     if args.multiprocessing: # Use multiprocessing
         # Prepare for multiprocessing
-        num_cpus = mp.cpu_count() - 2 # Leave 2 CPUs
+        num_cpus = 4 # Leave 2 CPUs
         processes = []
         result_queue = mp.SimpleQueue()
 
         file_PSG_assignment, file_labels_assignment = [list() for _ in range(num_cpus)], [list() for _ in range(num_cpus)]
-        for i in range(num_files):
+        for i in range(args.num_files):
             file_PSG_assignment[i%num_cpus].append(PSG_file_list[i])
             file_labels_assignment[i%num_cpus].append(labels_file_list[i])
 
@@ -293,8 +294,8 @@ def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:t
     else: # No multiprocessing
         output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"]}
 
-        for PSG_file, labels_file in zip(PSG_file_list, labels_file_list):
-            print(f"Processing: {os.path.basename(PSG_file)} with {os.path.basename(labels_file)}")
+        for PSG_file, labels_file in zip(PSG_file_list[0:args.num_files], labels_file_list[0:args.num_files]):
+            print(f"[{(time.time()-start_time):.2f}s] Processing: {os.path.basename(PSG_file)} with {os.path.basename(labels_file)}")
 
             output_one_night = read_single_whole_night(args, PSG_file, labels_file, channels_to_read, data_type)
             if output_one_night == -1:
@@ -302,7 +303,7 @@ def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:t
                     PSG_file: {PSG_file}\n
                     sleep_stage_file: {labels_file}\n
                     channels_to_read: {channels_to_read}\n
-                    clip_duration_sec: {args.clip_duration_sec}\n
+                    clip_length_s: {args.clip_length_s}\n
                     equal_num_sleep_stages: {args.equal_num_sleep_stages}\n
                     data_type: {data_type}\n
                     multiprocessing: {args.multiprocessing}""")
@@ -329,6 +330,7 @@ def main():
     if args.directory_psg == "": args.directory_psg = os.getcwd()
     if args.directory_labels == "": args.directory_labels = args.directory_psg
     if args.export_directory == "": args.export_directory = os.getcwd()
+    print(f"[{(time.time()-start_time):.2f}s] Arguments loaded. Started dataset generation.")
 
     # Generate data dictionary
     if args.type == "pseudo_random":
@@ -365,10 +367,10 @@ def main():
         # Save dataset
         tf.data.experimental.save(ds, compression=None, path=ds_filepath)
 
-        print(f"Dataset saved at: {ds_filepath}. It contains {output['sleep_stage'].shape[0]} clips.")
+        print(f"[{(time.time()-start_time):.2f}s] Dataset saved at: {ds_filepath}. It contains {output['sleep_stage'].shape[0]} clips.")
     
     else:
-        print(f"Could not generate dataset! Error return code: {return_code}. Nothing will be saved.")
+        print(f"[{(time.time()-start_time):.2f}s] Could not generate dataset! Error return code: {return_code}. Nothing will be saved.")
 
 if __name__ == "__main__":
     main()

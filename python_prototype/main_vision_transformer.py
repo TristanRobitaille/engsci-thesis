@@ -1,6 +1,9 @@
+import time
+start_time = time.time()
+
+import os
 import git
 import sys
-import time
 import socket
 import imblearn
 import datetime
@@ -8,6 +11,8 @@ import datetime
 import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 
 from io import StringIO
 from tensorflow.keras.layers import Dense, Dropout, LayerNormalization
@@ -27,7 +32,7 @@ DATA_TYPE = tf.float32
 TEST_SET_RATIO = 0.1 #Percentage of training data reserved for validation
 RANDOM_SEED = 42
 VERBOSITY = 'QUIET' #'QUIET', 'NORMAL', 'DETAILED'
-RESAMPLE_TRAINING_DATASET = True
+RESAMPLE_TRAINING_DATASET = False
 
 #--- Helpers ---#
 class Capturing(list):
@@ -58,6 +63,12 @@ def resample_clips(args, signals_train, labels_train):
     args.training_set_target_count = {i+1: weight for i, weight in enumerate(args.training_set_target_count)}
 
     original_sleep_stage_count = utilities.count_instances_per_class(labels_train, NUM_SLEEP_STAGES)
+
+    if args.training_set_target_count[0] == -1: args.training_set_target_count = 'auto'
+
+    # Remove some of majority class
+    resampler = imblearn.under_sampling.RandomUnderSampler(sampling_strategy={1:4200, 2:10000, 3:6700, 4:9250, 5:5600}, replacement=args.dataset_resample_replacement)
+    signals_train, labels_train = resampler.fit_resample(signals_train, labels_train)
 
     #Undersampling
     if args.dataset_resample_algo == 'RandomUnderSampler':
@@ -103,7 +114,7 @@ def resample_clips(args, signals_train, labels_train):
 
     signals_train, labels_train = resampler.fit_resample(signals_train, labels_train)
 
-    return signals_train, labels_train, resampler, original_sleep_stage_count
+    return signals_train, labels_train, original_sleep_stage_count
 
 def load_from_dataset(args):
     """
@@ -112,7 +123,13 @@ def load_from_dataset(args):
 
     global NUM_SLEEP_STAGES
 
-    data = tf.data.experimental.load(args.input_dataset)
+    if socket.gethostname() == "claude-ryzen":
+        data = tf.data.experimental.load(args.input_dataset)
+    elif socket.gethostname() == "MBP_Tristan":
+        data = tf.data.Dataset.load(args.input_dataset)
+    elif "cedar.computecanada.ca" in socket.gethostname():
+        data = tf.data.Dataset.load(args.input_dataset)
+
     data = next(iter(data))
 
     sleep_stages = data['sleep_stage']
@@ -120,12 +137,12 @@ def load_from_dataset(args):
     
     # Check corner cases
     if args.input_channel not in data.keys():
-        raise ValueError(f"Requested input channel {args.input_channel} not found in input dataset ({args.input_dataset}).\nAvailable channels are {data.keys()}.\nAborting.")
+        raise ValueError(f"[{(time.time()-start_time):.2f}s] Requested input channel {args.input_channel} not found in input dataset ({args.input_dataset}).\nAvailable channels are {data.keys()}.\nAborting.")
     else:
         signals = data[args.input_channel]
 
     if (args.num_clips > signals.shape[0]):
-        print(f"Requested number of clips ({args.num_clips}) larger than number of clips in dataset ({signals.shape[0]})! Will use {signals.shape[0]} clips.")
+        print(f"[{(time.time()-start_time):.2f}s] Requested number of clips ({args.num_clips}) larger than number of clips in dataset ({signals.shape[0]})! Will use {signals.shape[0]} clips.")
     else:
         signals = signals[0:args.num_clips-args.num_clips%args.batch_size, :]
         sleep_stages = sleep_stages[0:args.num_clips-args.num_clips%args.batch_size, :]
@@ -142,14 +159,17 @@ def load_from_dataset(args):
 
     # Resamples clips from the training dataset
     if RESAMPLE_TRAINING_DATASET:
-        signals_train, sleep_stages_train, resampler, original_sleep_stage_count = resample_clips(args, signals_train, sleep_stages_train)
+        print(f"[{(time.time()-start_time):.2f}s] Data loaded. Starting reshuffle.")
+        signals_train, sleep_stages_train, original_sleep_stage_count = resample_clips(args, signals_train, sleep_stages_train)
+    else:
+        original_sleep_stage_count = -1
 
     # Trim clips to be a multiple of batch_size
     signals_train, signals_val, sleep_stages_train, sleep_stages_val = trim_clips(args, signals_train, signals_val, sleep_stages_train, sleep_stages_val)
 
-    return signals_train, signals_val, sleep_stages_train, sleep_stages_val, resampler, original_sleep_stage_count
+    return signals_train, signals_val, sleep_stages_train, sleep_stages_val, original_sleep_stage_count
 
-def export_summary(parser, model, fit_history, resampler, accuracy:float, original_sleep_stage_count:list, sleep_stages_count_training:list, sleep_stages_count_validation:list, sleep_stages_count_pred:list, completion_time:float) -> None:
+def export_summary(parser, model, fit_history, accuracy:float, original_sleep_stage_count:list, sleep_stages_count_training:list, sleep_stages_count_validation:list, sleep_stages_count_pred:list) -> None:
     """
     Saves model and training summary to file
     """
@@ -161,13 +181,13 @@ def export_summary(parser, model, fit_history, resampler, accuracy:float, origin
         repo = git.Repo(search_parent_directories=True)
 
         # Count relative number of stages
-        num_clips_original_dataset = sum(original_sleep_stage_count)
+        if (original_sleep_stage_count != -1):  num_clips_original_dataset = sum(original_sleep_stage_count)
         num_clips_training = sum(sleep_stages_count_training)
         num_clips_validation = sum(sleep_stages_count_validation)
 
         log = "VISION TRANSFORMER MODEL TRAINING SUMMARY\n"
         log += f"Git hash: {repo.head.object.hexsha}\n"
-        log += f"Time to complete: {completion_time:.2f}s\n"
+        log += f"Time to complete: {(time.time()-start_time):.2f}s\n"
         log += model_summary
         log += f"\nDataset: {parser.input_dataset}\n"
         log += f"Channel: {parser.input_channel}\n"
@@ -177,14 +197,13 @@ def export_summary(parser, model, fit_history, resampler, accuracy:float, origin
         log += f"Number of epochs: {parser.num_epochs}\n\n"
 
         log += f"Training set resampling: {RESAMPLE_TRAINING_DATASET}\n"
-        log += f"Training set resampling strategy: {parser.dataset_resample_strategy}\n"
         log += f"Training set resampling replacement: {parser.dataset_resample_replacement}\n"
-        log += f"Training set resampler: {resampler}\n\n"
+        log += f"Training set resampler: {parser.dataset_resample_algo}\n"
         log += f"Training set target count: {parser.training_set_target_count}\n"
-        log += f"Dataset split random seed: {RANDOM_SEED}\n"
+        log += f"Dataset split random seed: {RANDOM_SEED}\n\n"
 
         log += f"Requested number of training clips: {int(TEST_SET_RATIO*parser.num_clips)}\n"
-        log += f"Sleep stages count in original dataset ({num_clips_original_dataset}): {original_sleep_stage_count} ({[round(num / num_clips_training, 4) for num in original_sleep_stage_count]})\n"
+        if (original_sleep_stage_count != -1): log += f"Sleep stages count in original dataset ({num_clips_original_dataset}): {original_sleep_stage_count} ({[round(num / num_clips_training, 4) for num in original_sleep_stage_count]})\n"
         log += f"Sleep stages count in training data ({num_clips_training}): {sleep_stages_count_training} ({[round(num / num_clips_training, 4) for num in sleep_stages_count_training]})\n"
         log += f"Sleep stages count in validation set input ({num_clips_validation}): {sleep_stages_count_validation} ({[round(num / num_clips_validation, 4) for num in sleep_stages_count_validation]})\n"
         log += f"Sleep stages count in validation set prediction ({num_clips_validation}): {sleep_stages_count_pred} ({[round(num / num_clips_validation, 4) for num in sleep_stages_count_pred]})\n\n"
@@ -216,6 +235,9 @@ def export_summary(parser, model, fit_history, resampler, accuracy:float, origin
         # Save to file
         with open(output_log_filename, 'w') as file:
             file.write(log)
+
+        return output_log_filename
+    
     except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to export summary.")
 
 def parse_arguments():
@@ -241,7 +263,6 @@ def parse_arguments():
     parser.add_argument('--learning_rate', help='Learning rate for training. Defaults to 1e-4.', default=1e-4, type=float)
     parser.add_argument('--class_weights', help='List of weights to apply in loss calculation.', nargs='+', default=[1, 1, 1, 1, 1, 1], type=float)
     parser.add_argument('--dataset_resample_algo', help="Which dataset resampling algorithm to use. Currently using 'imblearn' package.", choices=resampling_type_choices, default='RandomUnderSampler', type=str)
-    parser.add_argument('--dataset_resample_strategy', help='Defines which strategy to use when resampling dataset. Defaults to "auto"', choices=['majority', 'not minority', 'not majority', 'all', 'auto'], default='auto', type=str)
     parser.add_argument('--dataset_resample_replacement', help='Whether replacement is allowed when resampling dataset. Defaults to False', default=False, type=bool)
     parser.add_argument('--training_set_target_count', help='Target number of clips per class in training set. Defaults to [3500, 5000, 4000, 4250, 3750].', nargs='+', default=[3500, 5000, 4000, 4250, 3750], type=int)
 
@@ -259,6 +280,121 @@ def parse_arguments():
         raise ValueError(f"Number of class weights ({len(args.class_weights)}) should be equal to number of sleep stages ({NUM_SLEEP_STAGES})")
     
     return args
+
+def train_model(args, signals_train, sleep_stages_train, clip_length_num_samples, patch_length_num_samples):
+    try:
+        model = VisionTransformer(clip_length_num_samples=clip_length_num_samples, patch_length_num_samples=patch_length_num_samples, num_layers=args.num_layers, num_classes=NUM_SLEEP_STAGES,
+                                  embedding_depth=args.embedding_depth, num_heads=args.num_heads, mlp_dim=args.mlp_dim, dropout_rate=DROPOUT_RATE)
+    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to initialize model.")
+
+    try:
+        model.compile(
+            loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False),
+            optimizer=tf.keras.optimizers.Adam(CustomSchedule(args.embedding_depth), beta_1=0.9, beta_2=0.98, epsilon=1e-9),
+            metrics=["accuracy"],
+        )
+    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to compile model.")
+
+    tensorboard_log_dir = "logs/fit/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=tensorboard_log_dir, histogram_freq=1)
+
+    args.class_weights = {i: weight for i, weight in enumerate(args.class_weights)}
+    try: fit_history = model.fit(x=signals_train, y=sleep_stages_train, epochs=int(args.num_epochs), batch_size=args.batch_size, callbacks=[tensorboard_callback], class_weight=args.class_weights, verbose=2)
+    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to fit model.")
+
+    return model, fit_history
+
+def manual_validation(args, model, signals_val, sleep_stages_val):
+    total_correct = 0
+    total = 0
+    sleep_stages_count_pred = [0 for _ in range(NUM_SLEEP_STAGES)]
+
+    print(f"[{(time.time()-start_time):.2f}s] Now commencing manual validation with {signals_val.shape[0]} clips")
+
+    # Make batches
+    signals_val_batches = [signals_val[i:i + args.batch_size] for i in range(0, len(signals_val), args.batch_size)]
+    sleep_stages_val_batches = [sleep_stages_val[i:i + args.batch_size] for i in range(0, len(sleep_stages_val), args.batch_size)]
+    try:
+        for x_batch, y_batch in zip(signals_val_batches, sleep_stages_val_batches):
+            sleep_stages = model(x_batch, training=False)
+            sleep_stages = tf.argmax(sleep_stages, axis=1).numpy()
+
+            for i in range(args.batch_size): total_correct += (sleep_stages[i] == y_batch[i,0])
+            total += len(y_batch)
+
+            if (VERBOSITY == 'Normal'): print(f"Ground truth: {y_batch}, sleep stage pred: {sleep_stages}, accuracy: {total_correct/total:.4f}")
+            for sleep_stage in sleep_stages:
+                sleep_stages_count_pred[int(sleep_stage)] += 1
+    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to manually validate model.")
+
+    return total_correct, sleep_stages_count_pred
+
+def plot_single_night_prediction(args, model, single_night_filename, log_file_path):
+    #Single night to compare validation and prediction
+
+    if socket.gethostname() == "claude-ryzen":
+        data = tf.data.experimental.load(single_night_filename)
+    elif socket.gethostname() == "MBP_Tristan":
+        data = tf.data.Dataset.load(single_night_filename)
+    elif "cedar.computecanada.ca" in socket.gethostname():
+        data = tf.data.Dataset.load(single_night_filename)
+
+    data = next(iter(data))
+    total_correct = 0
+    sleep_stages_single = data['sleep_stage']
+    signals = data[args.input_channel]
+    signals_single = signals.numpy()
+    sleep_stages_single = [sleep_stage[0] for sleep_stage in sleep_stages_single.numpy()]
+    sleep_stages_count_single = [0, 0, 0, 0, 0, 0]
+    sleep_stages_single_pred = []
+
+    for x, y in zip(signals_single, sleep_stages_single):
+        x = tf.reshape(x, [1, x.shape[0]])
+        sleep_stage = model(x, training=False)
+        sleep_stage = tf.argmax(sleep_stage, axis=1).numpy()
+        sleep_stages_single_pred.append(sleep_stage[0])
+
+        total_correct += (float(sleep_stage[0]) == y)
+        sleep_stages_count_single[int(sleep_stage)] += 1
+
+    print(f"[{(time.time()-start_time):.2f}s] Single night inference complete. Starting plot export.")
+
+    # Plot results
+    plt.figure(figsize=(10, 6)) # Width, height in inches
+    plt.plot(list(map(int, sleep_stages_single)), label='sleep_stages_single', linewidth=0.5)
+    plt.plot(list(map(int, sleep_stages_single_pred)), label='sleep_stages_single_pred', linewidth=0.5)
+    plt.legend()
+
+    # Set labels and title
+    plt.xlabel('Clip count')
+    plt.ylabel('Sleep stage')
+    plt.title(f"Ground truth vs prediction for a single night. Accuracy: {(total_correct/len(sleep_stages_single_pred)):.4}")
+
+    # Add ticks
+    plt.xticks()
+    plt.yticks()
+
+    # Add stage count
+    plt.text(0, -1, f'Number of sleep stages: {sleep_stages_count_single}')
+    plt.text(0, -1, f'Number of sleep stages: {sleep_stages_count_single}')
+
+    # Export the plot
+    plt.savefig(log_file_path.replace(".txt", ".png"))
+
+    # Export interactive HTML
+    trace1 = go.Scatter(y=sleep_stages_single_pred, mode='lines', name='sleep_stages_single_pred')
+    trace2 = go.Scatter(y=sleep_stages_single, mode='lines', name='sleep_stages_single')
+
+    # Create a layout
+    layout = go.Layout(title=f"Ground truth vs prediction for a single night. Accuracy: {(total_correct/len(sleep_stages_single_pred)):.4}",
+                       xaxis=dict(title='Clip count'),
+                       yaxis=dict(title='Sleep stage'))
+
+    # Create a Figure and add the traces
+    fig = go.Figure(data=[trace1, trace2], layout=layout)
+
+    # Save the figure as an HTML file
+    fig.write_html(log_file_path.replace(".txt", ".html"))
 
 #--- Multi-Head Attention ---#
 class MultiHeadSelfAttention(tf.keras.layers.Layer):
@@ -424,76 +560,38 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
     return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
 
 def main():
-    # Start clock
-    start_time = time.time()
-
     # Parse arguments
     args = parse_arguments()
+    print(f"[{(time.time()-start_time):.2f}s] Arguments parsed; starting dataset load.")
 
     # Hyperparameters
     clip_length_num_samples = int(args.clip_length_s * SAMPLING_FREQUENCY_HZ)
     patch_length_num_samples = int(args.patch_length_s * SAMPLING_FREQUENCY_HZ)
 
     # Load data
-    try: signals_train, signals_val, sleep_stages_train, sleep_stages_val, resampler, original_sleep_stage_count = load_from_dataset(args=args)
-    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to load data from dataset.")
+    try: signals_train, signals_val, sleep_stages_train, sleep_stages_val, original_sleep_stage_count = load_from_dataset(args=args)
+    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description=f"[{(time.time()-start_time):.2f}s] Failed to load data from dataset.")
 
     # Train model
-    print(f"Starting training with {int((1 - TEST_SET_RATIO)*signals_train.shape[0])} clips")
-    try:
-        model = VisionTransformer(clip_length_num_samples=clip_length_num_samples, patch_length_num_samples=patch_length_num_samples, num_layers=args.num_layers, num_classes=NUM_SLEEP_STAGES,
-                                  embedding_depth=args.embedding_depth, num_heads=args.num_heads, mlp_dim=args.mlp_dim, dropout_rate=DROPOUT_RATE)
-    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to initialize model.")
-
-    try:
-        model.compile(
-            loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False),
-            optimizer=tf.keras.optimizers.Adam(CustomSchedule(args.embedding_depth), beta_1=0.9, beta_2=0.98, epsilon=1e-9),
-            metrics=["accuracy"],
-        )
-    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to compile model.")
-
-    tensorboard_log_dir = "logs/fit/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=tensorboard_log_dir, histogram_freq=1)
-
-    args.class_weights = {i: weight for i, weight in enumerate(args.class_weights)}
-    try: fit_history = model.fit(x=signals_train, y=sleep_stages_train, epochs=int(args.num_epochs), batch_size=args.batch_size, callbacks=[tensorboard_callback], class_weight=args.class_weights, verbose=2)
-    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to fit model.")
+    print(f"[{(time.time()-start_time):.2f}s] Dataset ready. Starting training with {int((1 - TEST_SET_RATIO)*signals_train.shape[0])} clips")
+    model, fit_history = train_model(args, signals_train, sleep_stages_train, clip_length_num_samples, patch_length_num_samples)
 
     # Manual validation
-    total_correct = 0
-    total = 0
-    sleep_stages_count_pred = [0 for _ in range(NUM_SLEEP_STAGES)]
-
-    print(f"Now commencing manual validation with {signals_val.shape[0]} clips")
-
-    # Make batches
-    signals_val_batches = [signals_val[i:i + args.batch_size] for i in range(0, len(signals_val), args.batch_size)]
-    sleep_stages_val_batches = [sleep_stages_val[i:i + args.batch_size] for i in range(0, len(sleep_stages_val), args.batch_size)]
-    try:
-        for x_batch, y_batch in zip(signals_val_batches, sleep_stages_val_batches):
-            sleep_stages = model(x_batch, training=False)
-            sleep_stages = tf.argmax(sleep_stages, axis=1).numpy()
-
-            for i in range(args.batch_size): total_correct += (sleep_stages[i] == y_batch[i,0])
-            total += len(y_batch)
-
-            if (VERBOSITY == 'Normal'): print(f"Ground truth: {y_batch}, sleep stage pred: {sleep_stages}, accuracy: {total_correct/total:.4f}")
-            for sleep_stage in sleep_stages:
-                sleep_stages_count_pred[int(sleep_stage)] += 1
-    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to manually validate model.")
+    total_correct, sleep_stages_count_pred = manual_validation(args, model, signals_val, sleep_stages_val)
 
     # Count sleep stages in training and validation datasets
     sleep_stages_count_training = utilities.count_instances_per_class(sleep_stages_train, NUM_SLEEP_STAGES)
     sleep_stages_count_validation = utilities.count_instances_per_class(sleep_stages_val, NUM_SLEEP_STAGES)
 
     # Save accuracy and model details to log file
-    completion_time = time.time() - start_time
+    log_file_path = export_summary(args, model, fit_history, total_correct/sum(sleep_stages_count_validation), original_sleep_stage_count,
+                                   sleep_stages_count_training, sleep_stages_count_validation, sleep_stages_count_pred)
 
-    export_summary(args, model, fit_history, resampler, total_correct/total, original_sleep_stage_count, sleep_stages_count_training, 
-                   sleep_stages_count_validation, sleep_stages_count_pred, completion_time=completion_time)
+    #Single night to compare validation and prediction
+    print(f"[{(time.time()-start_time):.2f}s] Manual validation done. Starting validation on single night.")
+    plot_single_night_prediction(args, model, "/mnt/data/tristan/engsci_thesis_python_prototype_data/single_night/SS3_EDF_Tensorized_5-stg_30s_01-03-0046/", log_file_path)
 
-    print("Done. Good bye.")
+    print(f"[{(time.time()-start_time):.2f}s] Done. Good bye.")
 
 if __name__ == "__main__":
     main()
