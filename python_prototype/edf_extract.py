@@ -19,7 +19,7 @@ import multiprocessing as mp
 
 SLEEP_STAGE_RESOLUTION_SEC = 30.0 #Nominal (i.e. in EDF file) length or each clip/sleep stage annotation
 NOMINAL_FREQUENCY_HZ = 256 #Sampling frequency for most channels
-HISTORICAL_LOOKBACK_LENGTH = 4 #We save the last HISTORICAL_LOOKBACK_LENGTH sleep stages. Set to 0 to disable.
+HISTORICAL_LOOKBACK_LENGTH = 0 #We save the last HISTORICAL_LOOKBACK_LENGTH sleep stages. Set to 0 to disable.
 SLEEP_STAGE_ANNOTATONS_CHANNEL = 2 #Channel of sleep stages in annotations file
 NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE = 5000 #Number of pseudo-random clips to generate for each sleep stage
 MAX_VOLTAGE = 2**15 - 1
@@ -166,18 +166,18 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
     sleep_stages, signals = prune_unknown(sleep_stages, signals)
 
     # Generate historical lookback
-    sleep_stages_history = list()
-    for i in range(len(sleep_stages)):
-        sleep_stage_history = list()
+    if HISTORICAL_LOOKBACK_LENGTH > 0: 
+        sleep_stages_history = list()
+        for i in range(len(sleep_stages)):
+            sleep_stage_history = list()
 
-        if i < historical_lookback_length:
-            sleep_stage_history = [sleep_stage_annotation_to_int["Sleep stage ?"] for _ in range(historical_lookback_length-i)]
-            sleep_stage_history = sleep_stages[0:i] + sleep_stage_history
-        else:
-            sleep_stage_history = [sleep_stages[i-j] for j in range(historical_lookback_length)]
-            # sleep_stage_history.append(sleep_stages[i-historical_lookback_length:i][0])
-        
-        sleep_stages_history.append(sleep_stage_history)
+            if i < historical_lookback_length:
+                sleep_stage_history = [sleep_stage_annotation_to_int["Sleep stage ?"] for _ in range(historical_lookback_length-i)]
+                sleep_stage_history = sleep_stages[0:i] + sleep_stage_history
+            else:
+                sleep_stage_history = [sleep_stages[i-j] for j in range(historical_lookback_length)]
+            
+            sleep_stages_history.append(sleep_stage_history)
 
     # Generate pseudo-random signal
     pseudo_random_list = list()
@@ -188,8 +188,8 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
     # Convert to tensors
     sleep_stages = tf.convert_to_tensor(sleep_stages, dtype=data_type, name="sleep_stage")
     pseudo_random_list = tf.convert_to_tensor(pseudo_random_list, dtype=data_type, name="pseudo_random")
-    sleep_stages_history = tf.convert_to_tensor(sleep_stages_history, dtype=data_type, name=f"history_{historical_lookback_length}-steps")
-    
+    if HISTORICAL_LOOKBACK_LENGTH > 0: sleep_stages_history = tf.convert_to_tensor(sleep_stages_history, dtype=data_type, name=f"history_{historical_lookback_length}-steps")
+
     if ONE_HOT_OUTPUT: sleep_stages = tf.transpose(sleep_stages, perm=[0, 2, 1])
     else: sleep_stages = tf.expand_dims(sleep_stages, axis=1)
 
@@ -199,14 +199,16 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
     signals = dict(zip(channels_to_read, signals)) #Convert to dictionary
     signals["pseudo_random"] = pseudo_random_list
     signals["sleep_stage"] = sleep_stages
-    signals[f"history_{historical_lookback_length}-steps"] = sleep_stages_history
+    if HISTORICAL_LOOKBACK_LENGTH > 0: signals[f"history_{historical_lookback_length}-steps"] = sleep_stages_history
 
     return signals
 
 def insert_into_all_night_dict(output_all_nights, output_one_night):
     for key, value in output_one_night.items():
-        if output_all_nights[key] == None: output_all_nights[key] = output_one_night[key]
-        else: output_all_nights[key] = tf.concat([output_all_nights[key], output_one_night[key]], axis=0)
+        if output_all_nights[key] == None:
+            output_all_nights[key] = output_one_night[key]
+        else:
+            output_all_nights[key] =tf.concat([output_all_nights[key], output_one_night[key]], axis=0)
 
     return output_all_nights
 
@@ -217,8 +219,8 @@ def process_dispatch(args, PSG_file_list, labels_file_list, channels_to_read, da
             result_queue.put(-1)
             return
 
-        if HISTORICAL_LOOKBACK_LENGTH > 0: output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"] + [f"history_{HISTORICAL_LOOKBACK_LENGTH}-steps"]}
-        else: output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"]}
+        if HISTORICAL_LOOKBACK_LENGTH > 0: output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"] + [f"history_{HISTORICAL_LOOKBACK_LENGTH}-steps"] + ["new_night_marker"]}
+        else: output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"] + ["new_night_marker"]}
 
         for PSG_file, labels_file in zip(PSG_file_list, labels_file_list):
             print(f"[{(time.time()-start_time):.2f}s] Process ID {os.getpid()} processing: {os.path.basename(PSG_file)} with {os.path.basename(labels_file)}")
@@ -233,6 +235,12 @@ def process_dispatch(args, PSG_file_list, labels_file_list, channels_to_read, da
                     data_type: {data_type}\n
                     multiprocessing: {args.multiprocessing}""")
                 continue #Skip this file
+
+            # Mark file clip of this night to indicate new file in dataset
+            new_file_marker = [False for _ in range(len(output_one_night["sleep_stage"]))]
+            new_file_marker[0] = True
+            output_one_night["new_night_marker"] = tf.convert_to_tensor(new_file_marker, dtype=data_type, name="new_night_marker")
+            output_one_night["new_night_marker"] = tf.expand_dims(output_one_night["new_night_marker"], axis=1)
 
             output_all_nights = insert_into_all_night_dict(output_all_nights, output_one_night)
 
@@ -269,7 +277,7 @@ def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:t
 
     if args.multiprocessing: # Use multiprocessing
         # Prepare for multiprocessing
-        num_cpus = 15 # Leave 2 CPUs
+        num_cpus = 24 # Leave 2 CPUs
         processes = []
         result_queue = mp.SimpleQueue()
 
@@ -293,15 +301,16 @@ def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:t
             process.join()
 
         # Concatenate nights from all processes
-        if (HISTORICAL_LOOKBACK_LENGTH > 0): output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"] + [f"history_{HISTORICAL_LOOKBACK_LENGTH}-steps"]}
-        else: output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"]}
+        if (HISTORICAL_LOOKBACK_LENGTH > 0): output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"] + [f"history_{HISTORICAL_LOOKBACK_LENGTH}-steps"] + ["new_night_marker"]}
+        else: output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"] + ["new_night_marker"]}
 
         for output in children_outputs:
             if output == -1: continue # No files processed
             output_all_nights = insert_into_all_night_dict(output_all_nights, output)
 
     else: # No multiprocessing
-        output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"]}
+        if HISTORICAL_LOOKBACK_LENGTH > 0: output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"] + ["new_night_marker"] + [f"history_{HISTORICAL_LOOKBACK_LENGTH}-steps"] + ["new_night_marker"]}
+        else: output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"] + ["new_night_marker"] + ["new_night_marker"]}
 
         for PSG_file, labels_file in zip(PSG_file_list[0:args.num_files], labels_file_list[0:args.num_files]):
             print(f"[{(time.time()-start_time):.2f}s] Processing: {os.path.basename(PSG_file)} with {os.path.basename(labels_file)}")
@@ -316,6 +325,12 @@ def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:t
                     data_type: {data_type}\n
                     multiprocessing: {args.multiprocessing}""")
                 continue #Skip this file
+
+            # Indicate first clip of the night
+            new_file_marker = [False for _ in range(len(output_one_night["sleep_stage"]))]
+            new_file_marker[0] = True
+            output_one_night["end_night_marker"] = tf.convert_to_tensor(new_file_marker, dtype=data_type, name="new_night_marker")
+            output_one_night["end_night_marker"] = tf.expand_dims(output_one_night["new_night_marker"], axis=1)
 
             output_all_nights = insert_into_all_night_dict(output_all_nights, output_one_night)
 
