@@ -20,9 +20,14 @@
             "program": "${workspaceFolder}/python_prototype/main_vision_transformer.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--clip_length_s=15", "--dataset_resample_strategy=auto", "--dataset_resample_replacement=True", "--batch_size=16", "--learning_rate=3e-3", "--num_epochs=20", 
-                     "--input_channel=EEG Pz-LER", "--num_clips=100000", "--embedding_depth=128", "--num_layers=16", "--num_heads=8", "--mlp_dim=32",
-                     "--input_dataset=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF_filtered_Tensorized_6-stg_15s", "--class_weights", "0.1", "0.1", "0.1", "0.1", "0.1", "0.5"]
+            "args": ["--clip_length_s=30", "--dataset_resample_replacement=True", "--batch_size=16", "--learning_rate=3e-3", "--num_epochs=1",
+                     "--input_channel=EEG Cz-LER", "--num_clips=2000", "--embedding_depth=64", "--num_layers=16", "--num_heads=8", "--mlp_dim=32", "--save_model=False",
+                    //  "--input_dataset=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF_Tensorized_5-stg_30s",
+                     "--input_dataset=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF_Tensorized_5-stg_30s_history_4-steps",
+                     "--class_weights", "1", "1", "1", "1", "1", "1",
+                     "--training_set_target_count", "-1", "-1", "-1", "-1", "-1", "--dataset_resample_algo=RandomUnderSampler"]
+                     //  "--training_set_target_count", "23000", "27000", "24000", "25000", "24000", "--dataset_resample_algo=SMOTEENN"]
+                    //30s dataset distribution:     [4253,    26343,   6844,    9368,    5732]
         },
         {
             "name": "EDF Extract",
@@ -31,7 +36,10 @@
             "program": "${workspaceFolder}/python_prototype/edf_extract.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--type=EDF", "--clip_length_s=30", "--num_files=100", "--directory_psg=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_filter_new", "--directory_labels=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF", "--export_directory=/mnt/data/tristan/engsci_thesis_python_prototype_data"]
+            "args": ["--type=EDF", "--clip_length_s=30", "--num_files=100", "--directory_psg=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF",
+                     "--directory_labels=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF", "--export_directory=/mnt/data/tristan/engsci_thesis_python_prototype_data"
+                    // ]
+                    ,  "--multiprocessing=True"]
         }
     ]
 }

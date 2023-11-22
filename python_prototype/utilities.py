@@ -58,7 +58,24 @@ def random_dataset(clip_length_num_samples:int, max_min:tuple, num_clips:int=100
 
     return input_dataset, sleep_stage_dataset
 
-def find_file_name(candidate_file_name:str, directory:str) -> str:
+def find_folder_path(candidate_folder_path:str, directory:str) -> str:
+    """
+    Finds a folder path that does not already exist in the given directory.
+    If the candidate folder path already exists, a number is appended to the end of the folder path.
+    """
+
+    existing_folder_paths = glob.glob(directory)
+
+    if (candidate_folder_path in existing_folder_paths):
+        counter = 2
+        candidate_folder_path += f"_{counter}"
+        while candidate_folder_path in existing_folder_paths:
+            counter += 1
+            candidate_folder_path += f"_{counter}"
+
+    return candidate_folder_path
+
+def find_txt_file_name(candidate_file_name:str, directory:str) -> str:
     """
     Finds a file name that does not already exist in the given directory.
     If the candidate file name already exists, a number is appended to the end of the file name.
