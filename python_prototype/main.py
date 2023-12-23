@@ -444,7 +444,7 @@ def main():
     model.fit(x=(x_train, y_uninitialized), y=y_train, epochs=int(args.num_epochs),
               batch_size=BATCH_SIZE, callbacks=[tensorboard_callback], verbose=2)
 
-    #Manual validation
+    # Manual validation
     total_correct = 0
     total = 0
 
@@ -458,7 +458,7 @@ def main():
         if (VERBOSITY == 'Normal'): print(f"Ground truth: {y}, sleep stage pred: {sleep_stage}, accuracy: {total_correct/total:.4f}")
         sleep_stages_count_pred[int(sleep_stage)] += 1
     
-    #Save accuracy and model details to log file
+    # Save accuracy and model details to log file
     export_summary(args, model, total_correct/total,
                    sleep_stages_count_training, sleep_stages_count_pred,
                    int(x_train.shape[0]), int(x_test.shape[0]))

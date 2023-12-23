@@ -28,10 +28,10 @@ NUM_SLEEP_STAGES = 5 #Excluding 'unknown'
 ONE_HOT_OUTPUT = False #If true, sleep stages are exported as their one-hot classes tensor, else they are reported as a scalar
 
 sleep_stage_annotation_to_int = { #Note: Stages 3 and 4 are combined and '0' is reserved for unknown
-                                    "Sleep stage 1": 1,
+                                    "Sleep stage 1": 3,
                                     "Sleep stage 2": 2,
-                                    "Sleep stage 3": 3,
-                                    "Sleep stage 4": 3,
+                                    "Sleep stage 3": 1,
+                                    "Sleep stage 4": 1,
                                     "Sleep stage R": 4,
                                     "Sleep stage W": 5,
                                     "Sleep stage ?": 0}

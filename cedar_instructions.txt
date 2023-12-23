@@ -31,3 +31,12 @@ tmux:
     -Attach to tmux session:    tmux attach -t <session name>
     -Kill tmux session:         tmux kill-session -t <session name>
     -List tmux session:         tmux list-sessions
+
+coral virtual environment:
+    -Start venv: source /home/trobitaille/engsci-thesis/coral/bin/activate
+    -Close venv: deactivate
+
+Tensorflow Lite model converter:
+    -Convert model: tflite_convert --saved_model_dir=model_to_convert --output_file=output_model_filepath
+
+EdgeTPU runner: python3 edgetpu_runner.py --model_fp=path_to_model --data_dir=directory_of_numpy_arrays
