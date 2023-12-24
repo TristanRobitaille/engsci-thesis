@@ -27,6 +27,7 @@ MAX_VOLTAGE = 2**15 - 1
 MIN_VOLTAGE = 0
 NUM_SLEEP_STAGES = 5 #Excluding 'unknown'
 ONE_HOT_OUTPUT = False #If true, sleep stages are exported as their one-hot classes tensor, else they are reported as a scalar
+NUM_PROCESSES = 20
 
 sleep_stage_annotation_to_int = { #Note: Stages 3 and 4 are combined and '0' is reserved for unknown
                                     "Sleep stage 1": 3,
@@ -290,17 +291,16 @@ def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:t
 
     if args.enable_multiprocessing: # Use multiprocessing
         # Prepare for multiprocessing
-        num_cpus = 24 # Leave 2 CPUs
         processes = []
         result_queue = mp.SimpleQueue()
 
-        file_PSG_assignment, file_labels_assignment = [list() for _ in range(num_cpus)], [list() for _ in range(num_cpus)]
+        file_PSG_assignment, file_labels_assignment = [list() for _ in range(NUM_PROCESSES)], [list() for _ in range(NUM_PROCESSES)]
         for i in range(args.num_files):
-            file_PSG_assignment[i%num_cpus].append(PSG_file_list[i])
-            file_labels_assignment[i%num_cpus].append(labels_file_list[i])
+            file_PSG_assignment[i%NUM_PROCESSES].append(PSG_file_list[i])
+            file_labels_assignment[i%NUM_PROCESSES].append(labels_file_list[i])
 
         # Start processes
-        for i in range(num_cpus):
+        for i in range(NUM_PROCESSES):
             if not file_PSG_assignment[i] == []:
                 process = mp.Process(target=process_dispatch, args=(args, file_PSG_assignment[i], file_labels_assignment[i], channels_to_read, data_type, result_queue))
                 processes.append(process)
