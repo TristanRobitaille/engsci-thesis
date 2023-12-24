@@ -1,12 +1,13 @@
-import matplotlib.pyplot as plt
-import tensorflow as tf
-import numpy as np
-import glob as glob
-import datetime
-import argparse
-import socket
 import os
 import time
+import socket
+import argparse
+import datetime
+
+import numpy as np
+import glob as glob
+import tensorflow as tf
+import matplotlib.pyplot as plt
 
 """
 Some utility functions used by models.

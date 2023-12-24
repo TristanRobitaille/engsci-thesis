@@ -7,14 +7,15 @@ start_time = time.time()
 import os
 import glob
 import math
+import json
 
-from pyedflib import EdfReader
-from pkg_resources import get_distribution
 from typing import List
+from pyedflib import EdfReader
 from argparse import ArgumentParser
+from scipy.interpolate import interp1d
 
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
 import multiprocessing as mp
 
 SLEEP_STAGE_RESOLUTION_SEC = 30.0 #Nominal (i.e. in EDF file) length or each clip/sleep stage annotation
@@ -110,6 +111,17 @@ def prune_unknown(sleep_stages, signals):
 
     return sleep_stages, signals
 
+def resample_list(input:list, input_freq:int, target_freq:int) -> list:
+    original_indices = np.arange(0, len(input))
+    target_length = int(len(input) * (target_freq / input_freq))
+    target_indices = np.linspace(0, len(input) - 1, target_length)
+
+    interpolator = interp1d(original_indices, input, kind='linear', fill_value="extrapolate")
+    resample = interpolator(target_indices)
+    resample = resample.astype(int)
+
+    return resample
+
 def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, channels_to_read:List[str], historical_lookback_length=HISTORICAL_LOOKBACK_LENGTH, data_type:tf.DType=tf.float32) -> (tf.Tensor, tf.Tensor, List[str]):
     """
     Returns a dictionary of channels with signals cut into clips and a return code.
@@ -182,8 +194,14 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
     # Generate pseudo-random signal
     pseudo_random_list = list()
     for sleep_stage in sleep_stages:
-        new_clip = pseudo_random_clip(sleep_stage, clip_duration_samples, max_min=(MAX_VOLTAGE, MIN_VOLTAGE, NUM_SLEEP_STAGES, 0))
+        new_clip = pseudo_random_clip(sleep_stage, int(float(args.clip_length_s) * args.downsampling_freq_hz), max_min=(MAX_VOLTAGE, MIN_VOLTAGE, NUM_SLEEP_STAGES, 0))
         pseudo_random_list.append(new_clip)
+
+    # Downsample
+    if (args.downsampling_freq_hz != NOMINAL_FREQUENCY_HZ):
+        for channel_index in range(len(signals)):
+            for clip_index in range(len(signals[channel_index])):
+                signals[channel_index][clip_index] = resample_list(input=signals[channel_index][clip_index], input_freq=NOMINAL_FREQUENCY_HZ, target_freq=args.downsampling_freq_hz)
 
     # Convert to tensors
     sleep_stages = tf.convert_to_tensor(sleep_stages, dtype=data_type, name="sleep_stage")
@@ -227,13 +245,8 @@ def process_dispatch(args, PSG_file_list, labels_file_list, channels_to_read, da
 
             output_one_night = read_single_whole_night(args, psg_filepath=PSG_file, annotations_filepath=labels_file, channels_to_read=channels_to_read, data_type=data_type)
             if output_one_night == -1:
-                print(f"""Received failure code {output_one_night} from read_single_whole_night. Skipping night.\n
-                    PSG_file: {PSG_file}\n
-                    sleep_stage_file: {labels_file}\n
-                    channels_to_read: {channels_to_read}\n
-                    clip_length_s: {args.clip_length_s}\n
-                    data_type: {data_type}\n
-                    multiprocessing: {args.multiprocessing}""")
+                print(f"Received failure code {output_one_night} from read_single_whole_night. Skipping night.")
+                print(vars(args))
                 continue #Skip this file
 
             # Mark file clip of this night to indicate new file in dataset
@@ -275,7 +288,7 @@ def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:t
 
     labels_file_list = [f"{args.directory_labels}/{os.path.basename(psg_file).replace('PSG', 'Base')}" for psg_file in PSG_file_list]
 
-    if args.multiprocessing: # Use multiprocessing
+    if args.enable_multiprocessing: # Use multiprocessing
         # Prepare for multiprocessing
         num_cpus = 24 # Leave 2 CPUs
         processes = []
@@ -323,7 +336,7 @@ def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:t
                     channels_to_read: {channels_to_read}\n
                     clip_length_s: {args.clip_length_s}\n
                     data_type: {data_type}\n
-                    multiprocessing: {args.multiprocessing}""")
+                    multiprocessing: {args.enable_multiprocessing}""")
                 continue #Skip this file
 
             # Indicate first clip of the night
@@ -336,7 +349,11 @@ def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:t
 
     return output_all_nights, labels_file_list, 0
 
-def main():
+def parse_arguments():
+    """"
+    Parses command line arguments and return parser object
+    """
+
     # Parser
     parser = ArgumentParser(description='Script to extract data from EDF files and export to a Tensorflow dataset.')
     parser.add_argument('--type', help='Type of generation: "EDF" (read PSG files and format their data) or "pseudo_random" (generate pseudo-random data for each sleep stage and equal number of sleep stages in dataset). Defaults to "EDF".', choices=["EDF", "pseudo_random"], default='EDF')
@@ -345,7 +362,9 @@ def main():
     parser.add_argument('--directory_labels', help='Directory from which to fetch the PSG label files. Defaults to --directory_psg.', default="")
     parser.add_argument('--export_directory', help='Location to export dataset. Defaults to cwd.', default="")
     parser.add_argument('--num_files', help='Number of files to parse. Parsed in alphabetical order. Defaults to 5 files.', type=int, default=5)
-    parser.add_argument('--multiprocessing', help='If set to True, enables multiprocessing of data. Defaults to False.', type=bool, default=False)
+    parser.add_argument('--enable_multiprocessing', help='Enables multiprocessing of data. Defaults to False if argument unused.', action='store_true')
+    parser.add_argument('--downsampling_freq_hz', help='Desired sampling frequency (Hz) at which to downsample. Frequencies that are not an integer multiple of the original frequency result in \
+                        interpolated samples.', type=int, default=NOMINAL_FREQUENCY_HZ)
 
     # Parse arguments
     args = parser.parse_args()
@@ -353,6 +372,30 @@ def main():
     if args.directory_labels == "": args.directory_labels = args.directory_psg
     if args.export_directory == "": args.export_directory = os.getcwd()
     print(f"[{(time.time()-start_time):.2f}s] Arguments loaded. Started dataset generation.")
+
+    return args
+
+def save_metadata_json(json_fp:str, args, channels_to_read:list):
+    """
+    Make and save .json file containing metadata about the dataset.
+    """
+
+    json_metadata = {
+        "single_channel": (len(channels_to_read) == 1),
+        "historical_lookback_length": HISTORICAL_LOOKBACK_LENGTH,
+        "num_stages": NUM_SLEEP_STAGES,
+        "one_hot_encoding": ONE_HOT_OUTPUT,
+        "clip_length_s": args.clip_length_s,
+        "sampling_freq_Hz": args.downsampling_freq_hz,
+        "type": args.type
+    }
+
+    with open(json_fp, 'w') as json_file:
+        json.dump(json_metadata, json_file, indent=4)
+
+def main():
+    # Parse arguments
+    args = parse_arguments()
 
     # Generate data dictionary
     if args.type == "pseudo_random":
@@ -381,14 +424,18 @@ def main():
         else:
             ds_filepath = f"{args.export_directory}/SS3_EDF_Tensorized_{NUM_SLEEP_STAGES}-stg_{args.clip_length_s}s"
 
+        ds_filepath = ds_filepath + f'_{args.downsampling_freq_hz}Hz'
         if ONE_HOT_OUTPUT: ds_filepath = ds_filepath + '_one-hot'
         if HISTORICAL_LOOKBACK_LENGTH > 0: ds_filepath = ds_filepath + f'_history_{HISTORICAL_LOOKBACK_LENGTH}-steps'
         if len(channels_to_read) == 1: ds_filepath = ds_filepath + f"_{channels_to_read[0]}"
         if args.num_files == 1: ds_filepath = ds_filepath + f"_{os.path.basename(labels_file_list[0]).split(' ')[0]}"
         ds_filepath = ds_filepath.replace('.', '-')
 
+        # Save metadata JSON
+        save_metadata_json(json_fp=ds_filepath+".json", args=args, channels_to_read=channels_to_read)
+
         # Save dataset
-        tf.data.experimental.save(ds, compression=None, path=ds_filepath)
+        tf.data.Dataset.save(ds, compression=None, path=ds_filepath)
 
         print(f"[{(time.time()-start_time):.2f}s] Dataset saved at: {ds_filepath}. It contains {output['sleep_stage'].shape[0]} clips.")
     
