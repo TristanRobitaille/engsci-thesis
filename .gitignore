@@ -36,3 +36,10 @@ python_prototype/SS3_EDF_*
 python_prototype/__pycache__/*
 python_prototype/error_logs/*
 python_prototype/*.zip
+
+### HDL
+hdl/__pycache__/*
+hdl/sim_build/*
+hdl/dump.vcd
+hdl/results.xml
+hdl/top
