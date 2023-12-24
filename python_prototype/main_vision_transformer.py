@@ -309,7 +309,7 @@ def parse_arguments():
     parser.add_argument('--dataset_resample_algo', help="Which dataset resampling algorithm to use. Currently using 'imblearn' package.", choices=resampling_type_choices, default='RandomUnderSampler', type=str)
     parser.add_argument('--enable_dataset_resample_replacement', help='Whether replacement is allowed when resampling dataset.', action='store_true')
     parser.add_argument('--training_set_target_count', help='Target number of clips per class in training set. Defaults to [3500, 5000, 4000, 4250, 3750].', nargs='+', default=[3500, 5000, 4000, 4250, 3750], type=int)
-    parser.add_argument('--enable_input_rescale', help='Enables layer rescaling inputs between [0, 1] at input. Defaults to True.', action='store_false')
+    parser.add_argument('--enable_input_rescale', help='Enables layer rescaling inputs between [0, 1] at input.', action='store_true')
     parser.add_argument('--dropout_rate', help='Dropout rate for all dropout layers. Defaults to 0.1.', default=0.1 , type=float)
     parser.add_argument('--save_model', help='Saves model to disk.', action='store_true')
     parser.add_argument('--load_model_filepath', help='Indicates, if not empty, the filepath of a model to load rather than training it. Defaults to None.', default=None, type=str)
@@ -517,6 +517,7 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
         x = tf.reshape(x, (batch_size, -1, self.num_heads, self.projection_dimension))
         return tf.transpose(x, perm=[0,2,1,3])
 
+    @tf.function
     def call(self, inputs):
         batch_size = inputs.shape[0]
 
@@ -668,6 +669,10 @@ class VisionTransformer(tf.keras.Model):
 
         return prediction
 
+    def build_graph(self):
+        x = tf.keras.Input(shape=(1,self.clip_length_num_samples))
+        return tf.keras.Model(inputs=[x], outputs=self.call(x, training=False))
+
 #--- Misc ---#
 class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
     def __init__(self, embedding_depth, warmup_steps=NUM_WARMUP_STEPS):
@@ -740,6 +745,8 @@ def main():
     if args.save_model:
         model.save(f"{output_folder_path}/{time_of_export}_vision.tf", save_format="tf")
         print(f"[{(time.time()-start_time):.2f}s] Saved model to {output_folder_path}/{time_of_export}_vision.tf.")
+
+        tf.keras.utils.plot_model(model.build_graph(), to_file=f"{output_folder_path}/{time_of_export}_vision_high_level.png", expand_nested=True, show_trainable=True, show_shapes=True, show_layer_activations=True, dpi=300, show_dtype=True)
 
         # Convert to Tensorflow Lite model
         converter = tf.lite.TFLiteConverter.from_keras_model(model)
