@@ -10,7 +10,7 @@ python3 /home/trobitaille/engsci-thesis/python_prototype/main_vision_transformer
 --input_channel='EEG Cz-LER' \
 --num_clips=115000 \
 --embedding_depth=64 \
---num_layers=3 \
+--num_layers=4 \
 --num_heads=8 \
 --mlp_dim=32 \
 --historical_lookback_DNN_depth=32 \

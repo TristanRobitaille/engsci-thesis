@@ -734,7 +734,7 @@ def main():
 
     #Single night to compare validation and prediction
     print(f"[{(time.time()-start_time):.2f}s] Manual validation done. Starting validation on single night.")
-    plot_single_night_prediction(args, model, single_night_filename="/mnt/data/tristan/engsci_thesis_python_prototype_data/single_night/SS3_EDF_Tensorized_5-stg_30s_200Hz_01-03-0046", log_file_path=f"{output_folder_path}/{time_of_export}_vision.extension")
+    plot_single_night_prediction(args, model, single_night_filename=args.input_dataset+"_01-03-0046", log_file_path=f"{output_folder_path}/{time_of_export}_vision.extension")
 
     # Save model to disk
     if args.save_model:
