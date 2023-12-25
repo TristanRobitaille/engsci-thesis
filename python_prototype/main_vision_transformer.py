@@ -33,7 +33,7 @@ NUM_WARMUP_STEPS = 4000
 VERBOSITY = 'QUIET' #'QUIET', 'NORMAL', 'DETAILED'
 RESAMPLE_TRAINING_DATASET = False
 WHOLE_NIGHT_VALIDATION = True or (NUM_SLEEP_STAGE_HISTORY > 0) #Whether to validate individual nights (sequentially) or a random subset of clips (if we use the preduiction history, we need whole nights for validation)
-NUM_CLIPS_PER_FILE_EDGETPU = 250
+NUM_CLIPS_PER_FILE_EDGETPU = 500 # Only valid for 256Hz 
 
 #--- Helpers ---#
 class Capturing(list):
@@ -165,6 +165,8 @@ def load_from_dataset(args):
         raise ValueError(f"[{(time.time()-start_time):.2f}s] Requested input channel {args.input_channel} not found in input dataset ({args.input_dataset}).\nAvailable channels are {data.keys()}.\nAborting.")
     else:   signals = data[args.input_channel]
 
+    signals = tf.cast(x=signals, dtype=tf.int16)
+
     if (args.num_clips > signals.shape[0]):
         print(f"[{(time.time()-start_time):.2f}s] Requested number of clips ({args.num_clips}) larger than number of clips in dataset ({signals.shape[0]})! Will use {signals.shape[0]} clips.")
         args.num_clips = signals.shape[0]
@@ -198,16 +200,17 @@ def load_from_dataset(args):
     # Trim clips to be a multiple of batch_size
     signals_train, signals_val, sleep_stages_train, sleep_stages_val = trim_clips(args, signals_train, signals_val, sleep_stages_train, sleep_stages_val)
 
+    # Output edge TPU data
+    if (args.output_edgetpu_data):
+        for file in range(signals_val.shape[0] // NUM_CLIPS_PER_FILE_EDGETPU):
+            data = np.expand_dims(signals_val[NUM_CLIPS_PER_FILE_EDGETPU*file: NUM_CLIPS_PER_FILE_EDGETPU*file + NUM_CLIPS_PER_FILE_EDGETPU], axis=1)
+            np.save(f"python_prototype/edgetpu_data/{file}_{SAMPLING_FREQUENCY_HZ}Hz.npy", data)
+
     # Cast
     signals_train = tf.cast(signals_train, dtype=DATA_TYPE)
     signals_val = tf.cast(signals_val, dtype=DATA_TYPE)
     sleep_stages_train = tf.cast(sleep_stages_train, dtype=DATA_TYPE)
     sleep_stages_val = tf.cast(sleep_stages_val, dtype=DATA_TYPE)
-
-    if (args.output_edgetpu_data):
-        for file in range(signals_val.shape[0] // NUM_CLIPS_PER_FILE_EDGETPU):
-            data = np.expand_dims(signals_val[NUM_CLIPS_PER_FILE_EDGETPU*file: NUM_CLIPS_PER_FILE_EDGETPU*file + NUM_CLIPS_PER_FILE_EDGETPU], axis=1)
-            np.save(f"python_prototype/edgetpu_data/{file}_{SAMPLING_FREQUENCY_HZ}Hz.npy", data)
 
     return signals_train, signals_val, sleep_stages_train, sleep_stages_val, start_of_night_markers, original_sleep_stage_count
 
@@ -514,6 +517,7 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
         value = tf.cast(value, dtype=DATA_TYPE) #value = (batch_size, num_heads, num_patches+1, num_heads)
         score = tf.matmul(query, key, transpose_b=True) #score = (batch_size, num_heads, num_patches+1, num_patches+1)
         dim_key = tf.cast(tf.shape(key)[-1], dtype=DATA_TYPE)
+        assert (self.num_heads == 16) or (self.num_heads == 4), "num_heads not 4 or 16, as needed to simply attention calculations."
         scaled_score = score / tf.math.sqrt(dim_key) #scaled_score = (batch_size, num_heads, num_patches+1, num_patches+1)
         weights = tf.nn.softmax(logits=scaled_score, axis=-1) #weights = (batch_size, num_heads, num_patches+1, num_patches+1)
         output = tf.matmul(weights, value) #output = (batch_size, num_heads, num_patches+1, num_heads)

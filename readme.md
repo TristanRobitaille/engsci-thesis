@@ -10,3 +10,5 @@ Install Python dependencies with: ```pip3 install -r requirements.txt```
 Install `verilator` for Verilog compilation (requires MacOS Homebrew): ```brew install verilator```
 
 Install `gtkwave` to view HDL simulation waveforms (requires MacOS Homebrew): ```brew install --cask gtkwave```
+
+Install EdgeTPU runtime and PyCoral by following this guide: https://coral.ai/docs/accelerator/get-started/

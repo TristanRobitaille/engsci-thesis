@@ -39,7 +39,7 @@ coral virtual environment:
 Tensorflow Lite model converter:
     -Convert model: tflite_convert --saved_model_dir=model_to_convert --output_file=output_model_filepath
 
-EdgeTPU runner: python3 edgetpu_runner.py --model_fp=path_to_model --data_dir=directory_of_numpy_arrays
+EdgeTPU runner: source ../coral/bin/activate && python3 edgetpu_runner.py --model_fp=path_to_model --data_dir=directory_of_numpy_arrays
 
 HDL (run from /hdl):
     -Compile Verilog and run testbench: clear && make

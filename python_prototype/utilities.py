@@ -1,5 +1,5 @@
-import os
 import time
+import glob
 import socket
 import argparse
 import datetime
@@ -172,32 +172,40 @@ def count_instances_per_class(input, num_classes) -> list:
     return count
 
 def run_model(model_fp:str, data_fp:str):
+    NUM_CLIPS_PER_FILE = 500 # Only valid for 256Hz 
+
     # Load saved model
     model = tf.keras.models.load_model(model_fp, custom_objects={"CustomSchedule": CustomSchedule})
-    input_data_filepaths = os.listdir(data_fp)
+    input_data_filepaths = glob.glob(data_fp + "/*.npy")
+    print(input_data_filepaths)
 
     inference_times = np.empty((1))
 
     # Run inference
+    print('---- INFERENCE ----')
+    file_cnt = 0
+    results_string = ""
+
+    for filepath in input_data_filepaths:
+        input_data = np.load(filepath) # Dimensions (# of clips, 1, clip_length). 1 indicates a batch_size of 1.
+        input_data = input_data.astype(np.float32)
+    
+        for i in range(input_data.shape[0]):
+            start = time.perf_counter()
+            sleep_stage_pred = model(input_data[i], training=False)
+            inference_time = time.perf_counter() - start
+            sleep_stage_pred = tf.argmax(sleep_stage_pred, axis=1)
+            results_string += str(sleep_stage_pred[0].numpy()) + '\n'
+            inference_times = np.append(inference_times, 1000*inference_time)
+
+            print(f"Clip {NUM_CLIPS_PER_FILE*file_cnt + i} output: {sleep_stage_pred[0].numpy()} (inference time: {(inference_time * 1000):.2f}ms)")
+
+        file_cnt += 1
+
+    # Write results to file
     with open(data_fp + "/out_cpu.txt", 'w') as text_file:
-        print('---- INFERENCE ----')
-        file_cnt = 0
-
-        for input_file in input_data_filepaths:
-            filepath = os.path.join(data_fp, input_file)
-            input_data = np.load(filepath) # Dimensions (# of clips, 1, clip_length). 1 indicates a batch_size of 1.
-        
-            for i in range(input_data.shape[0]):
-                start = time.perf_counter()
-                sleep_stage_pred = model(input_data[i], training=False)
-                inference_time = time.perf_counter() - start
-                sleep_stage_pred = tf.argmax(sleep_stage_pred, axis=1)
-                text_file.write(str(sleep_stage_pred[0].numpy()) + '\n')
-                inference_times = np.append(inference_times, 1000*inference_time)
-
-                print(f"Clip {250*file_cnt + i} output: {sleep_stage_pred[0].numpy()} (inference time: {(inference_time * 1000):.2f}ms)")
-
-            file_cnt += 1
+        text_file.write(f"Mean time: {np.mean(inference_times[2:]):.3f}ms, std. dev.: {np.std(inference_times[2:]):.3f}ms\n")
+        text_file.write(results_string)
 
     # Report stats
     print(f"Done. Mean time: {np.mean(inference_times[2:]):.3f}ms, std. dev.: {np.std(inference_times[2:]):.3f}ms")

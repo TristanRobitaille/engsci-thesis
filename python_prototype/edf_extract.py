@@ -28,6 +28,7 @@ MIN_VOLTAGE = 0
 NUM_SLEEP_STAGES = 5 #Excluding 'unknown'
 ONE_HOT_OUTPUT = False #If true, sleep stages are exported as their one-hot classes tensor, else they are reported as a scalar
 NUM_PROCESSES = 20
+DATA_TYPE = tf.int16
 
 sleep_stage_annotation_to_int = { #Note: Stages 3 and 4 are combined and '0' is reserved for unknown
                                     "Sleep stage 1": 3,
@@ -73,7 +74,7 @@ def pseudo_random_clip(sleep_stage:int, clip_length_num_samples:int, max_min:tup
 
     return clip
 
-def pseudo_random_dataset(num_clips_per_sleep_stage:int, clip_length_num_samples, data_type:tf.DType=tf.float32):
+def pseudo_random_dataset(num_clips_per_sleep_stage:int, clip_length_num_samples):
     """
     Returns a properly formatted dictionary with the pseudo random data, with equal number of each sleep stage.
     """
@@ -88,8 +89,8 @@ def pseudo_random_dataset(num_clips_per_sleep_stage:int, clip_length_num_samples
             output["pseudo_random"].append(new_clip)
 
     # Convert to tensor
-    output["pseudo_random"] = tf.convert_to_tensor(value=output["pseudo_random"], dtype=data_type)
-    output["sleep_stage"] = tf.convert_to_tensor(value=output["sleep_stage"], dtype=data_type)
+    output["pseudo_random"] = tf.convert_to_tensor(value=output["pseudo_random"])
+    output["sleep_stage"] = tf.convert_to_tensor(value=output["sleep_stage"])
     output["sleep_stage"] = tf.reshape(tensor=output["sleep_stage"], shape=(output["sleep_stage"].shape[0], 1), name="sleep_stage")
 
     return output, 0 # Return code == 0
@@ -123,7 +124,7 @@ def resample_list(input:list, input_freq:int, target_freq:int) -> list:
 
     return resample
 
-def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, channels_to_read:List[str], historical_lookback_length=HISTORICAL_LOOKBACK_LENGTH, data_type:tf.DType=tf.float32) -> (tf.Tensor, tf.Tensor, List[str]):
+def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, channels_to_read:List[str], historical_lookback_length=HISTORICAL_LOOKBACK_LENGTH) -> (tf.Tensor, tf.Tensor, List[str]):
     """
     Returns a dictionary of channels with signals cut into clips and a return code.
 
@@ -205,15 +206,15 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
                 signals[channel_index][clip_index] = resample_list(input=signals[channel_index][clip_index], input_freq=NOMINAL_FREQUENCY_HZ, target_freq=args.downsampling_freq_hz)
 
     # Convert to tensors
-    sleep_stages = tf.convert_to_tensor(sleep_stages, dtype=data_type, name="sleep_stage")
-    pseudo_random_list = tf.convert_to_tensor(pseudo_random_list, dtype=data_type, name="pseudo_random")
-    if HISTORICAL_LOOKBACK_LENGTH > 0: sleep_stages_history = tf.convert_to_tensor(sleep_stages_history, dtype=data_type, name=f"history_{historical_lookback_length}-steps")
+    sleep_stages = tf.convert_to_tensor(sleep_stages, name="sleep_stage")
+    pseudo_random_list = tf.convert_to_tensor(pseudo_random_list, name="pseudo_random")
+    if HISTORICAL_LOOKBACK_LENGTH > 0: sleep_stages_history = tf.convert_to_tensor(sleep_stages_history, name=f"history_{historical_lookback_length}-steps")
 
     if ONE_HOT_OUTPUT: sleep_stages = tf.transpose(sleep_stages, perm=[0, 2, 1])
     else: sleep_stages = tf.expand_dims(sleep_stages, axis=1)
 
     for i in range(len(channels_to_read)):
-        signals[i] = tf.convert_to_tensor(signals[i], dtype=data_type, name=channels_to_read[i])      
+        signals[i] = tf.convert_to_tensor(signals[i], name=channels_to_read[i])      
 
     signals = dict(zip(channels_to_read, signals)) #Convert to dictionary
     signals["pseudo_random"] = pseudo_random_list
@@ -222,16 +223,18 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
 
     return signals
 
-def insert_into_all_night_dict(output_all_nights, output_one_night):
+def insert_into_all_night_dict(output_all_nights, output_one_night, data_type:tf.DType=DATA_TYPE):
     for key, value in output_one_night.items():
         if output_all_nights[key] == None:
+            output_one_night[key] = tf.cast(x=output_one_night[key], dtype=data_type)
             output_all_nights[key] = output_one_night[key]
         else:
+            output_one_night[key] = tf.cast(x=output_one_night[key], dtype=data_type)
             output_all_nights[key] =tf.concat([output_all_nights[key], output_one_night[key]], axis=0)
 
     return output_all_nights
 
-def process_dispatch(args, PSG_file_list, labels_file_list, channels_to_read, data_type, result_queue):
+def process_dispatch(args, PSG_file_list, labels_file_list, channels_to_read, result_queue):
     try:
         if PSG_file_list == []: # No file to process
             print(f"Process ID {os.getpid()} received empty EDF file list ({PSG_file_list})!")
@@ -244,7 +247,7 @@ def process_dispatch(args, PSG_file_list, labels_file_list, channels_to_read, da
         for PSG_file, labels_file in zip(PSG_file_list, labels_file_list):
             print(f"[{(time.time()-start_time):.2f}s] Process ID {os.getpid()} processing: {os.path.basename(PSG_file)} with {os.path.basename(labels_file)}")
 
-            output_one_night = read_single_whole_night(args, psg_filepath=PSG_file, annotations_filepath=labels_file, channels_to_read=channels_to_read, data_type=data_type)
+            output_one_night = read_single_whole_night(args, psg_filepath=PSG_file, annotations_filepath=labels_file, channels_to_read=channels_to_read)
             if output_one_night == -1:
                 print(f"Received failure code {output_one_night} from read_single_whole_night. Skipping night.")
                 print(vars(args))
@@ -253,7 +256,7 @@ def process_dispatch(args, PSG_file_list, labels_file_list, channels_to_read, da
             # Mark file clip of this night to indicate new file in dataset
             new_file_marker = [False for _ in range(len(output_one_night["sleep_stage"]))]
             new_file_marker[0] = True
-            output_one_night["new_night_marker"] = tf.convert_to_tensor(new_file_marker, dtype=data_type, name="new_night_marker")
+            output_one_night["new_night_marker"] = tf.convert_to_tensor(new_file_marker, name="new_night_marker")
             output_one_night["new_night_marker"] = tf.expand_dims(output_one_night["new_night_marker"], axis=1)
 
             output_all_nights = insert_into_all_night_dict(output_all_nights, output_one_night)
@@ -264,7 +267,7 @@ def process_dispatch(args, PSG_file_list, labels_file_list, channels_to_read, da
     except Exception as e:
         print(f"Error in child process {os.getpid()}: {e}")
 
-def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:tf.DType=tf.float32) -> (tf.Tensor, tf.Tensor, List[str]):
+def read_all_nights_from_directory(args, channels_to_read:List[str]) -> (tf.Tensor, tf.Tensor, List[str]):
     """
     Calls read_single_whole_night() for all files in folder and returns a dictionary of all channels and sleep stages concatenated along with a success flag.
 
@@ -302,7 +305,7 @@ def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:t
         # Start processes
         for i in range(NUM_PROCESSES):
             if not file_PSG_assignment[i] == []:
-                process = mp.Process(target=process_dispatch, args=(args, file_PSG_assignment[i], file_labels_assignment[i], channels_to_read, data_type, result_queue))
+                process = mp.Process(target=process_dispatch, args=(args, file_PSG_assignment[i], file_labels_assignment[i], channels_to_read, result_queue))
                 processes.append(process)
                 process.start()
 
@@ -328,21 +331,20 @@ def read_all_nights_from_directory(args, channels_to_read:List[str], data_type:t
         for PSG_file, labels_file in zip(PSG_file_list[0:args.num_files], labels_file_list[0:args.num_files]):
             print(f"[{(time.time()-start_time):.2f}s] Processing: {os.path.basename(PSG_file)} with {os.path.basename(labels_file)}")
 
-            output_one_night = read_single_whole_night(args, psg_filepath=PSG_file, annotations_filepath=labels_file, channels_to_read=channels_to_read, data_type=data_type)
+            output_one_night = read_single_whole_night(args, psg_filepath=PSG_file, annotations_filepath=labels_file, channels_to_read=channels_to_read)
             if output_one_night == -1:
                 print(f"""Received failure code {output_one_night} from read_single_whole_night. Skipping night.\n
                     PSG_file: {PSG_file}\n
                     sleep_stage_file: {labels_file}\n
                     channels_to_read: {channels_to_read}\n
                     clip_length_s: {args.clip_length_s}\n
-                    data_type: {data_type}\n
                     multiprocessing: {args.enable_multiprocessing}""")
                 continue #Skip this file
 
             # Indicate first clip of the night
             new_file_marker = [False for _ in range(len(output_one_night["sleep_stage"]))]
             new_file_marker[0] = True
-            output_one_night["end_night_marker"] = tf.convert_to_tensor(new_file_marker, dtype=data_type, name="new_night_marker")
+            output_one_night["end_night_marker"] = tf.convert_to_tensor(new_file_marker, name="new_night_marker")
             output_one_night["end_night_marker"] = tf.expand_dims(output_one_night["new_night_marker"], axis=1)
 
             output_all_nights = insert_into_all_night_dict(output_all_nights, output_one_night)
@@ -387,7 +389,9 @@ def save_metadata_json(json_fp:str, args, channels_to_read:list):
         "one_hot_encoding": ONE_HOT_OUTPUT,
         "clip_length_s": args.clip_length_s,
         "sampling_freq_Hz": args.downsampling_freq_hz,
-        "type": args.type
+        "type": args.type,
+        "data_type": str(DATA_TYPE),
+        "time_to_export": f"{(time.time()-start_time):.2f}s"
     }
 
     with open(json_fp, 'w') as json_file:
@@ -410,7 +414,7 @@ def main():
         print(f"PSG file directory: {args.directory_psg}")
         print(f"Labels file directory: {args.directory_labels}")
         print(f"Output directory: {args.export_directory}")
-        output, labels_file_list, return_code = read_all_nights_from_directory(args, channels_to_read=channels_to_read, data_type=tf.float32)
+        output, labels_file_list, return_code = read_all_nights_from_directory(args, channels_to_read=channels_to_read)
 
     # Create and save dataset
     if return_code == 0:
