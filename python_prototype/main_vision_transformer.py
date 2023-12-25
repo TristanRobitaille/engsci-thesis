@@ -270,6 +270,8 @@ def export_summary(output_log_filename, parser, model, fit_history, accuracy:flo
         log += f"Class training weights: {parser.class_weights}\n"
         log += f"Initial learning rate: {parser.learning_rate:.6f}\n"
         log += f"Rescale layer enabled: {parser.enable_input_rescale}\n"
+        log += f"Use classification token: {parser.use_class_embedding}\n"
+        log += f"Positional embedding enabled: {parser.enable_positional_embedding}\n"
         log += f"Number of samples in output filtering: {NUM_OUTPUT_FILTERING}\n"
 
         log += f"Model loss: {model.loss.name}\n"
@@ -310,12 +312,14 @@ def parse_arguments():
     parser.add_argument('--enable_dataset_resample_replacement', help='Whether replacement is allowed when resampling dataset.', action='store_true')
     parser.add_argument('--training_set_target_count', help='Target number of clips per class in training set. Defaults to [3500, 5000, 4000, 4250, 3750].', nargs='+', default=[3500, 5000, 4000, 4250, 3750], type=int)
     parser.add_argument('--enable_input_rescale', help='Enables layer rescaling inputs between [0, 1] at input.', action='store_true')
+    parser.add_argument('--enable_positional_embedding', help='Enables positional embedding.', action='store_true')
     parser.add_argument('--dropout_rate', help='Dropout rate for all dropout layers. Defaults to 0.1.', default=0.1 , type=float)
     parser.add_argument('--save_model', help='Saves model to disk.', action='store_true')
     parser.add_argument('--load_model_filepath', help='Indicates, if not empty, the filepath of a model to load rather than training it. Defaults to None.', default=None, type=str)
     parser.add_argument('--historical_lookback_DNN_depth', help='Internal size of the output DNN for historical lookback. Defaults to 64.', default=64, type=int)
     parser.add_argument('--output_edgetpu_data', help='Select whether to output Numpy arrays when parsing input data to run on edge TPU.', action='store_true')
-
+    parser.add_argument('--use_class_embedding', help='Select whether to use classification token in model.', action='store_true')
+    
     # Parse arguments
     try:
         args = parser.parse_args()
@@ -337,8 +341,10 @@ def parse_arguments():
 
 def train_model(args, signals_train, sleep_stages_train, clip_length_num_samples, patch_length_num_samples):
     try:
-        model = VisionTransformer(clip_length_num_samples=clip_length_num_samples, patch_length_num_samples=patch_length_num_samples, num_layers=args.num_layers, num_classes=NUM_SLEEP_STAGES, historical_lookback_DNN_depth=args.historical_lookback_DNN_depth,
-                                  embedding_depth=args.embedding_depth, num_heads=args.num_heads, mlp_dim=args.mlp_dim, dropout_rate=args.dropout_rate, history_length=NUM_SLEEP_STAGE_HISTORY, enable_scaling=args.enable_input_rescale)
+        model = VisionTransformer(clip_length_num_samples=clip_length_num_samples, patch_length_num_samples=patch_length_num_samples, num_layers=args.num_layers, num_classes=NUM_SLEEP_STAGES, 
+                                  historical_lookback_DNN_depth=args.historical_lookback_DNN_depth, embedding_depth=args.embedding_depth, num_heads=args.num_heads, mlp_dim=args.mlp_dim, 
+                                  dropout_rate=args.dropout_rate, history_length=NUM_SLEEP_STAGE_HISTORY, enable_scaling=args.enable_input_rescale, enable_positional_embedding=args.enable_positional_embedding,
+                                  use_class_embedding=args.use_class_embedding)
     except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to initialize model.")
 
     try:
@@ -497,20 +503,20 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
             raise ValueError(f"Embedding dimension = {self.embedding_dimension} should be divisible by number of heads = {self.num_heads}")
 
         # Layers
-        self.query_dense = tf.keras.layers.Dense(self.embedding_dimension, name="mhsa_dense1")
-        self.key_dense = tf.keras.layers.Dense(self.embedding_dimension, name="mhsa_dense2")
-        self.value_dense = tf.keras.layers.Dense(self.embedding_dimension, name="mhsa_dense3")
-        self.combine_heads = tf.keras.layers.Dense(self.embedding_dimension, name="mhsa_dense4")
+        self.query_dense = tf.keras.layers.Dense(self.embedding_dimension, name="mhsa_query_dense")
+        self.key_dense = tf.keras.layers.Dense(self.embedding_dimension, name="mhsa_key_dense")
+        self.value_dense = tf.keras.layers.Dense(self.embedding_dimension, name="mhsa_value_dense")
+        self.combine_heads = tf.keras.layers.Dense(self.embedding_dimension, name="mhsa_combine_head_dense")
 
     def attention(self, query, key, value):
-        query = tf.cast(query, dtype=DATA_TYPE)
-        key = tf.cast(key, dtype=DATA_TYPE)
-        value = tf.cast(value, dtype=DATA_TYPE)
-        score = tf.matmul(query, key, transpose_b=True)
+        query = tf.cast(query, dtype=DATA_TYPE) #query = (batch_size, num_heads, num_patches+1, num_heads)
+        key = tf.cast(key, dtype=DATA_TYPE) #key = (batch_size, num_heads, num_patches+1, num_heads)
+        value = tf.cast(value, dtype=DATA_TYPE) #value = (batch_size, num_heads, num_patches+1, num_heads)
+        score = tf.matmul(query, key, transpose_b=True) #score = (batch_size, num_heads, num_patches+1, num_patches+1)
         dim_key = tf.cast(tf.shape(key)[-1], dtype=DATA_TYPE)
-        scaled_score = score / tf.math.sqrt(dim_key)
-        weights = tf.nn.softmax(scaled_score, axis=-1)
-        output = tf.matmul(weights, value)
+        scaled_score = score / tf.math.sqrt(dim_key) #scaled_score = (batch_size, num_heads, num_patches+1, num_patches+1)
+        weights = tf.nn.softmax(logits=scaled_score, axis=-1) #weights = (batch_size, num_heads, num_patches+1, num_patches+1)
+        output = tf.matmul(weights, value) #output = (batch_size, num_heads, num_patches+1, num_heads)
         return output, weights
 
     def separate_heads(self, x, batch_size):
@@ -521,17 +527,17 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
     def call(self, inputs):
         batch_size = inputs.shape[0]
 
-        query = self.query_dense(inputs)
-        key = self.key_dense(inputs)
-        value = self.value_dense(inputs)
-        query = self.separate_heads(query, batch_size)
-        key = self.separate_heads(key, batch_size)
-        value = self.separate_heads(value, batch_size)
+        query = self.query_dense(inputs) #query = (batch_size, num_patches+1, embedding_depth)
+        key = self.key_dense(inputs) #key = (batch_size, num_patches+1, embedding_depth)
+        value = self.value_dense(inputs) #value = (batch_size, num_patches+1, embedding_depth)
+        query = self.separate_heads(query, batch_size) #query = (batch_size, num_heads, num_patches+1, num_heads)
+        key = self.separate_heads(key, batch_size) #key = (batch_size, num_heads, num_patches+1, num_heads)
+        value = self.separate_heads(value, batch_size) #value = (batch_size, num_heads, num_patches+1, num_heads)
 
-        attention, weights = self.attention(query, key, value)
-        attention = tf.transpose(attention, perm=[0,2,1,3])
-        concat_attention = tf.reshape(attention, (batch_size, -1, self.embedding_dimension))
-        output = self.combine_heads(concat_attention)
+        attention, weights = self.attention(query, key, value) #attention = (batch_size, num_heads, num_patches+1, num_heads)
+        attention = tf.transpose(attention, perm=[0,2,1,3]) #attention = (batch_size, num_patches+1, num_heads, num_heads)
+        concat_attention = tf.reshape(attention, (batch_size, -1, self.embedding_dimension)) #concat_attention = (batch_size, num_patches+1, embedding_depth)
+        output = self.combine_heads(concat_attention) #output = (batch_size, num_patches+1, embedding_depth)
 
         return output
 
@@ -548,11 +554,11 @@ class Encoder(tf.keras.layers.Layer):
         self.history_length = history_length
 
         # Layers
-        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layerNorm_encoder")
+        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layerNorm1_encoder")
         self.mhsa = MultiHeadSelfAttention(self.embedding_depth, self.num_heads)
-        self.dropout1 = tf.keras.layers.Dropout(self.dropout_rate, seed=RANDOM_SEED, name="dropout_encoder")
+        self.dropout1 = tf.keras.layers.Dropout(self.dropout_rate, seed=RANDOM_SEED, name="dropout1_encoder")
 
-        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="mlp_layerNorm_encoder")
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layerNorm2_encoder")
         self.mlp = tf.keras.Sequential([
             tf.keras.layers.Dense(mlp_dim, activation=tfa.activations.gelu, name="mlp_dense1_encoder"),
             tf.keras.layers.Dropout(self.dropout_rate, seed=RANDOM_SEED, name="mlp_dropout1_encoder"),
@@ -562,21 +568,22 @@ class Encoder(tf.keras.layers.Layer):
         self.dropout2 = tf.keras.layers.Dropout(self.dropout_rate, seed=RANDOM_SEED, name="dropout2_encoder")
 
     def call(self, inputs, training):
-        inputs_norm = self.layernorm1(inputs)
-        attn_output = self.mhsa(inputs_norm)
-        attn_output = self.dropout1(attn_output, training=training)
+        inputs_norm = self.layernorm1(inputs) #inputs_norm = (batch_size, num_patches+1, embedding_depth)
+        attn_output = self.mhsa(inputs_norm) #attn_output = (batch_size, num_patches+1, embedding_depth)
+        attn_output = self.dropout1(attn_output, training=training) #attn_output = (batch_size, num_patches+1, embedding_depth)
 
-        out1 = attn_output + inputs
-        out1_norm = self.layernorm2(out1)
-        mlp_output = self.mlp(out1_norm)
+        out1 = attn_output + inputs  #out1 = (batch_size, num_patches+1, embedding_depth)
+        out1_norm = self.layernorm2(out1) #out1_norm = (batch_size, num_patches+1, embedding_depth)
+        mlp_output = self.mlp(out1_norm) #mlp_output = (batch_size, num_patches+1, embedding_depth)
 
-        mlp_output = self.dropout2(mlp_output, training=training)
+        mlp_output = self.dropout2(mlp_output, training=training) #mlp_output = (batch_size, num_patches+1, embedding_depth)
         return mlp_output + out1
 
 #--- Vision Transformer ---#
 class VisionTransformer(tf.keras.Model):
     def __init__(self, clip_length_num_samples:int, patch_length_num_samples:int, num_layers:int, num_classes:int, embedding_depth:int, historical_lookback_DNN_depth:int,
-                 num_heads:int, mlp_dim:int, dropout_rate:float=0.1, enable_scaling:bool=True, history_length:int=NUM_SLEEP_STAGE_HISTORY):
+                 num_heads:int, mlp_dim:int, dropout_rate:float=0.1, enable_scaling:bool=True, enable_positional_embedding:bool=True, use_class_embedding:bool=True,
+                 history_length:int=NUM_SLEEP_STAGE_HISTORY):
         super(VisionTransformer, self).__init__()
 
         # Hyperparameters
@@ -590,18 +597,17 @@ class VisionTransformer(tf.keras.Model):
         self.dropout_rate = dropout_rate
         self.num_patches = int(self.clip_length_num_samples / self.patch_length_num_samples)
         self.history_length = history_length
-        self.enable_scaling = enable_scaling
         self.historical_lookback_DNN = False and (True if self.history_length > 0 else False)
         self.historical_lookback_DNN_depth = historical_lookback_DNN_depth
+        self.enable_scaling = enable_scaling
+        self.enable_positional_embedding = enable_positional_embedding
+        self.use_class_embedding = use_class_embedding
 
         # Layers
         self.rescale = tf.keras.layers.experimental.preprocessing.Rescaling(1.0 / MAX_VOLTAGE)
         self.patch_projection = tf.keras.layers.Dense(self.embedding_depth, name="patch_projection_dense")
-        if self.history_length > 0:
-            self.positional_embedding = self.add_weight("pos_emb", shape=(1, self.num_patches+2, self.embedding_depth)) #+2 is for the trainable classification token the historical lookback prepended to input sequence of patches
-        else:
-            self.positional_embedding = self.add_weight("pos_emb", shape=(1, self.num_patches+1, self.embedding_depth)) #+1 is for the trainable classification token prepended to input sequence of patches
-        self.class_embedding = self.add_weight("class_emb", shape=(1, 1, self.embedding_depth))
+        if self.use_class_embedding: self.class_embedding = self.add_weight("class_emb", shape=(1, 1, self.embedding_depth))
+        if self.enable_positional_embedding: self.positional_embedding = self.add_weight("pos_emb", shape=(1, self.num_patches+self.use_class_embedding+(self.history_length > 0), self.embedding_depth)) #+1 for the trainable classification token, +1 for historical lookback
         self.encoder_layers = [Encoder(embedding_depth=self.embedding_depth, num_heads=self.num_heads, mlp_dim=self.mlp_dim, dropout_rate=self.dropout_rate, history_length=self.history_length) for _ in range(self.num_layers)]
         self.mlp_head = tf.keras.Sequential([
             tf.keras.layers.LayerNormalization(epsilon=1e-6, name="mlp_head_layerNorm"),
@@ -634,11 +640,11 @@ class VisionTransformer(tf.keras.Model):
         batch_size = clip.shape[0]
         if batch_size == None: batch_size = 1
 
-        # Normalize to [0,1]
+        # Normalize to [0, 1]
         if self.enable_scaling: clip = self.rescale(clip)
 
         # Extract patches
-        patches = self.extract_patches(batch_size, clip)
+        patches = self.extract_patches(batch_size, clip) #patches = (batch_size, num_patches, patch_length_num_samples)
         if self.history_length > 0:
             patches = tf.concat([patches, historical_lookback_patch], axis=1)
 
@@ -646,18 +652,18 @@ class VisionTransformer(tf.keras.Model):
         clip = self.patch_projection(patches) #clip = (num_patches, embedding_depth)
 
         # Classification token
-        class_embedding = tf.broadcast_to(self.class_embedding, [batch_size, 1, self.embedding_depth])
+        if self.use_class_embedding:
+            class_embedding = tf.broadcast_to(self.class_embedding, [batch_size, 1, self.embedding_depth]) #class_embedding = (batch_size, 1, embedding_depth)
+            clip = tf.concat([class_embedding, clip], axis=1) #clip = (batch_size, num_patches+1, embedding_depth)
 
-        # Construct sequence
-        clip = tf.concat([class_embedding, clip], axis=1)
-        clip = clip + self.positional_embedding
+        if self.enable_positional_embedding: clip = clip + self.positional_embedding #clip = (batch_size, num_patches+1, embedding_depth)
 
         # Go through encoder
         for layer in self.encoder_layers:
-            clip = layer(inputs=clip, training=training)
+            clip = layer(inputs=clip, training=training) #clip = (batch_size, num_patches+1, embedding_depth)
 
         # Classify with first token
-        prediction = self.mlp_head(clip[:, 0])
+        prediction = self.mlp_head(clip[:, 0]) #prediction = (batch_size, NUM_SLEEP_STAGES)
 
         if self.historical_lookback_DNN:
             historical_lookback = tf.cast(historical_lookback, tf.uint8)
@@ -748,11 +754,9 @@ def main():
 
         tf.keras.utils.plot_model(model.build_graph(), to_file=f"{output_folder_path}/{time_of_export}_vision_high_level.png", expand_nested=True, show_trainable=True, show_shapes=True, show_layer_activations=True, dpi=300, show_dtype=True)
 
-        # Convert to Tensorflow Lite model
+        # Convert to Tensorflow Lite model and save
         converter = tf.lite.TFLiteConverter.from_keras_model(model)
         tflite_model = converter.convert()
-
-        # Save .tflite model
         with open(f"{output_folder_path}/{time_of_export}_vision.tflite", "wb") as f:
             f.write(tflite_model)
         print(f"[{(time.time()-start_time):.2f}s] Saved TensorFlow Lite model to {output_folder_path}/{time_of_export}_vision.tflite.")
