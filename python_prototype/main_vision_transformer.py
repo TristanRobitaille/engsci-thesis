@@ -492,6 +492,15 @@ def plot_single_night_prediction(args, model, single_night_filename, log_file_pa
     print(f"[{(time.time()-start_time):.2f}s] Single night inference complete. Starting plot export.")
     export_plots(pred=sleep_stages_single_pred, ground_truth=sleep_stages_single, accuracy=total_correct/len(sleep_stages_single_pred), log_file_path=log_file_path)
 
+# def representative_dataset(dataset_fp:str):
+#     for data in tf.data.Dataset.from_tensor_slices((dataset_fp)).take(100):
+#         yield [tf.dtypes.cast(data, tf.float32)]
+
+def representative_dataset():
+    for _ in range(100):
+      data = np.random.rand(1, 30*256)
+      yield [data.astype(np.float32)]
+
 #--- Multi-Head Attention ---#
 class MultiHeadSelfAttention(tf.keras.layers.Layer):
     def __init__(self, embedding_dimension:int, num_heads:int=8):
@@ -630,7 +639,7 @@ class VisionTransformer(tf.keras.Model):
         patches = tf.reshape(clips, [batch_size, -1, self.patch_length_num_samples])
         return patches
 
-    def call(self, input, training:bool):
+    def call(self, input, training:bool=False):
         # Extract historical lookback (if present)
         if self.history_length > 0:
             clip, historical_lookback = tf.split(input, [self.clip_length_num_samples, self.history_length], axis=1)
@@ -764,6 +773,37 @@ def main():
         with open(f"{output_folder_path}/{time_of_export}_vision.tflite", "wb") as f:
             f.write(tflite_model)
         print(f"[{(time.time()-start_time):.2f}s] Saved TensorFlow Lite model to {output_folder_path}/{time_of_export}_vision.tflite.")
+
+        # Convert to quantized Tensorflow Lite model and save
+        converter = tf.lite.TFLiteConverter.from_keras_model(model)
+        converter.optimizations = [tf.lite.Optimize.DEFAULT]
+        tflite_quant_model = converter.convert()
+        with open(f"{output_folder_path}/{time_of_export}_vision_quant.tflite", "wb") as f:
+            f.write(tflite_quant_model)
+        print(f"[{(time.time()-start_time):.2f}s] Saved quantized TensorFlow Lite model to {output_folder_path}/{time_of_export}_vision_quant.tflite.")
+
+        # Convert to full quantized Tensorflow Lite model and save
+        converter = tf.lite.TFLiteConverter.from_keras_model(model)
+        converter.optimizations = [tf.lite.Optimize.DEFAULT]
+        converter.representative_dataset = representative_dataset
+        converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
+        converter.inference_input_type = tf.int8  # or tf.uint8
+        converter.inference_output_type = tf.int8  # or tf.uint8
+        tflite_full_quant_model = converter.convert()
+        with open(f"{output_folder_path}/{time_of_export}_vision_full_quant.tflite", "wb") as f:
+            f.write(tflite_full_quant_model)
+        print(f"[{(time.time()-start_time):.2f}s] Saved fully quantized TensorFlow Lite model to {output_folder_path}/{time_of_export}_vision_full_quant.tflite.")
+
+        # Convert to full quantized Tensorflow Lite model with 16b activations and 8b weights and save
+        converter = tf.lite.TFLiteConverter.from_keras_model(model)
+        converter.optimizations = [tf.lite.Optimize.DEFAULT]
+        converter.representative_dataset = representative_dataset
+        converter.optimizations = [tf.lite.Optimize.DEFAULT]
+        converter.target_spec.supported_ops = [tf.lite.OpsSet.EXPERIMENTAL_TFLITE_BUILTINS_ACTIVATIONS_INT16_WEIGHTS_INT8]
+        tflite_16x8_full_quant_model = converter.convert()
+        with open(f"{output_folder_path}/{time_of_export}_vision_full_quant_16x8.tflite", "wb") as f:
+            f.write(tflite_16x8_full_quant_model)
+        print(f"[{(time.time()-start_time):.2f}s] Saved fully quantized TensorFlow Lite model (16b activations and 8b weights) to {output_folder_path}/{time_of_export}_vision_full_quant_16x8.tflite.")
 
     print(f"[{(time.time()-start_time):.2f}s] Done. Good bye.")
 

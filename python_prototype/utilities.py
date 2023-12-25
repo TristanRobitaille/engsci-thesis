@@ -177,7 +177,7 @@ def run_model(model_fp:str, data_fp:str):
     # Load saved model
     model = tf.keras.models.load_model(model_fp, custom_objects={"CustomSchedule": CustomSchedule})
     input_data_filepaths = glob.glob(data_fp + "/*.npy")
-    print(input_data_filepaths)
+    print(f"Filepaths: {input_data_filepaths}")
 
     inference_times = np.empty((1))
 
@@ -204,6 +204,55 @@ def run_model(model_fp:str, data_fp:str):
 
     # Write results to file
     with open(data_fp + "/out_cpu.txt", 'w') as text_file:
+        text_file.write(f"Model: {model_fp}\n")
+        text_file.write(f"Mean time: {np.mean(inference_times[2:]):.3f}ms, std. dev.: {np.std(inference_times[2:]):.3f}ms\n")
+        text_file.write(results_string)
+
+    # Report stats
+    print(f"Done. Mean time: {np.mean(inference_times[2:]):.3f}ms, std. dev.: {np.std(inference_times[2:]):.3f}ms")
+
+def run_tflite_model(model_fp:str, data_fp:str):
+    NUM_CLIPS_PER_FILE = 500 # Only valid for 256Hz 
+
+    # Load saved model
+    interpreter = tf.lite.Interpreter(model_path=model_fp)
+    interpreter.allocate_tensors()
+
+    # Get input and output tensors.
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+
+    input_data_filepaths = glob.glob(data_fp + "/*.npy")
+    print(f"Filepaths: {input_data_filepaths}")
+
+    inference_times = np.empty((1))
+
+    # Run inference
+    print('---- INFERENCE ----')
+    file_cnt = 0
+    results_string = ""
+
+    for filepath in input_data_filepaths:
+        input_data = np.load(filepath) # Dimensions (# of clips, 1, clip_length). 1 indicates a batch_size of 1.
+        input_data = input_data.astype(np.float32)
+    
+        for i in range(input_data.shape[0]):
+            start = time.perf_counter()
+            interpreter.set_tensor(input_details[0]['index'], input_data[i])
+            inference_time = time.perf_counter() - start
+            interpreter.invoke()
+            sleep_stage_pred = interpreter.get_tensor(output_details[0]['index'])
+            sleep_stage_pred = tf.argmax(sleep_stage_pred, axis=1)
+            results_string += str(sleep_stage_pred[0].numpy()) + '\n'
+            inference_times = np.append(inference_times, 1000*inference_time)
+
+            print(f"Clip {NUM_CLIPS_PER_FILE*file_cnt + i} output: {sleep_stage_pred[0].numpy()} (inference time: {(inference_time * 1000):.2f}ms)")
+
+        file_cnt += 1
+
+    # Write results to file
+    with open(data_fp + "/out_cpu.txt", 'w') as text_file:
+        text_file.write(f"Model: {model_fp}\n")
         text_file.write(f"Mean time: {np.mean(inference_times[2:]):.3f}ms, std. dev.: {np.std(inference_times[2:]):.3f}ms\n")
         text_file.write(results_string)
 
@@ -212,8 +261,9 @@ def run_model(model_fp:str, data_fp:str):
 
 def main():
 
-    run_model(model_fp="/home/trobitaille/engsci-thesis/python_prototype/results/2023-12-06_15-01-24_vision_best/2023-12-06_15-01-24_vision.tf", data_fp="/home/trobitaille/engsci-thesis/python_prototype/edgetpu_data")
-
+    # run_model(model_fp="/home/trobitaille/engsci-thesis/python_prototype/results/2023-12-06_15-01-24_vision_best/2023-12-06_15-01-24_vision.tf", data_fp="/home/trobitaille/engsci-thesis/python_prototype/edgetpu_data")
+    run_tflite_model(model_fp="/home/trobitaille/engsci-thesis/python_prototype/results/2023-12-25_14-42-11_vision/2023-12-25_14-42-11_vision_quant.tflite", data_fp="/home/trobitaille/engsci-thesis/python_prototype/edgetpu_data")
+              
     return
 
 if __name__ == "__main__":

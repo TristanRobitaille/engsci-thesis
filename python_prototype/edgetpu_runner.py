@@ -18,7 +18,7 @@ def main():
     args = parser.parse_args()
 
     # Prepare model interpreter
-    interpreter = make_interpreter(*args.model_fp.split('@'))
+    interpreter = tf.lite.Interpreter(*args.model_fp.split('@'))
     interpreter.allocate_tensors()
 
     # Input data
@@ -48,6 +48,7 @@ def main():
 
     # Write results to file
     with open(args.data_dir + "/out_tpu.txt", 'w') as text_file:
+        text_file.write(f"Model: {args.model_fp}\n")
         text_file.write(f"Mean time: {np.mean(inference_times[2:]):.3f}ms, std. dev.: {np.std(inference_times[2:]):.3f}ms\n")
         text_file.write(results_string)
 
