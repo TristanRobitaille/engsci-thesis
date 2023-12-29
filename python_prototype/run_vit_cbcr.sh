@@ -21,5 +21,7 @@ python3 /home/trobitaille/engsci-thesis/python_prototype/main_vision_transformer
 --training_set_target_count 4600   4600   4600   4600   4600 \
 --save_model \
 --enable_dataset_resample_replacement \
+--use_class_embedding \
+--enable_positional_embedding \
 --enable_input_rescale \
-# 30s dataset distribution: 4253,  26343, 6844,  9368,  5732
+# --output_edgetpu_data \

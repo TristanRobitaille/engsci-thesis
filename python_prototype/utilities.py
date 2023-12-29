@@ -1,4 +1,3 @@
-import time
 import glob
 import socket
 import argparse
@@ -133,12 +132,9 @@ def find_txt_file_name(candidate_file_name:str, directory:str) -> str:
     return candidate_filepath
 
 def log_error_and_exit(exception, manual_description:str="", additional_msg:str="") -> None:
-    if socket.gethostname() == "claude-ryzen":
-        error_log = find_txt_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/home/trobitaille/engsci-thesis/python_prototype/error_logs/*")
-    elif socket.gethostname() == "MBP_Tristan":
-        error_log = find_txt_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/Users/tristan/Desktop/engsci-thesis/python_prototype/error_logs/*")
-    elif "cedar.computecanada.ca" in socket.gethostname():
-        error_log = find_txt_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/error_logs/*")
+    if socket.gethostname() == "claude-ryzen":              error_log = find_txt_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/home/trobitaille/engsci-thesis/python_prototype/error_logs/")
+    elif socket.gethostname() == "MBP_Tristan":             error_log = find_txt_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/Users/tristan/Desktop/engsci-thesis/python_prototype/error_logs/")
+    elif "cedar.computecanada.ca" in socket.gethostname():  error_log = find_txt_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/error_logs/")
 
     print(f"Received error: {exception}")
 
@@ -171,50 +167,35 @@ def count_instances_per_class(input, num_classes) -> list:
         count[int(elem)] += 1
     return count
 
-def run_model(model_fp:str, data_fp:str):
-    NUM_CLIPS_PER_FILE = 500 # Only valid for 256Hz 
+def run_model(model, data:dict, whole_night_indices:list, data_type:tf.DType, num_output_filtering:int=0, num_sleep_stage_history:int=0) -> list:
+    # Load saved model (if argument is string)
+    if (isinstance(model, str)):
+        model = tf.keras.models.load_model(model, custom_objects={"CustomSchedule": CustomSchedule})
 
-    # Load saved model
-    model = tf.keras.models.load_model(model_fp, custom_objects={"CustomSchedule": CustomSchedule})
-    input_data_filepaths = glob.glob(data_fp + "/*.npy")
-    print(f"Filepaths: {input_data_filepaths}")
+    sleep_stages_pred = []
+    total = 0
+    output_filter = MovingAverage(num_output_filtering)
+    if num_sleep_stage_history > 0: historical_pred = tf.zeros(shape=(1, num_sleep_stage_history), dtype=data_type)
 
-    inference_times = np.empty((1))
+    try:
+        for x, y in zip(data["signals_val"], data["sleep_stages_val"]):
+            x = tf.reshape(x, [1, x.shape[0]]) # Prepend 1 to shape to make it a batch of 1
 
-    # Run inference
-    print('---- INFERENCE ----')
-    file_cnt = 0
-    results_string = ""
+            if num_sleep_stage_history > 0:
+                x = tf.concat([x[:,:-num_sleep_stage_history], historical_pred], axis=1) # Concatenate historical prediction to input
+                if whole_night_indices[total].numpy()[0] == 1.0: historical_pred = tf.zeros(shape=(1, num_sleep_stage_history)) # Reset historical prediction at 0 (unknown) if at the start a new night
 
-    for filepath in input_data_filepaths:
-        input_data = np.load(filepath) # Dimensions (# of clips, 1, clip_length). 1 indicates a batch_size of 1.
-        input_data = input_data.astype(np.float32)
-    
-        for i in range(input_data.shape[0]):
-            start = time.perf_counter()
-            sleep_stage_pred = model(input_data[i], training=False)
-            inference_time = time.perf_counter() - start
+            sleep_stage_pred = model(x, training=False)
             sleep_stage_pred = tf.argmax(sleep_stage_pred, axis=1)
-            results_string += str(sleep_stage_pred[0].numpy()) + '\n'
-            inference_times = np.append(inference_times, 1000*inference_time)
+            sleep_stage_pred = tf.cast(output_filter.filter(sleep_stage_pred), dtype=data_type) # Filter sleep stage
+            if num_sleep_stage_history > 0: historical_pred = tf.concat([tf.expand_dims(sleep_stage_pred, axis=1), historical_pred[:, 0:num_sleep_stage_history-1]], axis=1)
+            sleep_stages_pred.append(int(sleep_stage_pred[0].numpy()))
+            total += 1
+    except Exception as e: log_error_and_exit(exception=e, manual_description="Failed to manually run model.")
 
-            print(f"Clip {NUM_CLIPS_PER_FILE*file_cnt + i} output: {sleep_stage_pred[0].numpy()} (inference time: {(inference_time * 1000):.2f}ms)")
+    return sleep_stages_pred
 
-        file_cnt += 1
-
-    # Write results to file
-    with open(data_fp + "/out_cpu.txt", 'w') as text_file:
-        text_file.write(f"Model: {model_fp}\n")
-        text_file.write(f"Mean time: {np.mean(inference_times[2:]):.3f}ms, std. dev.: {np.std(inference_times[2:]):.3f}ms\n")
-        text_file.write(results_string)
-
-    # Report stats
-    print(f"Done. Mean time: {np.mean(inference_times[2:]):.3f}ms, std. dev.: {np.std(inference_times[2:]):.3f}ms")
-
-def run_tflite_model(model_fp:str, data_fp:str):
-    NUM_CLIPS_PER_FILE = 500 # Only valid for 256Hz 
-
-    # Load saved model
+def run_tflite_model(model_fp:str, data:str, whole_night_indices:list, data_type:tf.DType, num_output_filtering:int=0, num_sleep_stage_history:int=0) -> list:
     interpreter = tf.lite.Interpreter(model_path=model_fp)
     interpreter.allocate_tensors()
 
@@ -222,49 +203,52 @@ def run_tflite_model(model_fp:str, data_fp:str):
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
 
-    input_data_filepaths = glob.glob(data_fp + "/*.npy")
-    print(f"Filepaths: {input_data_filepaths}")
+    predictions = []
+    total = 0
+    output_filter = MovingAverage(num_output_filtering)
+    if num_sleep_stage_history > 0: historical_pred = tf.zeros(shape=(1, num_sleep_stage_history), dtype=data_type)
 
-    inference_times = np.empty((1))
+    try:
+        for x, y in zip(data["signals_val"], data["sleep_stages_val"]):
+            if (data_type == tf.int8):
+                x = x / 2**15 * 2**7
+            x = tf.cast(x=x, dtype=data_type)
+            x = tf.reshape(x, [1, x.shape[0]]) # Prepend 1 to shape to make it a batch of 1
 
-    # Run inference
-    print('---- INFERENCE ----')
-    file_cnt = 0
-    results_string = ""
+            if num_sleep_stage_history > 0:
+                x = tf.concat([x[:,:-num_sleep_stage_history], historical_pred], axis=1) # Concatenate historical prediction to input
+                if whole_night_indices[total].numpy()[0] == 1.0: historical_pred = tf.zeros(shape=(1, num_sleep_stage_history)) # Reset historical prediction at 0 (unknown) if at the start a new night
 
-    for filepath in input_data_filepaths:
-        input_data = np.load(filepath) # Dimensions (# of clips, 1, clip_length). 1 indicates a batch_size of 1.
-        input_data = input_data.astype(np.float32)
-    
-        for i in range(input_data.shape[0]):
-            start = time.perf_counter()
-            interpreter.set_tensor(input_details[0]['index'], input_data[i])
-            inference_time = time.perf_counter() - start
+            interpreter.set_tensor(input_details[0]['index'], x)
             interpreter.invoke()
             sleep_stage_pred = interpreter.get_tensor(output_details[0]['index'])
             sleep_stage_pred = tf.argmax(sleep_stage_pred, axis=1)
-            results_string += str(sleep_stage_pred[0].numpy()) + '\n'
-            inference_times = np.append(inference_times, 1000*inference_time)
+            sleep_stage_pred = tf.cast(output_filter.filter(sleep_stage_pred), dtype=data_type) # Filter sleep stage
+            if num_sleep_stage_history > 0: historical_pred = tf.concat([tf.expand_dims(sleep_stage_pred, axis=1), historical_pred[:, 0:num_sleep_stage_history-1]], axis=1)
+            predictions.append(int(sleep_stage_pred[0].numpy()))
+            total += 1
+    except Exception as e: log_error_and_exit(exception=e, manual_description="Failed to manually run model.")
 
-            print(f"Clip {NUM_CLIPS_PER_FILE*file_cnt + i} output: {sleep_stage_pred[0].numpy()} (inference time: {(inference_time * 1000):.2f}ms)")
+    return predictions
 
-        file_cnt += 1
+def folder_base_path():
+    if socket.gethostname() == "claude-ryzen":              return f"/home/trobitaille/engsci-thesis/python_prototype/results/"
+    elif socket.gethostname() == "MBP_Tristan":             return f"/Users/tristan/Desktop/engsci-thesis/python_prototype/results/"
+    elif "cedar.computecanada.ca" in socket.gethostname():  return f"/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/results/"
 
-    # Write results to file
-    with open(data_fp + "/out_cpu.txt", 'w') as text_file:
-        text_file.write(f"Model: {model_fp}\n")
-        text_file.write(f"Mean time: {np.mean(inference_times[2:]):.3f}ms, std. dev.: {np.std(inference_times[2:]):.3f}ms\n")
-        text_file.write(results_string)
-
-    # Report stats
-    print(f"Done. Mean time: {np.mean(inference_times[2:]):.3f}ms, std. dev.: {np.std(inference_times[2:]):.3f}ms")
+def shuffle(signal:tf.Tensor, sleep_stages:tf.Tensor, random_seed:int):
+    """
+    Shuffles two input tensors in the same way s.t. corresponding pairs remain
+    """
+    size = tf.shape(signal)[0]
+    indices = tf.range(size)
+    shuffled_indices = tf.random.shuffle(value=indices, seed=random_seed)
+    signal_shuffled = tf.gather(signal, shuffled_indices)
+    sleep_stages_shuffled = tf.gather(sleep_stages, shuffled_indices)
+    return signal_shuffled, sleep_stages_shuffled
 
 def main():
-
-    # run_model(model_fp="/home/trobitaille/engsci-thesis/python_prototype/results/2023-12-06_15-01-24_vision_best/2023-12-06_15-01-24_vision.tf", data_fp="/home/trobitaille/engsci-thesis/python_prototype/edgetpu_data")
-    run_tflite_model(model_fp="/home/trobitaille/engsci-thesis/python_prototype/results/2023-12-25_14-42-11_vision/2023-12-25_14-42-11_vision_quant.tflite", data_fp="/home/trobitaille/engsci-thesis/python_prototype/edgetpu_data")
-              
-    return
+    print("Nothing to do in utilities main.")
 
 if __name__ == "__main__":
     main()

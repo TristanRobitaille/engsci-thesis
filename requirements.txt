@@ -1,6 +1,5 @@
 tensorflow>=2.14.0
 tensorrt>=8.6.1
-tensorflow-addons>=0.23.0
 numpy>=1.24.0
 matplotlib>=3.8.0
 six>=1.16.0

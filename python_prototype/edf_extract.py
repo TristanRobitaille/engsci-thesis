@@ -8,6 +8,8 @@ import os
 import glob
 import math
 import json
+import shutil
+import utilities
 
 from typing import List
 from pyedflib import EdfReader
@@ -18,6 +20,8 @@ import numpy as np
 import tensorflow as tf
 import multiprocessing as mp
 
+tf.get_logger().setLevel('ERROR')
+
 SLEEP_STAGE_RESOLUTION_SEC = 30.0 #Nominal (i.e. in EDF file) length or each clip/sleep stage annotation
 NOMINAL_FREQUENCY_HZ = 256 #Sampling frequency for most channels
 HISTORICAL_LOOKBACK_LENGTH = 0 #We save the last HISTORICAL_LOOKBACK_LENGTH sleep stages. Set to 0 to disable.
@@ -27,8 +31,8 @@ MAX_VOLTAGE = 2**15 - 1
 MIN_VOLTAGE = 0
 NUM_SLEEP_STAGES = 5 #Excluding 'unknown'
 ONE_HOT_OUTPUT = False #If true, sleep stages are exported as their one-hot classes tensor, else they are reported as a scalar
-NUM_PROCESSES = 20
-DATA_TYPE = tf.int16
+NUM_PROCESSES = 22
+DATA_TYPE = tf.float32
 
 sleep_stage_annotation_to_int = { #Note: Stages 3 and 4 are combined and '0' is reserved for unknown
                                     "Sleep stage 1": 3,
@@ -168,6 +172,10 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
         for clip_number in range(total_raw_clips): #Split measurement list into clips of clip_length_s duration
             measurement = signal_reader.readSignal(channel_number, start=clip_duration_samples*clip_number, n=clip_duration_samples, digital=True)
             measurement = signals_processing(measurement)
+            if DATA_TYPE == tf.uint16: measurement = measurement.astype(np.uint16)
+            elif DATA_TYPE == tf.int16: measurement = measurement.astype(np.int16)
+            elif DATA_TYPE == tf.float32: measurement = measurement.astype(np.float32)
+            else: raise ValueError("Unknown DATA_TYPE '{DATA_TYPE}'. Aborting.")
             temp_clip.append(measurement)
 
         signals.append(temp_clip)
@@ -206,15 +214,15 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
                 signals[channel_index][clip_index] = resample_list(input=signals[channel_index][clip_index], input_freq=NOMINAL_FREQUENCY_HZ, target_freq=args.downsampling_freq_hz)
 
     # Convert to tensors
-    sleep_stages = tf.convert_to_tensor(sleep_stages, name="sleep_stage")
-    pseudo_random_list = tf.convert_to_tensor(pseudo_random_list, name="pseudo_random")
-    if HISTORICAL_LOOKBACK_LENGTH > 0: sleep_stages_history = tf.convert_to_tensor(sleep_stages_history, name=f"history_{historical_lookback_length}-steps")
+    sleep_stages = tf.convert_to_tensor(sleep_stages, dtype=tf.int8, name="sleep_stage")
+    pseudo_random_list = tf.convert_to_tensor(pseudo_random_list, dtype=DATA_TYPE, name="pseudo_random")
+    if HISTORICAL_LOOKBACK_LENGTH > 0: sleep_stages_history = tf.convert_to_tensor(sleep_stages_history, dtype=DATA_TYPE, name=f"history_{historical_lookback_length}-steps")
 
     if ONE_HOT_OUTPUT: sleep_stages = tf.transpose(sleep_stages, perm=[0, 2, 1])
     else: sleep_stages = tf.expand_dims(sleep_stages, axis=1)
 
     for i in range(len(channels_to_read)):
-        signals[i] = tf.convert_to_tensor(signals[i], name=channels_to_read[i])      
+        signals[i] = tf.convert_to_tensor(signals[i], dtype=DATA_TYPE, name=channels_to_read[i])      
 
     signals = dict(zip(channels_to_read, signals)) #Convert to dictionary
     signals["pseudo_random"] = pseudo_random_list
@@ -223,27 +231,15 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
 
     return signals
 
-def insert_into_all_night_dict(output_all_nights, output_one_night, data_type:tf.DType=DATA_TYPE):
-    for key, value in output_one_night.items():
-        if output_all_nights[key] == None:
-            output_one_night[key] = tf.cast(x=output_one_night[key], dtype=data_type)
-            output_all_nights[key] = output_one_night[key]
-        else:
-            output_one_night[key] = tf.cast(x=output_one_night[key], dtype=data_type)
-            output_all_nights[key] =tf.concat([output_all_nights[key], output_one_night[key]], axis=0)
+def insert_into_all_night_dict(output_all_nights, output_one_night):
+    for key in output_one_night.keys():
+        if output_all_nights[key] == None:  output_all_nights[key] = output_one_night[key]
+        else:   output_all_nights[key] = tf.concat([output_all_nights[key], output_one_night[key]], axis=0)
 
     return output_all_nights
 
-def process_dispatch(args, PSG_file_list, labels_file_list, channels_to_read, result_queue):
+def process_dispatch(args, PSG_file_list, labels_file_list, channels_to_read, result_dict):
     try:
-        if PSG_file_list == []: # No file to process
-            print(f"Process ID {os.getpid()} received empty EDF file list ({PSG_file_list})!")
-            result_queue.put(-1)
-            return
-
-        if HISTORICAL_LOOKBACK_LENGTH > 0: output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"] + [f"history_{HISTORICAL_LOOKBACK_LENGTH}-steps"] + ["new_night_marker"]}
-        else: output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"] + ["new_night_marker"]}
-
         for PSG_file, labels_file in zip(PSG_file_list, labels_file_list):
             print(f"[{(time.time()-start_time):.2f}s] Process ID {os.getpid()} processing: {os.path.basename(PSG_file)} with {os.path.basename(labels_file)}")
 
@@ -259,9 +255,8 @@ def process_dispatch(args, PSG_file_list, labels_file_list, channels_to_read, re
             output_one_night["new_night_marker"] = tf.convert_to_tensor(new_file_marker, name="new_night_marker")
             output_one_night["new_night_marker"] = tf.expand_dims(output_one_night["new_night_marker"], axis=1)
 
-            output_all_nights = insert_into_all_night_dict(output_all_nights, output_one_night)
+            result_dict[PSG_file] = output_one_night # Add to shared dict
 
-        result_queue.put(output_all_nights)
         print(f"[{(time.time()-start_time):.2f}s] Process ID {os.getpid()} completed reading its files.")
 
     except Exception as e:
@@ -269,7 +264,7 @@ def process_dispatch(args, PSG_file_list, labels_file_list, channels_to_read, re
 
 def read_all_nights_from_directory(args, channels_to_read:List[str]) -> (tf.Tensor, tf.Tensor, List[str]):
     """
-    Calls read_single_whole_night() for all files in folder and returns a dictionary of all channels and sleep stages concatenated along with a success flag.
+    Calls read_single_whole_night() for all files in folder and returns a dictionary of all channels and sleep stages concatenated along with an error flag.
 
     Dimensions:
       -Dictionary value (one channel): (num_clips_total, num_samples_per_clip)
@@ -295,7 +290,8 @@ def read_all_nights_from_directory(args, channels_to_read:List[str]) -> (tf.Tens
     if args.enable_multiprocessing: # Use multiprocessing
         # Prepare for multiprocessing
         processes = []
-        result_queue = mp.SimpleQueue()
+        manager = mp.Manager()
+        result_dict = manager.dict()
 
         file_PSG_assignment, file_labels_assignment = [list() for _ in range(NUM_PROCESSES)], [list() for _ in range(NUM_PROCESSES)]
         for i in range(args.num_files):
@@ -305,12 +301,9 @@ def read_all_nights_from_directory(args, channels_to_read:List[str]) -> (tf.Tens
         # Start processes
         for i in range(NUM_PROCESSES):
             if not file_PSG_assignment[i] == []:
-                process = mp.Process(target=process_dispatch, args=(args, file_PSG_assignment[i], file_labels_assignment[i], channels_to_read, result_queue))
+                process = mp.Process(target=process_dispatch, args=(args, file_PSG_assignment[i], file_labels_assignment[i], channels_to_read, result_dict))
                 processes.append(process)
                 process.start()
-
-        # Collect results
-        children_outputs = [result_queue.get() for _ in range(len(processes))] # Need to do this before .join() because processes don't exit until their data has been .get() from the queue
 
         # Wait for children to die
         for process in processes:
@@ -320,13 +313,15 @@ def read_all_nights_from_directory(args, channels_to_read:List[str]) -> (tf.Tens
         if (HISTORICAL_LOOKBACK_LENGTH > 0): output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"] + [f"history_{HISTORICAL_LOOKBACK_LENGTH}-steps"] + ["new_night_marker"]}
         else: output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"] + ["new_night_marker"]}
 
-        for output in children_outputs:
-            if output == -1: continue # No files processed
-            output_all_nights = insert_into_all_night_dict(output_all_nights, output)
+        for fp in PSG_file_list[0:args.num_files]: #
+            if fp not in result_dict.keys():
+                print(f"ERROR: File '{fp}' not found in outputs directory! Continuing.")
+                continue
+            output_all_nights = insert_into_all_night_dict(output_all_nights, result_dict[fp])
 
     else: # No multiprocessing
-        if HISTORICAL_LOOKBACK_LENGTH > 0: output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"] + ["new_night_marker"] + [f"history_{HISTORICAL_LOOKBACK_LENGTH}-steps"] + ["new_night_marker"]}
-        else: output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"] + ["new_night_marker"] + ["new_night_marker"]}
+        if HISTORICAL_LOOKBACK_LENGTH > 0: output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"] + ["new_night_marker"] + [f"history_{HISTORICAL_LOOKBACK_LENGTH}-steps"]}
+        else: output_all_nights = {key: None for key in channels_to_read + ["sleep_stage"] + ["pseudo_random"] + ["new_night_marker"]}
 
         for PSG_file, labels_file in zip(PSG_file_list[0:args.num_files], labels_file_list[0:args.num_files]):
             print(f"[{(time.time()-start_time):.2f}s] Processing: {os.path.basename(PSG_file)} with {os.path.basename(labels_file)}")
@@ -344,8 +339,8 @@ def read_all_nights_from_directory(args, channels_to_read:List[str]) -> (tf.Tens
             # Indicate first clip of the night
             new_file_marker = [False for _ in range(len(output_one_night["sleep_stage"]))]
             new_file_marker[0] = True
-            output_one_night["end_night_marker"] = tf.convert_to_tensor(new_file_marker, name="new_night_marker")
-            output_one_night["end_night_marker"] = tf.expand_dims(output_one_night["new_night_marker"], axis=1)
+            output_one_night["new_night_marker"] = tf.convert_to_tensor(new_file_marker, name="new_night_marker")
+            output_one_night["new_night_marker"] = tf.expand_dims(output_one_night["new_night_marker"], axis=1)
 
             output_all_nights = insert_into_all_night_dict(output_all_nights, output_one_night)
 
@@ -377,7 +372,7 @@ def parse_arguments():
 
     return args
 
-def save_metadata_json(json_fp:str, args, channels_to_read:list):
+def save_metadata_json(json_fp:str, args, channels_to_read:list, stages_cnt:list):
     """
     Make and save .json file containing metadata about the dataset.
     """
@@ -391,11 +386,13 @@ def save_metadata_json(json_fp:str, args, channels_to_read:list):
         "sampling_freq_Hz": args.downsampling_freq_hz,
         "type": args.type,
         "data_type": str(DATA_TYPE),
-        "time_to_export": f"{(time.time()-start_time):.2f}s"
-    }
+        "time_to_export": f"{(time.time()-start_time):.2f}s",
+        "sleep_stages_mapping": sleep_stage_annotation_to_int,
+        "sleep_stages_cnt": stages_cnt
+        }
 
     with open(json_fp, 'w') as json_file:
-        json.dump(json_metadata, json_file, indent=4)
+        json.dump(json_metadata, json_file, sort_keys=True, indent=4)
 
 def main():
     # Parse arguments
@@ -404,7 +401,7 @@ def main():
     # Generate data dictionary
     if args.type == "pseudo_random":
         print(f"Will generate {NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE} pseudo-random clips per sleep stage.")
-        output, return_code = pseudo_random_dataset(num_clips_per_sleep_stage=NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE, clip_length_num_samples=NOMINAL_FREQUENCY_HZ*float(args.clip_length_s), data_type=tf.float32)
+        output, return_code = pseudo_random_dataset(num_clips_per_sleep_stage=NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE, clip_length_num_samples=NOMINAL_FREQUENCY_HZ*float(args.clip_length_s), data_type=DATA_TYPE)
 
     elif args.type == "EDF":
         # Load data
@@ -414,6 +411,7 @@ def main():
         print(f"PSG file directory: {args.directory_psg}")
         print(f"Labels file directory: {args.directory_labels}")
         print(f"Output directory: {args.export_directory}")
+
         output, labels_file_list, return_code = read_all_nights_from_directory(args, channels_to_read=channels_to_read)
 
     # Create and save dataset
@@ -436,13 +434,14 @@ def main():
         ds_filepath = ds_filepath.replace('.', '-')
 
         # Save metadata JSON
-        save_metadata_json(json_fp=ds_filepath+".json", args=args, channels_to_read=channels_to_read)
+        stages_cnt = utilities.count_instances_per_class(output['sleep_stage'], NUM_SLEEP_STAGES+1)
+        save_metadata_json(json_fp=ds_filepath+".json", args=args, channels_to_read=channels_to_read, stages_cnt=stages_cnt)
 
         # Save dataset
+        if os.path.exists(path=ds_filepath): 
+            shutil.rmtree(path=ds_filepath) # Delete file if it exists
         tf.data.Dataset.save(ds, compression=None, path=ds_filepath)
-
         print(f"[{(time.time()-start_time):.2f}s] Dataset saved at: {ds_filepath}. It contains {output['sleep_stage'].shape[0]} clips.")
-    
     else:
         print(f"[{(time.time()-start_time):.2f}s] Could not generate dataset! Error return code: {return_code}. Nothing will be saved.")
 

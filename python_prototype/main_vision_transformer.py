@@ -6,18 +6,15 @@ import io
 import git
 import sys
 import json
-import socket
 import sklearn
 import datetime
 import imblearn
+import utilities
 
 import numpy as np
 import tensorflow as tf
-import tensorflow_addons as tfa
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-
-import utilities
 
 MAX_VOLTAGE = 2**16-1 #Maximum ADC code output
 DEFAULT_CLIP_LENGTH_S = int(30)
@@ -32,8 +29,11 @@ RANDOM_SEED = 42
 NUM_WARMUP_STEPS = 4000
 VERBOSITY = 'QUIET' #'QUIET', 'NORMAL', 'DETAILED'
 RESAMPLE_TRAINING_DATASET = False
-WHOLE_NIGHT_VALIDATION = True or (NUM_SLEEP_STAGE_HISTORY > 0) #Whether to validate individual nights (sequentially) or a random subset of clips (if we use the preduiction history, we need whole nights for validation)
-NUM_CLIPS_PER_FILE_EDGETPU = 500 # Only valid for 256Hz 
+WHOLE_NIGHT_VALIDATION = True #Whether to validate individual nights (sequentially) or a random subset of clips (if we use the prediction history, we need whole nights for validation)
+SHUFFLE_TRAINING_CLIPS = False
+NUM_CLIPS_PER_FILE_EDGETPU = 500 # Only valid for 256Hz
+
+train_signals_representative_dataset = None
 
 #--- Helpers ---#
 class Capturing(list):
@@ -117,13 +117,13 @@ def resample_clips(args, signals_train, labels_train):
 
     return signals_train, labels_train, original_sleep_stage_count
 
-def split_whole_night_validation_set(args, signals, sleep_stages, whole_night_markers):
+def split_whole_night_validation_set(signals, sleep_stages, whole_night_markers):
     """
     Split the dataset into whole nights for validation
     """
 
     split_index = int((1-TEST_SET_RATIO) * len(sleep_stages))
-    whole_night_indices = [i for i, x in enumerate(whole_night_markers) if x == True]
+    whole_night_indices = [i for i, x in enumerate(whole_night_markers.numpy()) if x == True]
     cutoff_night = min(whole_night_indices, key=lambda x: abs(x - split_index))
 
     signals_train = signals[0:cutoff_night]
@@ -149,7 +149,7 @@ def load_from_dataset(args):
 
     SAMPLING_FREQUENCY_HZ = dataset_metadata["sampling_freq_Hz"]
     NUM_SLEEP_STAGE_HISTORY = dataset_metadata["historical_lookback_length"]
-    WHOLE_NIGHT_VALIDATION = (NUM_SLEEP_STAGE_HISTORY > 0)
+    WHOLE_NIGHT_VALIDATION = WHOLE_NIGHT_VALIDATION or (NUM_SLEEP_STAGE_HISTORY > 0)
     NUM_SLEEP_STAGES = dataset_metadata["num_stages"] + 1 # +1 needed to account for "unknown" sleep stage
 
     # Load dataset
@@ -158,14 +158,14 @@ def load_from_dataset(args):
 
     sleep_stages = data['sleep_stage']
     start_of_night_markers = data['new_night_marker']
-    if NUM_SLEEP_STAGE_HISTORY > 0: sleep_stages_history = data[f'history_{NUM_SLEEP_STAGE_HISTORY}-steps']
+    if NUM_SLEEP_STAGE_HISTORY > 0:
+        sleep_stages_history = data[f'history_{NUM_SLEEP_STAGE_HISTORY}-steps']
+        raise ValueError("Don't use historical lookback. Script isn't set up correctly for that (clips are shuffled, history not handled in model, etc.)")
 
     # Check corner cases
     if args.input_channel not in data.keys():
         raise ValueError(f"[{(time.time()-start_time):.2f}s] Requested input channel {args.input_channel} not found in input dataset ({args.input_dataset}).\nAvailable channels are {data.keys()}.\nAborting.")
     else:   signals = data[args.input_channel]
-
-    signals = tf.cast(x=signals, dtype=tf.int16)
 
     if (args.num_clips > signals.shape[0]):
         print(f"[{(time.time()-start_time):.2f}s] Requested number of clips ({args.num_clips}) larger than number of clips in dataset ({signals.shape[0]})! Will use {signals.shape[0]} clips.")
@@ -186,9 +186,12 @@ def load_from_dataset(args):
 
     # Split into training and validation sets
     if WHOLE_NIGHT_VALIDATION:
-        signals_train, signals_val, sleep_stages_train, sleep_stages_val = split_whole_night_validation_set(args, signals, sleep_stages, start_of_night_markers)
+        signals_train, signals_val, sleep_stages_train, sleep_stages_val = split_whole_night_validation_set(signals, sleep_stages, start_of_night_markers)
         start_of_night_markers = start_of_night_markers[len(signals_train):args.num_clips]
-    else: signals_train, signals_val, sleep_stages_train, sleep_stages_val = sklearn.model_selection.train_test_split(signals, sleep_stages, test_size=TEST_SET_RATIO, random_state=RANDOM_SEED, shuffle=True)
+    else: signals_train, signals_val, sleep_stages_train, sleep_stages_val = sklearn.model_selection.train_test_split(signals, sleep_stages, test_size=TEST_SET_RATIO, random_state=RANDOM_SEED)
+
+    # Shuffle training data
+    if SHUFFLE_TRAINING_CLIPS: signals_train, sleep_stages_train = utilities.shuffle(signals_train, sleep_stages_train, RANDOM_SEED)
 
     # Resamples clips from the training dataset
     if RESAMPLE_TRAINING_DATASET:
@@ -211,10 +214,12 @@ def load_from_dataset(args):
     signals_val = tf.cast(signals_val, dtype=DATA_TYPE)
     sleep_stages_train = tf.cast(sleep_stages_train, dtype=DATA_TYPE)
     sleep_stages_val = tf.cast(sleep_stages_val, dtype=DATA_TYPE)
+    data_dict = {"signals_train":signals_train, "signals_val":signals_val, "sleep_stages_train":sleep_stages_train, "sleep_stages_val":sleep_stages_val}
 
-    return signals_train, signals_val, sleep_stages_train, sleep_stages_val, start_of_night_markers, original_sleep_stage_count
+    return data_dict, start_of_night_markers, original_sleep_stage_count, dataset_metadata
 
-def export_summary(output_log_filename, parser, model, fit_history, accuracy:float, original_sleep_stage_count:list, sleep_stages_count_training:list, sleep_stages_count_validation:list, sleep_stages_count_pred:list) -> None:
+def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_stage_count:list, sleep_stages_count_training:list, 
+                   sleep_stages_count_val:list, pred_cnt:dict, mlp_dense_activation, dataset_metadata:dict, note:str="") -> None:
     """
     Saves model and training summary to file
     """
@@ -230,7 +235,7 @@ def export_summary(output_log_filename, parser, model, fit_history, accuracy:flo
         # Count relative number of stages
         if (original_sleep_stage_count != -1):  num_clips_original_dataset = sum(original_sleep_stage_count)
         num_clips_training = sum(sleep_stages_count_training)
-        num_clips_validation = sum(sleep_stages_count_validation)
+        num_clips_validation = sum(sleep_stages_count_val)
 
         log = "VISION TRANSFORMER MODEL TRAINING SUMMARY\n"
         log += f"Git hash: {repo.head.object.hexsha}\n"
@@ -240,26 +245,29 @@ def export_summary(output_log_filename, parser, model, fit_history, accuracy:flo
         log += f"Save model: {parser.save_model}\n"
         log += f"File path of model to load (model trained if empty string): {parser.load_model_filepath}\n"
         log += f"Channel: {parser.input_channel}\n"
-        log += f"Validation set accuracy: {accuracy:.4f}\n"
+        for model_type, acc in acc.items(): log += f"Validation set accuracy ({model_type}): {acc:.4f}\n"
         log += f"Training accuracy: {[round(accuracy, 4) for accuracy in fit_history.history['accuracy']]}\n"
         log += f"Training loss: {[round(loss, 4) for loss in fit_history.history['loss']]}\n"
         log += f"Number of epochs: {parser.num_epochs}\n\n"
 
         log += f"Training set resampling: {RESAMPLE_TRAINING_DATASET}\n"
         log += f"Training set resampling replacement: {parser.enable_dataset_resample_replacement}\n"
+        log += f"Training set shuffled: {SHUFFLE_TRAINING_CLIPS}\n"
         log += f"Training set resampler: {parser.dataset_resample_algo}\n"
         log += f"Training set target count: {parser.training_set_target_count}\n"
         log += f"Use sleep stage history: {USE_SLEEP_STAGE_HISTORY}\n"
         log += f"Number of historical sleep stages: {NUM_SLEEP_STAGE_HISTORY}\n"
-        log += f"Dataset split random seed: {RANDOM_SEED}\n\n"
+        log += f"Dataset split random seed: {RANDOM_SEED}\n"
+        log += f"Whole-night validation: {WHOLE_NIGHT_VALIDATION}\n"
+        log += f"Dataset metadata {json.dumps(dataset_metadata, indent=4)}\n\n"
 
         log += f"Requested number of training clips: {int(TEST_SET_RATIO*parser.num_clips)}\n"
         if (original_sleep_stage_count != -1): log += f"Sleep stages count in original dataset ({num_clips_original_dataset}): {original_sleep_stage_count} ({[round(num / num_clips_training, 4) for num in original_sleep_stage_count]})\n"
         log += f"Sleep stages count in training data ({num_clips_training}): {sleep_stages_count_training} ({[round(num / num_clips_training, 4) for num in sleep_stages_count_training]})\n"
-        log += f"Sleep stages count in validation set input ({num_clips_validation}): {sleep_stages_count_validation} ({[round(num / num_clips_validation, 4) for num in sleep_stages_count_validation]})\n"
-        log += f"Sleep stages count in validation set prediction ({num_clips_validation}): {sleep_stages_count_pred} ({[round(num / num_clips_validation, 4) for num in sleep_stages_count_pred]})\n\n"
+        log += f"Sleep stages count in validation set input ({num_clips_validation}): {sleep_stages_count_val} ({[round(num / num_clips_validation, 4) for num in sleep_stages_count_val]})\n"
+        for model_type, pred_cnt in pred_cnt.items(): log += f"Sleep stages count in validation set prediction ({num_clips_validation}, {model_type}): {pred_cnt} ({[round(num / num_clips_validation, 4) for num in pred_cnt]})\n"
 
-        log += f"Clip length (s): {parser.clip_length_s}\n"
+        log += f"\nClip length (s): {parser.clip_length_s}\n"
         log += f"Patch length (s): {parser.patch_length_s}\n"
         log += f"Number of sleep stages (includes unknown): {NUM_SLEEP_STAGES}\n"
         log += f"Data type: {DATA_TYPE}\n"
@@ -270,22 +278,19 @@ def export_summary(output_log_filename, parser, model, fit_history, accuracy:flo
         log += f"MLP dimensions: {parser.mlp_dim}\n"
         log += f"Dropout rate: {parser.dropout_rate:.3f}\n"
         log += f"Historical prediction lookback DNN depth: {parser.historical_lookback_DNN_depth}\n"
+        log += f"Activation function of first dense layer in MLP layer and MLP head: {mlp_dense_activation}\n"
         log += f"Class training weights: {parser.class_weights}\n"
         log += f"Initial learning rate: {parser.learning_rate:.6f}\n"
         log += f"Rescale layer enabled: {parser.enable_input_rescale}\n"
         log += f"Use classification token: {parser.use_class_embedding}\n"
         log += f"Positional embedding enabled: {parser.enable_positional_embedding}\n"
         log += f"Number of samples in output filtering: {NUM_OUTPUT_FILTERING}\n"
-
-        log += f"Model loss: {model.loss.name}\n"
+        log += f"Model loss type: {model.loss.name}\n"
+        log += f"Note: {note}\n"
 
         # Save to file
-        with open(output_log_filename, 'w') as file:
-            file.write(log)
-
-        print(f"[{(time.time()-start_time):.2f}s] Saved model summary to {output_log_filename}.")
-
-        return output_log_filename
+        with open(out_fp+"/info.txt", 'w') as file: file.write(log)
+        print(f"[{(time.time()-start_time):.2f}s] Saved model summary to {out_fp}/info.txt.")
 
     except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to export summary.")
 
@@ -342,12 +347,9 @@ def parse_arguments():
 
     return args
 
-def train_model(args, signals_train, sleep_stages_train, clip_length_num_samples, patch_length_num_samples):
+def train_model(args, signals_train, sleep_stages_train, mlp_dense_activation):
     try:
-        model = VisionTransformer(clip_length_num_samples=clip_length_num_samples, patch_length_num_samples=patch_length_num_samples, num_layers=args.num_layers, num_classes=NUM_SLEEP_STAGES, 
-                                  historical_lookback_DNN_depth=args.historical_lookback_DNN_depth, embedding_depth=args.embedding_depth, num_heads=args.num_heads, mlp_dim=args.mlp_dim, 
-                                  dropout_rate=args.dropout_rate, history_length=NUM_SLEEP_STAGE_HISTORY, enable_scaling=args.enable_input_rescale, enable_positional_embedding=args.enable_positional_embedding,
-                                  use_class_embedding=args.use_class_embedding)
+        model = VisionTransformer(args, mlp_dense_activation)
     except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to initialize model.")
 
     try:
@@ -374,132 +376,62 @@ def export_plots(pred:list, ground_truth:list, accuracy:float, log_file_path:str
     Exports PNG plot and HTML web plot of the prediction and ground truth
     """
 
-    # Plot results
-    plt.figure(figsize=(10, 6)) # Width, height in inches
-    plt.plot(list(map(int, ground_truth)), label='sleep_stages_single', linewidth=0.5)
-    plt.plot(list(map(int, pred)), label='sleep_stages_single_pred', linewidth=0.5)
-    plt.legend()
-
-    # Set labels and title
+    # Export PNG
+    data = {"Prediction":list(map(int, pred)), "Ground truth":list(map(int, ground_truth))}
+    plt.figure(figsize=(10, 6), dpi=300) # Width, height in inches
+    plt.plot('Ground truth', data=data, linewidth=0.5)
+    plt.plot('Prediction', data=data, linewidth=0.5)
     plt.xlabel('Clip count')
-    plt.ylabel('Sleep stage')
-    plt.title(f"Ground truth vs prediction for a single night. Accuracy: {accuracy:.4}")
-
-    # Add ticks
+    plt.title(f"Ground truth vs prediction. Accuracy: {accuracy:.4}")
+    plt.legend()
     plt.xticks()
     plt.yticks()
-
-    # Export the plot
-    plt.savefig(log_file_path.replace(".extension", ".png"))
+    plt.savefig(log_file_path.replace(".ext", ".png")) # Export the plot
 
     # Export interactive HTML
-    trace1 = go.Scatter(y=pred, mode='lines', name='sleep_stages_single_pred')
-    trace2 = go.Scatter(y=ground_truth, mode='lines', name='sleep_stages_single')
+    trace1 = go.Scatter(y=data['Prediction'], mode='lines', name='Model prediction')
+    trace2 = go.Scatter(y=data['Ground truth'], mode='lines', name='Ground truth')
+    layout = go.Layout(title=f"Ground truth vs prediction. Accuracy: {accuracy:.4}", xaxis=dict(title='Clip count'), yaxis=dict(title='Sleep stage')) # Create a layout
+    fig = go.Figure(data=[trace1, trace2], layout=layout) # Create a Figure and add the traces
+    fig.write_html(log_file_path.replace(".ext", ".html")) # Save the figure as an HTML file
 
-    # Create a layout
-    layout = go.Layout(title=f"Ground truth vs prediction for a single night. Accuracy: {accuracy:.4}",
-                       xaxis=dict(title='Clip count'),
-                       yaxis=dict(title='Sleep stage'))
-
-    # Create a Figure and add the traces
-    fig = go.Figure(data=[trace1, trace2], layout=layout)
-
-    # Save the figure as an HTML file
-    fig.write_html(log_file_path.replace(".extension", ".html"))
-
-def manual_validation(model, signals_val, sleep_stages_val, whole_night_indices):
+def manual_val(model, type:str, data:dict, whole_night_indices:dict, out_fp:str):
     total_correct = 0
-    total = 0
-    sleep_stages_count_pred = [0 for _ in range(NUM_SLEEP_STAGES)]
-    if NUM_SLEEP_STAGE_HISTORY > 0: historical_pred = tf.zeros(shape=(1, NUM_SLEEP_STAGE_HISTORY), dtype=DATA_TYPE)
+    accuracy = 0
+    pred_cnt = [0 for _ in range(NUM_SLEEP_STAGES)]
 
-    print(f"[{(time.time()-start_time):.2f}s] Now commencing manual validation with {signals_val.shape[0]} clips.")
+    print(f"[{(time.time()-start_time):.2f}s] Starting manual validation for model type '{type}'.")
 
-    sleep_stages_pred = []
-    sleep_stages_ground_truth = []
-
-    output_filter = utilities.MovingAverage(NUM_OUTPUT_FILTERING)
-
+    # Run model
     try:
-        for x, y in zip(signals_val, sleep_stages_val):
-            x = tf.reshape(x, [1, x.shape[0]]) # Prepend 1 to shape to make it a batch of 1
-            sleep_stages_ground_truth.append(y[0])
+        if (type == "tf"):
+            sleep_stages_pred = utilities.run_model(model, data=data, whole_night_indices=whole_night_indices, data_type=DATA_TYPE, num_output_filtering=NUM_OUTPUT_FILTERING, num_sleep_stage_history=NUM_SLEEP_STAGE_HISTORY)
+        elif (type == "tflite") or (type == "tflite (quant)") or (type == "tflite (16bx8b full quant)"):
+            sleep_stages_pred = utilities.run_tflite_model(model, data=data, whole_night_indices=whole_night_indices, data_type=DATA_TYPE, num_output_filtering=NUM_OUTPUT_FILTERING, num_sleep_stage_history=NUM_SLEEP_STAGE_HISTORY)
+        elif type == "tflite (full quant)":
+            sleep_stages_pred = utilities.run_tflite_model(model, data=data, whole_night_indices=whole_night_indices, data_type=tf.uint8, num_output_filtering=NUM_OUTPUT_FILTERING, num_sleep_stage_history=NUM_SLEEP_STAGE_HISTORY)
 
-            if NUM_SLEEP_STAGE_HISTORY > 0:
-                x = tf.concat([x[:,:-NUM_SLEEP_STAGE_HISTORY], historical_pred], axis=1) # Concatenate historical prediction to input
-                if whole_night_indices[total].numpy()[0] == 1.0: historical_pred = tf.zeros(shape=(1, NUM_SLEEP_STAGE_HISTORY)) # Reset historical prediction at 0 (unknown) if at the start a new night
+        # Check accuracy
+        for i in range(len(sleep_stages_pred)):
+            total_correct += (sleep_stages_pred[i] == data["sleep_stages_val"][i][0].numpy())
+            pred_cnt[sleep_stages_pred[i]] += 1
+        accuracy = total_correct/len(sleep_stages_pred)
 
-            sleep_stage_pred = model(x, training=False)
-            sleep_stage_pred = tf.argmax(sleep_stage_pred, axis=1)
+        # Export plots
+        export_plots(pred=sleep_stages_pred, ground_truth=data["sleep_stages_val"].numpy(), accuracy=accuracy, log_file_path=f"{out_fp}/models/{type}_man_val.ext")
+    except: print(f"Failed to manually validate model type '{type}'. Moving on.")
 
-            # Filter sleep stage
-            sleep_stage_pred = tf.cast(output_filter.filter(sleep_stage_pred), dtype=DATA_TYPE)
-
-            if NUM_SLEEP_STAGE_HISTORY > 0: historical_pred = tf.concat([tf.expand_dims(sleep_stage_pred, axis=1), historical_pred[:, 0:NUM_SLEEP_STAGE_HISTORY-1]], axis=1)
-
-            # Count number of correct predictions
-            total_correct += (sleep_stage_pred[0] == y[0]).numpy()
-            total += 1
-
-            sleep_stages_pred.append(sleep_stage_pred[0])
-
-            if (VERBOSITY == 'Normal'): print(f"Ground truth: {y}, sleep stage pred: {sleep_stage_pred}, accuracy: {total_correct/total:.4f}")
-            sleep_stages_count_pred[int(sleep_stage_pred)] += 1
-
-    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to manually validate model.")
-
-    return total_correct, sleep_stages_count_pred, sleep_stages_pred, sleep_stages_ground_truth
-
-def plot_single_night_prediction(args, model, single_night_filename, log_file_path):
-    #Single night to compare validation and prediction
-    data = tf.data.Dataset.load(single_night_filename)
-
-    data = next(iter(data))
-    total_correct = 0
-    sleep_stages_single = data['sleep_stage']
-    signals = data[args.input_channel]
-    if NUM_SLEEP_STAGE_HISTORY > 0: sleep_stages_history = data[f'history_{NUM_SLEEP_STAGE_HISTORY}-steps']
-
-    # Concatenate signals and sleep stages history for easier manual manipulation
-    if NUM_SLEEP_STAGE_HISTORY > 0: signals = tf.concat((signals, sleep_stages_history), axis=1)
-
-    signals_single = signals.numpy()
-    sleep_stages_single = [sleep_stage[0] for sleep_stage in sleep_stages_single.numpy()]
-
-    sleep_stages_count_single = [0, 0, 0, 0, 0, 0]
-    sleep_stages_single_pred = []
-    output_filter = utilities.MovingAverage(NUM_OUTPUT_FILTERING)
-
-    if NUM_SLEEP_STAGE_HISTORY > 0: historical_pred = tf.zeros(shape=(1, NUM_SLEEP_STAGE_HISTORY), dtype=DATA_TYPE)
-
-    for x, y in zip(signals_single, sleep_stages_single):
-        x = tf.reshape(x, [1, x.shape[0]]) # Prepend 1 to shape to make it a batch of 1
-
-        if NUM_SLEEP_STAGE_HISTORY > 0:
-            x = tf.concat([x[:,:-NUM_SLEEP_STAGE_HISTORY], historical_pred], axis=1) # Concatenate historical prediction to input
-
-        sleep_stage_pred = model(x, training=False)
-        sleep_stage_pred = tf.argmax(sleep_stage_pred, axis=1)
-        sleep_stage_pred = tf.cast(output_filter.filter(sleep_stage_pred), dtype=DATA_TYPE)
-        sleep_stages_single_pred.append(sleep_stage_pred[0])
-        if NUM_SLEEP_STAGE_HISTORY > 0: historical_pred = tf.concat([tf.expand_dims(sleep_stage_pred, axis=1), historical_pred[:, 0:NUM_SLEEP_STAGE_HISTORY-1]], axis=1)
-
-        # Count number of correct predictions
-        total_correct += (sleep_stage_pred == y).numpy()[0]
-
-        sleep_stages_count_single[int(sleep_stage_pred)] += 1
-
-    print(f"[{(time.time()-start_time):.2f}s] Single night inference complete. Starting plot export.")
-    export_plots(pred=sleep_stages_single_pred, ground_truth=sleep_stages_single, accuracy=total_correct/len(sleep_stages_single_pred), log_file_path=log_file_path)
-
-# def representative_dataset(dataset_fp:str):
-#     for data in tf.data.Dataset.from_tensor_slices((dataset_fp)).take(100):
-#         yield [tf.dtypes.cast(data, tf.float32)]
+    print(f"[{(time.time()-start_time):.2f}s] Done manually validating model type '{type}'.")
+    return accuracy, pred_cnt
 
 def representative_dataset():
-    for _ in range(100):
-      data = np.random.rand(1, 30*256)
-      yield [data.astype(np.float32)]
+    for data in train_signals_representative_dataset[0:500]:
+        yield {"input_1": data}
+
+#--- APTx activation ---#
+def aptx(x):
+    return (1 + tf.keras.activations.tanh(0.5*x)) * (0.5*x)     
+tf.keras.utils.get_custom_objects().update({'aptx': aptx})
 
 #--- Multi-Head Attention ---#
 class MultiHeadSelfAttention(tf.keras.layers.Layer):
@@ -521,12 +453,9 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
         self.combine_heads = tf.keras.layers.Dense(self.embedding_dimension, name="mhsa_combine_head_dense")
 
     def attention(self, query, key, value):
-        query = tf.cast(query, dtype=DATA_TYPE) #query = (batch_size, num_heads, num_patches+1, num_heads)
-        key = tf.cast(key, dtype=DATA_TYPE) #key = (batch_size, num_heads, num_patches+1, num_heads)
-        value = tf.cast(value, dtype=DATA_TYPE) #value = (batch_size, num_heads, num_patches+1, num_heads)
         score = tf.matmul(query, key, transpose_b=True) #score = (batch_size, num_heads, num_patches+1, num_patches+1)
         dim_key = tf.cast(tf.shape(key)[-1], dtype=DATA_TYPE)
-        assert (self.num_heads == 16) or (self.num_heads == 4), "num_heads not 4 or 16, as needed to simply attention calculations."
+        # assert (self.num_heads == 16) or (self.num_heads == 4), "num_heads not 4 or 16, as needed to simply attention calculations."
         scaled_score = score / tf.math.sqrt(dim_key) #scaled_score = (batch_size, num_heads, num_patches+1, num_patches+1)
         weights = tf.nn.softmax(logits=scaled_score, axis=-1) #weights = (batch_size, num_heads, num_patches+1, num_patches+1)
         output = tf.matmul(weights, value) #output = (batch_size, num_heads, num_patches+1, num_heads)
@@ -556,15 +485,16 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
 
 #--- Encoder ---#
 class Encoder(tf.keras.layers.Layer):
-    def __init__(self, embedding_depth:int, num_heads:int, mlp_dim:int, dropout_rate:float=0.1, history_length:int=NUM_SLEEP_STAGE_HISTORY):
+    def __init__(self, args, mlp_dense_activation):
         super(Encoder, self).__init__()
 
         # Hyperparameters
-        self.embedding_depth = embedding_depth
-        self.num_heads = num_heads
-        self.mlp_dim = mlp_dim
-        self.dropout_rate = dropout_rate
-        self.history_length = history_length
+        self.embedding_depth = args.embedding_depth
+        self.num_heads = args.num_heads
+        self.mlp_dim = args.mlp_dim
+        self.dropout_rate = args.dropout_rate
+        self.history_length = NUM_SLEEP_STAGE_HISTORY
+        self.mlp_dense_activation = mlp_dense_activation
 
         # Layers
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layerNorm1_encoder")
@@ -573,7 +503,7 @@ class Encoder(tf.keras.layers.Layer):
 
         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layerNorm2_encoder")
         self.mlp = tf.keras.Sequential([
-            tf.keras.layers.Dense(mlp_dim, activation=tfa.activations.gelu, name="mlp_dense1_encoder"),
+            tf.keras.layers.Dense(self.mlp_dim, activation=self.mlp_dense_activation, name="mlp_dense1_encoder"),
             tf.keras.layers.Dropout(self.dropout_rate, seed=RANDOM_SEED, name="mlp_dropout1_encoder"),
             tf.keras.layers.Dense(self.embedding_depth, name="mlp_dense2_encoder"),
             tf.keras.layers.Dropout(self.dropout_rate, seed=RANDOM_SEED, name="mlp_dropout2_encoder"),
@@ -594,39 +524,38 @@ class Encoder(tf.keras.layers.Layer):
 
 #--- Vision Transformer ---#
 class VisionTransformer(tf.keras.Model):
-    def __init__(self, clip_length_num_samples:int, patch_length_num_samples:int, num_layers:int, num_classes:int, embedding_depth:int, historical_lookback_DNN_depth:int,
-                 num_heads:int, mlp_dim:int, dropout_rate:float=0.1, enable_scaling:bool=True, enable_positional_embedding:bool=True, use_class_embedding:bool=True,
-                 history_length:int=NUM_SLEEP_STAGE_HISTORY):
+    def __init__(self, args, mlp_dense_activation):
         super(VisionTransformer, self).__init__()
 
         # Hyperparameters
-        self.clip_length_num_samples = clip_length_num_samples
-        self.patch_length_num_samples = patch_length_num_samples
-        self.num_layers = num_layers
-        self.num_classes = num_classes
-        self.embedding_depth = embedding_depth
-        self.num_heads = num_heads
-        self.mlp_dim = mlp_dim
-        self.dropout_rate = dropout_rate
+        self.clip_length_num_samples = int(args.clip_length_s * SAMPLING_FREQUENCY_HZ)
+        self.patch_length_num_samples = int(args.patch_length_s * SAMPLING_FREQUENCY_HZ)
+        self.num_encoder_layers = args.num_layers
+        self.num_classes = NUM_SLEEP_STAGES
+        self.embedding_depth = args.embedding_depth
+        self.num_heads = args.num_heads
+        self.mlp_dim = args.mlp_dim
+        self.dropout_rate = args.dropout_rate
         self.num_patches = int(self.clip_length_num_samples / self.patch_length_num_samples)
-        self.history_length = history_length
+        self.history_length = NUM_SLEEP_STAGE_HISTORY
         self.historical_lookback_DNN = False and (True if self.history_length > 0 else False)
-        self.historical_lookback_DNN_depth = historical_lookback_DNN_depth
-        self.enable_scaling = enable_scaling
-        self.enable_positional_embedding = enable_positional_embedding
-        self.use_class_embedding = use_class_embedding
+        self.historical_lookback_DNN_depth = args.historical_lookback_DNN_depth
+        self.enable_scaling = args.enable_input_rescale
+        self.enable_positional_embedding = args.enable_positional_embedding
+        self.use_class_embedding = args.use_class_embedding
+        self.mlp_dense_activation = mlp_dense_activation
 
         # Layers
-        self.rescale = tf.keras.layers.experimental.preprocessing.Rescaling(1.0 / MAX_VOLTAGE)
         self.patch_projection = tf.keras.layers.Dense(self.embedding_depth, name="patch_projection_dense")
+        if self.enable_scaling: self.rescale = tf.keras.layers.experimental.preprocessing.Rescaling(1.0 / MAX_VOLTAGE)
         if self.use_class_embedding: self.class_embedding = self.add_weight("class_emb", shape=(1, 1, self.embedding_depth))
         if self.enable_positional_embedding: self.positional_embedding = self.add_weight("pos_emb", shape=(1, self.num_patches+self.use_class_embedding+(self.history_length > 0), self.embedding_depth)) #+1 for the trainable classification token, +1 for historical lookback
-        self.encoder_layers = [Encoder(embedding_depth=self.embedding_depth, num_heads=self.num_heads, mlp_dim=self.mlp_dim, dropout_rate=self.dropout_rate, history_length=self.history_length) for _ in range(self.num_layers)]
+        self.encoder_layers = [Encoder(args, mlp_dense_activation=self.mlp_dense_activation) for _ in range(self.num_encoder_layers)]
         self.mlp_head = tf.keras.Sequential([
             tf.keras.layers.LayerNormalization(epsilon=1e-6, name="mlp_head_layerNorm"),
-            tf.keras.layers.Dense(self.mlp_dim, activation=tfa.activations.gelu, name="mlp_head_dense1"),
+            tf.keras.layers.Dense(self.mlp_dim, activation=self.mlp_dense_activation, name="mlp_head_dense1"),
             tf.keras.layers.Dropout(self.dropout_rate, seed=RANDOM_SEED, name="mlp_head_dropout"),
-            tf.keras.layers.Dense(self.num_classes, activation='softmax', name="mlp_head_dense2")
+            tf.keras.layers.Dense(self.num_classes, activation="softmax", name="mlp_head_dense2")
         ], name="mlp_head")
         # self.historical_lookback = tf.keras.Sequential([
         #     tf.keras.layers.Dense(self.historical_lookback_DNN_depth, activation=tf.keras.activations.relu),
@@ -692,18 +621,40 @@ class VisionTransformer(tf.keras.Model):
         x = tf.keras.Input(shape=(1,self.clip_length_num_samples))
         return tf.keras.Model(inputs=[x], outputs=self.call(x, training=False))
 
+    def get_config(self):
+        config = {
+            'name': 'VisionTransformer',
+            'clip_length_num_samples': self.clip_length_num_samples,
+            'patch_length_num_samples': self.patch_length_num_samples,
+            'num_encoder_layers': self.num_encoder_layers,
+            'num_classes': self.num_classes,
+            'embedding_depth': self.embedding_depth,
+            'num_heads': self.num_heads,
+            'mlp_dim': self.mlp_dim,
+            'dropout_rate': self.dropout_rate,
+            'num_patches': self.num_patches,
+            'history_length': self.history_length,
+            'historical_lookback_DNN': self.historical_lookback_DNN,
+            'historical_lookback_DNN_depth': self.historical_lookback_DNN_depth,
+            'enable_scaling': self.enable_scaling,
+            'enable_positional_embedding': self.enable_positional_embedding,
+            'use_class_embedding': self.use_class_embedding,
+            'mlp_dense_activation': self.mlp_dense_activation
+        }
+        return config
+
 #--- Misc ---#
 class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
     def __init__(self, embedding_depth, warmup_steps=NUM_WARMUP_STEPS):
         super().__init__()
-        self.embedding_depth = embedding_depth
-        self.embedding_depth = tf.cast(self.embedding_depth, tf.float32)
+        self.embedding_depth = tf.cast(embedding_depth, tf.float32)
+        self.warmup_steps_exponent = -1.5
         self.warmup_steps = warmup_steps
 
     def __call__(self, step):
         step = tf.cast(step, dtype=tf.float32)
         arg1 = tf.math.rsqrt(step)
-        arg2 = step * (self.warmup_steps ** -1.5)
+        arg2 = step * (self.warmup_steps ** self.warmup_steps_exponent)
 
         return tf.math.rsqrt(self.embedding_depth) * tf.math.minimum(arg1, arg2)
 
@@ -711,6 +662,7 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
         config = {
             'embedding_depth': int(self.embedding_depth),
             'warmup_steps': int(self.warmup_steps),
+            'warmup_steps_exponent': self.warmup_steps_exponent,
         }
         return config
 
@@ -720,90 +672,82 @@ def main():
     print(f"[{(time.time()-start_time):.2f}s] Arguments parsed; starting dataset load.")
 
     # Load data
-    try: signals_train, signals_val, sleep_stages_train, sleep_stages_val, start_of_night_markers, original_sleep_stage_count = load_from_dataset(args=args)
+    try: data, start_of_night_markers, original_sleep_stage_cnt, dataset_metadata = load_from_dataset(args=args)
     except Exception as e: utilities.log_error_and_exit(exception=e, manual_description=f"[{(time.time()-start_time):.2f}s] Failed to load data from dataset.")
+    global train_signals_representative_dataset
+    train_signals_representative_dataset = data["signals_train"]
 
     # Train or load model
-    clip_length_num_samples = int(args.clip_length_s * SAMPLING_FREQUENCY_HZ)
-    patch_length_num_samples = int(args.patch_length_s * SAMPLING_FREQUENCY_HZ)
+    mlp_dense_act = "swish"
     if args.load_model_filepath == None:
-        print(f"[{(time.time()-start_time):.2f}s] Dataset ready. Starting training with {int(signals_train.shape[0])} clips.")
-        model, fit_history = train_model(args, signals_train, sleep_stages_train, clip_length_num_samples, patch_length_num_samples)
+        print(f"[{(time.time()-start_time):.2f}s] Dataset ready. Starting training with {int(data['signals_train'].shape[0])} clips.")
+        model, fit_history = train_model(args, data['signals_train'], data['sleep_stages_train'], mlp_dense_act)
     else: model = tf.keras.models.load_model(args.load_model_filepath, custom_objects={"CustomSchedule": CustomSchedule})
-
-    # Manual validation
-    total_correct, sleep_stages_count_pred, manual_validation_pred, manual_validation_ground_truth = manual_validation(model, signals_val, sleep_stages_val, start_of_night_markers)
-
-    # Count sleep stages in training and validation datasets
-    sleep_stages_count_training = utilities.count_instances_per_class(sleep_stages_train, NUM_SLEEP_STAGES)
-    sleep_stages_count_validation = utilities.count_instances_per_class(sleep_stages_val, NUM_SLEEP_STAGES)
 
     # Make results directory. Check whether folder with the same name already exist and append counter if necessary
     time_of_export = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    out_fp = utilities.find_folder_path(utilities.folder_base_path()+f"{time_of_export}_vision", utilities.folder_base_path())
+    os.makedirs(out_fp, exist_ok=True)
+    os.makedirs(out_fp+"/models", exist_ok=True)
 
-    if socket.gethostname() == "claude-ryzen":              folder_base_path = f"/home/trobitaille/engsci-thesis/python_prototype/results/"
-    elif socket.gethostname() == "MBP_Tristan":             folder_base_path = f"/Users/tristan/Desktop/engsci-thesis/python_prototype/results/"
-    elif "cedar.computecanada.ca" in socket.gethostname():  folder_base_path = f"/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/results/"
-
-    output_folder_path = utilities.find_folder_path(folder_base_path+f"{time_of_export}_vision", folder_base_path)
-
-    os.makedirs(output_folder_path, exist_ok=True)
-
-    # Save accuracy and model details to log file
-    export_summary(f"{output_folder_path}/{time_of_export}_vision.txt", args, model, fit_history, total_correct/sum(sleep_stages_count_validation), original_sleep_stage_count,
-                   sleep_stages_count_training, sleep_stages_count_validation, sleep_stages_count_pred)
-
-    # Export plot of prediction and ground truth
-    export_plots(pred=manual_validation_pred, ground_truth=manual_validation_ground_truth, accuracy=total_correct/len(manual_validation_pred), log_file_path=f"{output_folder_path}/{time_of_export}_vision_manual_validation.extension")
-
-    #Single night to compare validation and prediction
-    print(f"[{(time.time()-start_time):.2f}s] Manual validation done. Starting validation on single night.")
-    plot_single_night_prediction(args, model, single_night_filename=args.input_dataset+"_01-03-0046", log_file_path=f"{output_folder_path}/{time_of_export}_vision.extension")
-
-    # Save model to disk
+    # Save models to disk
+    models = {"tf":model, "tflite":-1, "tflite (quant)":-1, "tflite (full quant)":-1, "tflite (16bx8b full quant)":-1}
     if args.save_model:
-        model.save(f"{output_folder_path}/{time_of_export}_vision.tf", save_format="tf")
-        print(f"[{(time.time()-start_time):.2f}s] Saved model to {output_folder_path}/{time_of_export}_vision.tf.")
+        model.save(f"{out_fp}/models/model.tf", save_format="tf")
+        print(f"[{(time.time()-start_time):.2f}s] Saved model to {out_fp}/models/model.tf")
 
-        tf.keras.utils.plot_model(model.build_graph(), to_file=f"{output_folder_path}/{time_of_export}_vision_high_level.png", expand_nested=True, show_trainable=True, show_shapes=True, show_layer_activations=True, dpi=300, show_dtype=True)
+        tf.keras.utils.plot_model(model.build_graph(), to_file=f"{out_fp}/model_architecture.png", expand_nested=True, show_trainable=True, show_shapes=True, show_layer_activations=True, dpi=300, show_dtype=True)
 
         # Convert to Tensorflow Lite model and save
         converter = tf.lite.TFLiteConverter.from_keras_model(model)
         tflite_model = converter.convert()
-        with open(f"{output_folder_path}/{time_of_export}_vision.tflite", "wb") as f:
+        models["tflite"] = f"{out_fp}/models/model.tflite"
+        with open(f"{out_fp}/models/model.tflite", "wb") as f:
             f.write(tflite_model)
-        print(f"[{(time.time()-start_time):.2f}s] Saved TensorFlow Lite model to {output_folder_path}/{time_of_export}_vision.tflite.")
+        print(f"[{(time.time()-start_time):.2f}s] Saved TensorFlow Lite model to {out_fp}/models/model.tflite.")
 
         # Convert to quantized Tensorflow Lite model and save
-        converter = tf.lite.TFLiteConverter.from_keras_model(model)
         converter.optimizations = [tf.lite.Optimize.DEFAULT]
         tflite_quant_model = converter.convert()
-        with open(f"{output_folder_path}/{time_of_export}_vision_quant.tflite", "wb") as f:
+        models["tflite (quant)"] = f"{out_fp}/models/model_quant.tflite"
+        with open(f"{out_fp}/models/model_quant.tflite", "wb") as f:
             f.write(tflite_quant_model)
-        print(f"[{(time.time()-start_time):.2f}s] Saved quantized TensorFlow Lite model to {output_folder_path}/{time_of_export}_vision_quant.tflite.")
+        print(f"[{(time.time()-start_time):.2f}s] Saved quantized TensorFlow Lite model to {out_fp}/models/model_quant.tflite.")
 
         # Convert to full quantized Tensorflow Lite model and save
-        converter = tf.lite.TFLiteConverter.from_keras_model(model)
         converter.optimizations = [tf.lite.Optimize.DEFAULT]
         converter.representative_dataset = representative_dataset
         converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
-        converter.inference_input_type = tf.int8  # or tf.uint8
-        converter.inference_output_type = tf.int8  # or tf.uint8
+        converter.inference_input_type = tf.uint8
+        converter.inference_output_type = tf.uint8
         tflite_full_quant_model = converter.convert()
-        with open(f"{output_folder_path}/{time_of_export}_vision_full_quant.tflite", "wb") as f:
+        models["tflite (full quant)"] = f"{out_fp}/models/model_full_quant.tflite"
+        with open(f"{out_fp}/models/model_full_quant.tflite", "wb") as f:
             f.write(tflite_full_quant_model)
-        print(f"[{(time.time()-start_time):.2f}s] Saved fully quantized TensorFlow Lite model to {output_folder_path}/{time_of_export}_vision_full_quant.tflite.")
+        print(f"[{(time.time()-start_time):.2f}s] Saved fully quantized TensorFlow Lite model to {out_fp}/models/model_full_quant.tflite.")
 
         # Convert to full quantized Tensorflow Lite model with 16b activations and 8b weights and save
-        converter = tf.lite.TFLiteConverter.from_keras_model(model)
-        converter.optimizations = [tf.lite.Optimize.DEFAULT]
-        converter.representative_dataset = representative_dataset
-        converter.optimizations = [tf.lite.Optimize.DEFAULT]
+        converter.inference_input_type = tf.float32
+        converter.inference_output_type = tf.float32
         converter.target_spec.supported_ops = [tf.lite.OpsSet.EXPERIMENTAL_TFLITE_BUILTINS_ACTIVATIONS_INT16_WEIGHTS_INT8]
         tflite_16x8_full_quant_model = converter.convert()
-        with open(f"{output_folder_path}/{time_of_export}_vision_full_quant_16x8.tflite", "wb") as f:
+        models["tflite (16bx8b full quant)"] = f"{out_fp}/models/model_full_quant_16bx8b.tflite"
+        with open(f"{out_fp}/models/model_full_quant_16bx8b.tflite", "wb") as f:
             f.write(tflite_16x8_full_quant_model)
-        print(f"[{(time.time()-start_time):.2f}s] Saved fully quantized TensorFlow Lite model (16b activations and 8b weights) to {output_folder_path}/{time_of_export}_vision_full_quant_16x8.tflite.")
+        print(f"[{(time.time()-start_time):.2f}s] Saved fully quantized TensorFlow Lite model (16b activations and 8b weights) to {out_fp}/models/model_full_quant_16bx8b.tflite.")
+
+    # Manual validation
+    acc = {"tf":-1, "tflite":-1, "tflite (quant)":-1, "tflite (full quant)":-1, "tflite (16bx8b full quant)":-1}
+    pred_cnt = {"tf":-1, "tflite":-1, "tflite (quant)":-1, "tflite (full quant)":-1, "tflite (16bx8b full quant)":-1}
+    for model_type, model in models.items():
+        acc[model_type], pred_cnt[model_type] = manual_val(model, type=model_type, data=data, whole_night_indices=start_of_night_markers, out_fp=out_fp)
+
+    # Count sleep stages in training and validation datasets
+    sleep_stages_cnt_train = utilities.count_instances_per_class(data['sleep_stages_train'], NUM_SLEEP_STAGES)
+    sleep_stages_cnt_val = utilities.count_instances_per_class(data['sleep_stages_val'], NUM_SLEEP_STAGES)
+
+    # Save accuracy and model details to log file
+    export_summary(out_fp, args, models["tf"], fit_history, acc, original_sleep_stage_cnt, sleep_stages_cnt_train, sleep_stages_cnt_val, pred_cnt, mlp_dense_act, dataset_metadata)
 
     print(f"[{(time.time()-start_time):.2f}s] Done. Good bye.")
 
