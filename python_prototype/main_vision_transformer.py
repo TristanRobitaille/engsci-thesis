@@ -30,7 +30,7 @@ NUM_WARMUP_STEPS = 4000
 VERBOSITY = 'QUIET' #'QUIET', 'NORMAL', 'DETAILED'
 RESAMPLE_TRAINING_DATASET = False
 WHOLE_NIGHT_VALIDATION = True #Whether to validate individual nights (sequentially) or a random subset of clips (if we use the prediction history, we need whole nights for validation)
-SHUFFLE_TRAINING_CLIPS = False
+SHUFFLE_TRAINING_CLIPS = True
 NUM_CLIPS_PER_FILE_EDGETPU = 500 # Only valid for 256Hz
 
 train_signals_representative_dataset = None
@@ -218,7 +218,7 @@ def load_from_dataset(args):
 
     return data_dict, start_of_night_markers, original_sleep_stage_count, dataset_metadata
 
-def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_stage_count:list, sleep_stages_count_training:list, 
+def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_stage_count:list, sleep_stages_count_training:list,
                    sleep_stages_count_val:list, pred_cnt:dict, mlp_dense_activation, dataset_metadata:dict, note:str="") -> None:
     """
     Saves model and training summary to file
@@ -242,6 +242,7 @@ def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_
         log += f"Time to complete: {(time.time()-start_time):.2f}s\n"
         log += model_summary
         log += f"\nDataset: {parser.input_dataset}\n"
+        log += f"Number of operations: {model.calculate_ops()}\n"
         log += f"Save model: {parser.save_model}\n"
         log += f"File path of model to load (model trained if empty string): {parser.load_model_filepath}\n"
         log += f"Channel: {parser.input_channel}\n"
@@ -327,7 +328,7 @@ def parse_arguments():
     parser.add_argument('--historical_lookback_DNN_depth', help='Internal size of the output DNN for historical lookback. Defaults to 64.', default=64, type=int)
     parser.add_argument('--output_edgetpu_data', help='Select whether to output Numpy arrays when parsing input data to run on edge TPU.', action='store_true')
     parser.add_argument('--use_class_embedding', help='Select whether to use classification token in model.', action='store_true')
-    
+
     # Parse arguments
     try:
         args = parser.parse_args()
@@ -428,37 +429,80 @@ def representative_dataset():
     for data in train_signals_representative_dataset[0:500]:
         yield {"input_1": data}
 
+def increment_ops(ops_dict:dict, in_shape, out_shape, layer_type:str, activation:bool=False):
+    """
+    Updates operations count dictionary for different types of layers.
+    For MatrixMultiply, enter the leftmost matrix as input (i.e. in Y = AX, in_shape should come from A)
+    """
+
+    x_in, y_in, z_in = in_shape
+    x_out, y_out, z_out = out_shape
+
+    if layer_type == "Dense":
+        ops_dict["mults"] += x_in**2 * y_in
+        ops_dict["adds"] += x_in * y_in * (x_in-1) + x_out * y_in
+        ops_dict["incrs"] += x_in * y_in * (x_in-1) + x_out * y_in
+        if activation: ops_dict["acts"] += x_out * y_in
+
+    elif layer_type == "LayerNorm":
+        ops_dict["adds"] += y_in * (3*x_in - 1)
+        ops_dict["divs"] += y_in * (x_in+2)
+        ops_dict["subs"] += x_in * y_in
+        ops_dict["mults"] += 2 * x_in * y_in
+        ops_dict["sqrts"] += y_in
+        ops_dict["incrs"] += 3 * y_in * (x_in-1) + 3 * (y_in-1)
+
+    elif layer_type == "MatrixMultiply":
+        if (z_in == 0): # 2D matrix
+            ops_dict["mults"] += x_in * y_in * x_out
+            ops_dict["adds"] += x_in * (y_in - 1) * y_out
+            ops_dict["incrs"] += x_in * y_out * y_in
+        else: # 3D matrix
+            ops_dict["mults"] += x_in * y_in * y_out * z_out
+            ops_dict["adds"] += x_in * y_in * z_in * (y_out - 1) * z_out
+            ops_dict["incrs"] += x_in * y_in * z_out * y_out
+
+    elif layer_type == "nnSoftmax":
+        ops_dict["divs"] += x_in * y_in
+        ops_dict["exps"] += x_in * y_in
+        ops_dict["adds"] += y_in * (x_in - 1)
+        ops_dict["incrs"] += 2 * y_in * (x_in - 1)
+
 #--- APTx activation ---#
 def aptx(x):
-    return (1 + tf.keras.activations.tanh(0.5*x)) * (0.5*x)     
+    return (1 + tf.keras.activations.tanh(0.5*x)) * (0.5*x)
 tf.keras.utils.get_custom_objects().update({'aptx': aptx})
 
 #--- Multi-Head Attention ---#
 class MultiHeadSelfAttention(tf.keras.layers.Layer):
-    def __init__(self, embedding_dimension:int, num_heads:int=8):
+    def __init__(self, args, embedding_depth:int, num_heads:int=8):
         super(MultiHeadSelfAttention, self).__init__()
 
         # Hyperparameters
-        self.embedding_dimension = embedding_dimension
+        self.embedding_depth = embedding_depth
         self.num_heads = num_heads
-        self.projection_dimension = self.embedding_dimension // self.num_heads
+        self.projection_dimension = self.embedding_depth // self.num_heads
+        self.clip_length_num_samples = int(args.clip_length_s * SAMPLING_FREQUENCY_HZ)
+        self.patch_length_num_samples = int(args.patch_length_s * SAMPLING_FREQUENCY_HZ)
+        self.num_patches = int(self.clip_length_num_samples / self.patch_length_num_samples)
+        self.use_class_embedding = args.use_class_embedding
 
-        if self.embedding_dimension % num_heads != 0:
-            raise ValueError(f"Embedding dimension = {self.embedding_dimension} should be divisible by number of heads = {self.num_heads}")
+        if self.embedding_depth % num_heads != 0:
+            raise ValueError(f"Embedding dimension = {self.embedding_depth} should be divisible by number of heads = {self.num_heads}")
 
         # Layers
-        self.query_dense = tf.keras.layers.Dense(self.embedding_dimension, name="mhsa_query_dense")
-        self.key_dense = tf.keras.layers.Dense(self.embedding_dimension, name="mhsa_key_dense")
-        self.value_dense = tf.keras.layers.Dense(self.embedding_dimension, name="mhsa_value_dense")
-        self.combine_heads = tf.keras.layers.Dense(self.embedding_dimension, name="mhsa_combine_head_dense")
+        self.query_dense = tf.keras.layers.Dense(self.embedding_depth, name="mhsa_query_dense")
+        self.key_dense = tf.keras.layers.Dense(self.embedding_depth, name="mhsa_key_dense")
+        self.value_dense = tf.keras.layers.Dense(self.embedding_depth, name="mhsa_value_dense")
+        self.combine_heads = tf.keras.layers.Dense(self.embedding_depth, name="mhsa_combine_head_dense")
 
     def attention(self, query, key, value):
-        score = tf.matmul(query, key, transpose_b=True) #score = (batch_size, num_heads, num_patches+1, num_patches+1)
+        score = tf.matmul(query, key, transpose_b=True) #score = (batch_size, embedding_depth/num_heads, num_patches+1, num_patches+1)
         dim_key = tf.cast(tf.shape(key)[-1], dtype=DATA_TYPE)
-        # assert (self.num_heads == 16) or (self.num_heads == 4), "num_heads not 4 or 16, as needed to simply attention calculations."
-        scaled_score = score / tf.math.sqrt(dim_key) #scaled_score = (batch_size, num_heads, num_patches+1, num_patches+1)
-        weights = tf.nn.softmax(logits=scaled_score, axis=-1) #weights = (batch_size, num_heads, num_patches+1, num_patches+1)
-        output = tf.matmul(weights, value) #output = (batch_size, num_heads, num_patches+1, num_heads)
+        assert (self.num_heads == 16) or (self.num_heads == 4), "num_heads not 4 or 16, as needed to simplify attention calculations."
+        scaled_score = score / tf.math.sqrt(dim_key) #scaled_score = (batch_size, embedding_depth/num_heads, num_patches+1, num_patches+1)
+        weights = tf.nn.softmax(logits=scaled_score, axis=-1) #weights = (batch_size, embedding_depth/num_heads, num_patches+1, num_patches+1)
+        output = tf.matmul(weights, value) #output = (batch_size, embedding_depth/num_heads, num_patches+1, num_heads)
         return output, weights
 
     def separate_heads(self, x, batch_size):
@@ -472,16 +516,42 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
         query = self.query_dense(inputs) #query = (batch_size, num_patches+1, embedding_depth)
         key = self.key_dense(inputs) #key = (batch_size, num_patches+1, embedding_depth)
         value = self.value_dense(inputs) #value = (batch_size, num_patches+1, embedding_depth)
-        query = self.separate_heads(query, batch_size) #query = (batch_size, num_heads, num_patches+1, num_heads)
-        key = self.separate_heads(key, batch_size) #key = (batch_size, num_heads, num_patches+1, num_heads)
-        value = self.separate_heads(value, batch_size) #value = (batch_size, num_heads, num_patches+1, num_heads)
 
-        attention, weights = self.attention(query, key, value) #attention = (batch_size, num_heads, num_patches+1, num_heads)
-        attention = tf.transpose(attention, perm=[0,2,1,3]) #attention = (batch_size, num_patches+1, num_heads, num_heads)
-        concat_attention = tf.reshape(attention, (batch_size, -1, self.embedding_dimension)) #concat_attention = (batch_size, num_patches+1, embedding_depth)
+        query = self.separate_heads(query, batch_size) #query = (batch_size, embedding_depth/num_heads, num_patches+1, num_heads)
+        key = self.separate_heads(key, batch_size) #key = (batch_size, embedding_depth/num_heads, num_patches+1, num_heads)
+        value = self.separate_heads(value, batch_size) #value = (batch_size, embedding_depth/num_heads, num_patches+1, num_heads)
+
+        attention, weights = self.attention(query, key, value) #attention = (batch_size, embedding_depth/num_heads, num_patches+1, num_heads)
+        attention = tf.transpose(attention, perm=[0,2,1,3]) #attention = (batch_size, num_patches+1, embedding_depth/num_heads, num_heads)
+        concat_attention = tf.reshape(attention, (batch_size, -1, self.embedding_depth)) #concat_attention = (batch_size, num_patches+1, embedding_depth)
         output = self.combine_heads(concat_attention) #output = (batch_size, num_patches+1, embedding_depth)
 
         return output
+
+    def calculate_ops(self):
+        """
+        Return a dict of operation counts. Takes into account matrix operations and indexing into the matrices. Doesn't discriminate between float and fixed-point.
+        Ignores historical lookback.
+        """
+        ops = {"adds":0, "subs":0, "mults":0, "divs":0, "acts":0, "incrs":0, "exps":0, "sqrts":0}
+
+        x_in, y_in = self.num_patches + self.use_class_embedding, self.embedding_depth
+        increment_ops(ops_dict=ops, in_shape=(x_in,y_in,0), out_shape=(x_in,y_in,0), layer_type="Dense", activation=False) # Query Dense
+        increment_ops(ops_dict=ops, in_shape=(x_in,y_in,0), out_shape=(x_in,y_in,0), layer_type="Dense", activation=False) # Key Dense
+        increment_ops(ops_dict=ops, in_shape=(x_in,y_in,0), out_shape=(x_in,y_in,0), layer_type="Dense", activation=False) # Value Dense
+
+        x_in, y_in, z_in = self.embedding_depth/self.num_heads, self.num_patches + self.use_class_embedding, self.num_heads
+        x_out, y_out, z_out = self.embedding_depth/self.num_heads, self.num_patches + self.use_class_embedding, self.num_patches + self.use_class_embedding
+        increment_ops(ops_dict=ops, in_shape=(x_in,y_in,z_in), out_shape=(x_out,y_out,z_out), layer_type="MatrixMultiply") # Matrix multiply between Query and Value
+        # Divide by sqrt(# heads)
+        ops["sqrts"] += 1
+        ops["divs"] += x_out * y_out * z_out
+        ops["incrs"] += (x_out - 1) * y_out * z_out
+        increment_ops(ops_dict=ops, in_shape=(x_out,y_out,z_out), out_shape=(x_out,y_out,z_out), layer_type="nnSoftmax") # Softmax
+        increment_ops(ops_dict=ops, in_shape=(x_out,y_out,z_out), out_shape=(x_in,y_in,self.num_heads), layer_type="MatrixMultiply") # Matrix multiply with values
+        increment_ops(ops_dict=ops, in_shape=(y_out,self.embedding_depth,0), out_shape=(y_out,self.embedding_depth,0), layer_type="Dense", activation=False) # Output Dense
+
+        return ops
 
 #--- Encoder ---#
 class Encoder(tf.keras.layers.Layer):
@@ -489,16 +559,21 @@ class Encoder(tf.keras.layers.Layer):
         super(Encoder, self).__init__()
 
         # Hyperparameters
+        self.args = args
         self.embedding_depth = args.embedding_depth
         self.num_heads = args.num_heads
         self.mlp_dim = args.mlp_dim
         self.dropout_rate = args.dropout_rate
         self.history_length = NUM_SLEEP_STAGE_HISTORY
         self.mlp_dense_activation = mlp_dense_activation
+        self.clip_length_num_samples = int(args.clip_length_s * SAMPLING_FREQUENCY_HZ)
+        self.patch_length_num_samples = int(args.patch_length_s * SAMPLING_FREQUENCY_HZ)
+        self.num_patches = int(self.clip_length_num_samples / self.patch_length_num_samples)
+        self.use_class_embedding = args.use_class_embedding
 
         # Layers
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layerNorm1_encoder")
-        self.mhsa = MultiHeadSelfAttention(self.embedding_depth, self.num_heads)
+        self.mhsa = MultiHeadSelfAttention(self.args, self.embedding_depth, self.num_heads)
         self.dropout1 = tf.keras.layers.Dropout(self.dropout_rate, seed=RANDOM_SEED, name="dropout1_encoder")
 
         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layerNorm2_encoder")
@@ -521,6 +596,25 @@ class Encoder(tf.keras.layers.Layer):
 
         mlp_output = self.dropout2(mlp_output, training=training) #mlp_output = (batch_size, num_patches+1, embedding_depth)
         return mlp_output + out1
+
+    def calculate_ops(self):
+        """
+        Return a dict of operation counts. Takes into account matrix operations and indexing into the matrices. Doesn't discriminate between float and fixed-point.
+        Ignores historical lookback.
+        """
+        ops = {"adds":0, "subs":0, "mults":0, "divs":0, "acts":0, "incrs":0, "exps":0, "sqrts":0}
+
+        x, y = self.num_patches + self.use_class_embedding, self.embedding_depth
+
+        increment_ops(ops_dict=ops, in_shape=(x,y,0), out_shape=(x,y,0), layer_type="LayerNorm") # LayerNorm
+        for op, num in self.mhsa.calculate_ops().items(): ops[op] += num # MHSA
+        ops["adds"] += x * y # Add inputs
+        increment_ops(ops_dict=ops, in_shape=(x,y,0), out_shape=(x,y,0), layer_type="LayerNorm") # LayerNorm
+        increment_ops(ops_dict=ops, in_shape=(x,y,0), out_shape=(x,y,0), layer_type="Dense", activation=True) # MLP Dense 1
+        increment_ops(ops_dict=ops, in_shape=(x,y,0), out_shape=(x,y,0), layer_type="Dense", activation=True) # MLP Dense 2
+        ops["adds"] += x * y # Add
+
+        return ops
 
 #--- Vision Transformer ---#
 class VisionTransformer(tf.keras.Model):
@@ -555,7 +649,7 @@ class VisionTransformer(tf.keras.Model):
             tf.keras.layers.LayerNormalization(epsilon=1e-6, name="mlp_head_layerNorm"),
             tf.keras.layers.Dense(self.mlp_dim, activation=self.mlp_dense_activation, name="mlp_head_dense1"),
             tf.keras.layers.Dropout(self.dropout_rate, seed=RANDOM_SEED, name="mlp_head_dropout"),
-            tf.keras.layers.Dense(self.num_classes, activation="softmax", name="mlp_head_dense2")
+            tf.keras.layers.Dense(self.num_classes, activation="softmax", name="mlp_head_dense2"),
         ], name="mlp_head")
         # self.historical_lookback = tf.keras.Sequential([
         #     tf.keras.layers.Dense(self.historical_lookback_DNN_depth, activation=tf.keras.activations.relu),
@@ -591,7 +685,7 @@ class VisionTransformer(tf.keras.Model):
             patches = tf.concat([patches, historical_lookback_patch], axis=1)
 
         # Linear projection
-        clip = self.patch_projection(patches) #clip = (num_patches, embedding_depth)
+        clip = self.patch_projection(patches) #clip = (batch_size, num_patches, embedding_depth)
 
         # Classification token
         if self.use_class_embedding:
@@ -642,6 +736,40 @@ class VisionTransformer(tf.keras.Model):
             'mlp_dense_activation': self.mlp_dense_activation
         }
         return config
+
+    def calculate_ops(self):
+        """
+        Return a dict (# adds, # mults, # divs, # acts, # incrs). Takes into account matrix operations and indexing into the matrices. Doesn't discriminate between float and fixed-point.
+        Ignores historical lookback.
+        """
+        ops = {"adds":0, "subs":0, "mults":0, "divs":0, "acts":0, "incrs":0, "exps":0, "sqrts":0}
+
+        # Rescale
+        if self.enable_scaling:
+            ops["divs"] += self.clip_length_num_samples
+            ops["incrs"] += self.clip_length_num_samples
+
+        # Patch embeddings
+        x_in, y_in = self.num_patches, self.patch_length_num_samples
+        x_out, y_out = self.num_patches, self.embedding_depth
+        increment_ops(ops_dict=ops, in_shape=(x_in,y_in,0), out_shape=(x_out,y_out,0), layer_type="Dense", activation=False)
+
+        # Positional embedding
+        if self.enable_positional_embedding:
+            ops["adds"] += (self.num_patches + self.use_class_embedding) * self.embedding_depth
+
+        # Encoder layers
+        for op, num in self.encoder_layers[0].calculate_ops().items():
+            ops[op] += self.num_encoder_layers * num
+
+        # MLP head
+        x_in, y_in = self.num_patches+self.use_class_embedding, y_out
+        increment_ops(ops_dict=ops, in_shape=(x_in,y_in,0), out_shape=(x_in,y_in,0), layer_type="LayerNorm")
+        increment_ops(ops_dict=ops, in_shape=(x_in,y_in,0), out_shape=(y_in,self.mlp_dim,0), layer_type="Dense", activation=True)
+        increment_ops(ops_dict=ops, in_shape=(y_in,self.mlp_dim,0), out_shape=(1, NUM_SLEEP_STAGES,0), layer_type="Dense", activation=True)
+
+        for op in ops.keys(): ops[op] = int(ops[op])
+        return ops
 
 #--- Misc ---#
 class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
@@ -747,7 +875,8 @@ def main():
     sleep_stages_cnt_val = utilities.count_instances_per_class(data['sleep_stages_val'], NUM_SLEEP_STAGES)
 
     # Save accuracy and model details to log file
-    export_summary(out_fp, args, models["tf"], fit_history, acc, original_sleep_stage_cnt, sleep_stages_cnt_train, sleep_stages_cnt_val, pred_cnt, mlp_dense_act, dataset_metadata)
+    note = ""
+    export_summary(out_fp, args, models["tf"], fit_history, acc, original_sleep_stage_cnt, sleep_stages_cnt_train, sleep_stages_cnt_val, pred_cnt, mlp_dense_act, dataset_metadata, note)
 
     print(f"[{(time.time()-start_time):.2f}s] Done. Good bye.")
 

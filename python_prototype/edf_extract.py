@@ -32,7 +32,7 @@ MIN_VOLTAGE = 0
 NUM_SLEEP_STAGES = 5 #Excluding 'unknown'
 ONE_HOT_OUTPUT = False #If true, sleep stages are exported as their one-hot classes tensor, else they are reported as a scalar
 NUM_PROCESSES = 22
-DATA_TYPE = tf.float32
+DATA_TYPE = tf.uint16
 
 sleep_stage_annotation_to_int = { #Note: Stages 3 and 4 are combined and '0' is reserved for unknown
                                     "Sleep stage 1": 3,
@@ -179,6 +179,8 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
             temp_clip.append(measurement)
 
         signals.append(temp_clip)
+
+    del(signal_reader) # Free memory
 
     # Duplicate sleep stages to account for stages being shorter than the nominal 30s
     sleep_stages = [item for item in sleep_stages for _ in range(int(SLEEP_STAGE_RESOLUTION_SEC/float(args.clip_length_s)))]
@@ -372,7 +374,17 @@ def parse_arguments():
 
     return args
 
-def save_metadata_json(json_fp:str, args, channels_to_read:list, stages_cnt:list):
+def get_dir_size(path:str):
+    total = 0
+    with os.scandir(path) as it:
+        for entry in it:
+            if entry.is_file():
+                total += entry.stat().st_size
+            elif entry.is_dir():
+                total += get_dir_size(entry.path)
+    return total
+
+def save_metadata_json(ds_filepath:str, args, channels_to_read:list, stages_cnt:list):
     """
     Make and save .json file containing metadata about the dataset.
     """
@@ -388,10 +400,12 @@ def save_metadata_json(json_fp:str, args, channels_to_read:list, stages_cnt:list
         "data_type": str(DATA_TYPE),
         "time_to_export": f"{(time.time()-start_time):.2f}s",
         "sleep_stages_mapping": sleep_stage_annotation_to_int,
-        "sleep_stages_cnt": stages_cnt
+        "total_clips": sum(stages_cnt),
+        "sleep_stages_cnt": stages_cnt,
+        "dataset_filesize_GB": round(get_dir_size(path=ds_filepath)/2**30, ndigits=2)
         }
 
-    with open(json_fp, 'w') as json_file:
+    with open(ds_filepath+".json", 'w') as json_file:
         json.dump(json_metadata, json_file, sort_keys=True, indent=4)
 
 def main():
@@ -433,14 +447,15 @@ def main():
         if args.num_files == 1: ds_filepath = ds_filepath + f"_{os.path.basename(labels_file_list[0]).split(' ')[0]}"
         ds_filepath = ds_filepath.replace('.', '-')
 
-        # Save metadata JSON
-        stages_cnt = utilities.count_instances_per_class(output['sleep_stage'], NUM_SLEEP_STAGES+1)
-        save_metadata_json(json_fp=ds_filepath+".json", args=args, channels_to_read=channels_to_read, stages_cnt=stages_cnt)
-
         # Save dataset
         if os.path.exists(path=ds_filepath): 
             shutil.rmtree(path=ds_filepath) # Delete file if it exists
         tf.data.Dataset.save(ds, compression=None, path=ds_filepath)
+
+        # Save metadata JSON
+        stages_cnt = utilities.count_instances_per_class(output['sleep_stage'], NUM_SLEEP_STAGES+1)
+        save_metadata_json(ds_filepath=ds_filepath, args=args, channels_to_read=channels_to_read, stages_cnt=stages_cnt)
+
         print(f"[{(time.time()-start_time):.2f}s] Dataset saved at: {ds_filepath}. It contains {output['sleep_stage'].shape[0]} clips.")
     else:
         print(f"[{(time.time()-start_time):.2f}s] Could not generate dataset! Error return code: {return_code}. Nothing will be saved.")

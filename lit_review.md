@@ -47,7 +47,7 @@
         - Increased training complexity
         - No rigourous guarantee of compression ratio and inference accuracy
     - DRAM access is 200x more energy than on-chip memory
-    - BCM for weight storage: 
+    - BCM for weight storage:
         - Partition weight matrix in array of circulant matrices. Can use "circulant convolution theorem" and FFT to perform matrix-vector multiply in O(nlogn) instead of O(n^2).
         - Needs special backpropagation in training.
         - 400x-4000x storage reduction (when combined with 32b float -> 16b fixed quantization)
@@ -64,11 +64,24 @@
 
 ### LLM in a flash: Efficient Large Language Model Inference with Limited Memory
 - **Results**:
-    -Run models 2x RAM size up to 4-5x (on CPU) and 20-25x (on GPU) compared to naive implementation.
+    - Run models 2x RAM size up to 4-5x (on CPU) and 20-25x (on GPU) compared to naive implementation.
 - **Main ideas**:
-    -Large models don't fit in RAM --> Minimize data transfers to speed up inference
-    -To ammortize data transfer overheads, read data in large contiguous chunks as much as possible
-    -Feed-Forward Network in Transformers is typically >90% sparse --> Keep embeddings in memory but select which weights to load for ReLU layers with a predictor
-    -Only maintain activated neurons associated with the past k tokens s.t. you only need to change some small amount of incremental data 
-    -Bundle columns and rows from up projection and down projection in memory so they can be loaded contiguously in large chunks
-    -Closest friend: Neurons tend to be co-activated together so load your closest friend together with you. In practice, not good because you tend to load the same data a lot.
+    - Large models don't fit in RAM --> Minimize data transfers to speed up inference
+    - To ammortize data transfer overheads, read data in large contiguous chunks as much as possible
+    - Feed-Forward Network in Transformers is typically >90% sparse --> Keep embeddings in memory but select which weights to load for ReLU layers with a predictor
+    - Only maintain activated neurons associated with the past k tokens s.t. you only need to change some small amount of incremental data
+    - Bundle columns and rows from up projection and down projection in memory so they can be loaded contiguously in large chunks
+    - Closest friend: Neurons tend to be co-activated together so load your closest friend together with you. In practice, not good because you tend to load the same data a lot.
+
+### Opportunities and Limitations of in-Memory Multiply-and-Accumulate Arrays
+- **Results**:
+    - Their architecture (vs. von Neumann) is ~5x less energy per inference and ~100-1000x less memory I/O
+- **Main ideas**:
+    - Power demands for AI increased 300,000x since 2012
+    - Place MACs in DRAM (1 MAC shared between 2 bitcell arrays)
+    - Implemented "Clipped staircase ReLU" as activation function because 1) Very cheap and 2) Prevents overflow (MACs are 8b mult. and 32b acc.), which is an issue for deep NN
+    - Inference workflow summary:
+        - Input is stored off-array, weights are local to MAC's bitcell arrays.
+        - During compute, the (local) weights are loaded into MAC input and the input is broadcast serially on "global bit lines" and each MAC that needs it grabs it (good for parallelization)
+        - MAC stack + activation function compute embedded in memory increase memory size by 12%
+    - Future work: Thermal and metal area constraints, OS and compiler support
