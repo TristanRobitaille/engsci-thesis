@@ -49,8 +49,8 @@ def signals_processing(signals:List) -> List:
     Returns input tensor with processing applied.
     """
     # Shift up signal to remove negative values
-    for i in range(len(signals)):
-        signals[i] += 2**15
+    signals = np.array(signals)
+    signals += 32768 # 15b shift
 
     return signals
 
@@ -128,6 +128,24 @@ def resample_list(input:list, input_freq:int, target_freq:int) -> list:
 
     return resample
 
+def resample_sleep_stages(base_sleep_stages:list, clip_length:float) -> list:
+    """
+    Resamples the base sleep stages from the EDF file based on the requested clip length.
+    If clip length < SLEEP_STAGE_RESOLUTION_SEC: Duplicate sleep stages for subclips
+    If clip length == SLEEP_STAGE_RESOLUTION_SEC: Do nothing
+    If clip length > SLEEP_STAGE_RESOLUTION_SEC: Take the first sleep stage of clips 
+    """
+
+    if (clip_length == SLEEP_STAGE_RESOLUTION_SEC): sleep_stages = base_sleep_stages
+    elif (clip_length < SLEEP_STAGE_RESOLUTION_SEC):
+        clip_length_multiple = int(SLEEP_STAGE_RESOLUTION_SEC/clip_length)
+        sleep_stages = [item for item in base_sleep_stages for _ in range(clip_length_multiple)]
+    else:
+        clip_length_multiple = int(clip_length/SLEEP_STAGE_RESOLUTION_SEC)
+        sleep_stages = base_sleep_stages[::clip_length_multiple]
+    
+    return sleep_stages
+
 def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, channels_to_read:List[str], historical_lookback_length=HISTORICAL_LOOKBACK_LENGTH) -> (tf.Tensor, tf.Tensor, List[str]):
     """
     Returns a dictionary of channels with signals cut into clips and a return code.
@@ -157,8 +175,8 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
     signals = list()
     channels = list(signal_reader.getSignalLabels())
 
-    total_raw_clips = min(math.floor(signal_reader.getFileDuration() / float(args.clip_length_s)), int(SLEEP_STAGE_RESOLUTION_SEC/float(args.clip_length_s))*len(sleep_stages))
-    clip_duration_samples = int(float(args.clip_length_s) * NOMINAL_FREQUENCY_HZ)
+    total_raw_clips = math.floor(signal_reader.getFileDuration() / args.clip_length_s)
+    clip_duration_samples = int(args.clip_length_s * NOMINAL_FREQUENCY_HZ)
 
     # Extract clips for each channel
     for channel in channels_to_read:
@@ -183,7 +201,7 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
     del(signal_reader) # Free memory
 
     # Duplicate sleep stages to account for stages being shorter than the nominal 30s
-    sleep_stages = [item for item in sleep_stages for _ in range(int(SLEEP_STAGE_RESOLUTION_SEC/float(args.clip_length_s)))]
+    sleep_stages = resample_sleep_stages(sleep_stages, args.clip_length_s)
     sleep_stages = sleep_stages[0:total_raw_clips] #On some files, sleep stages are longer than PSG signals so we slice it. Assume that they line up at the lowest index.
 
     # Prune unknown sleep stages from all lists
@@ -356,7 +374,7 @@ def parse_arguments():
     # Parser
     parser = ArgumentParser(description='Script to extract data from EDF files and export to a Tensorflow dataset.')
     parser.add_argument('--type', help='Type of generation: "EDF" (read PSG files and format their data) or "pseudo_random" (generate pseudo-random data for each sleep stage and equal number of sleep stages in dataset). Defaults to "EDF".', choices=["EDF", "pseudo_random"], default='EDF')
-    parser.add_argument('--clip_length_s', help='Clip length (in sec). Must be one of 3.25, 5, 7.5, 10, 15, 30.', choices=["3.25", "7.5", "15", "30"], default=30, type=str)
+    parser.add_argument('--clip_length_s', help='Clip length (in sec). Must be one of 3.25, 5, 7.5, 10, 15, 30, 60, 90, 120.', choices=[3.25, 5, 7.5, 10, 15, 30, 60, 90, 120], default=30, type=float)
     parser.add_argument('--directory_psg', help='Directory from which to fetch the PSG EDF files. Searches current workding directory by default.', default="")
     parser.add_argument('--directory_labels', help='Directory from which to fetch the PSG label files. Defaults to --directory_psg.', default="")
     parser.add_argument('--export_directory', help='Location to export dataset. Defaults to cwd.', default="")

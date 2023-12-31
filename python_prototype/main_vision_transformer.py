@@ -142,6 +142,7 @@ def load_from_dataset(args):
     global NUM_SLEEP_STAGE_HISTORY
     global WHOLE_NIGHT_VALIDATION
     global SAMPLING_FREQUENCY_HZ
+    global CLIP_LENGTH_NUM_SAMPLES
 
     # Extract from dataset metadata
     with open(args.input_dataset + ".json", 'r') as json_file:
@@ -151,6 +152,9 @@ def load_from_dataset(args):
     NUM_SLEEP_STAGE_HISTORY = dataset_metadata["historical_lookback_length"]
     WHOLE_NIGHT_VALIDATION = WHOLE_NIGHT_VALIDATION or (NUM_SLEEP_STAGE_HISTORY > 0)
     NUM_SLEEP_STAGES = dataset_metadata["num_stages"] + 1 # +1 needed to account for "unknown" sleep stage
+    if (dataset_metadata["clip_length_s"] % args.patch_length_s != 0):
+        raise ValueError(f"Patch length ({args.patch_length_s}s) needs to be a multiple of clip length ({dataset_metadata['clip_length_s']}s! Aborting.)")
+    CLIP_LENGTH_NUM_SAMPLES = int(dataset_metadata["clip_length_s"] * SAMPLING_FREQUENCY_HZ)
 
     # Load dataset
     data = tf.data.Dataset.load(args.input_dataset)
@@ -248,7 +252,9 @@ def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_
         log += f"Channel: {parser.input_channel}\n"
         for model_type, acc in acc.items(): log += f"Validation set accuracy ({model_type}): {acc:.4f}\n"
         log += f"Training accuracy: {[round(accuracy, 4) for accuracy in fit_history.history['accuracy']]}\n"
+        log += f"Validation accuracy (while training): {[round(accuracy, 4) for accuracy in fit_history.history['val_accuracy']]}\n"
         log += f"Training loss: {[round(loss, 4) for loss in fit_history.history['loss']]}\n"
+        log += f"Validation loss (while training): {[round(loss, 4) for loss in fit_history.history['val_loss']]}\n"
         log += f"Number of epochs: {parser.num_epochs}\n\n"
 
         log += f"Training set resampling: {RESAMPLE_TRAINING_DATASET}\n"
@@ -268,7 +274,7 @@ def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_
         log += f"Sleep stages count in validation set input ({num_clips_validation}): {sleep_stages_count_val} ({[round(num / num_clips_validation, 4) for num in sleep_stages_count_val]})\n"
         for model_type, pred_cnt in pred_cnt.items(): log += f"Sleep stages count in validation set prediction ({num_clips_validation}, {model_type}): {pred_cnt} ({[round(num / num_clips_validation, 4) for num in pred_cnt]})\n"
 
-        log += f"\nClip length (s): {parser.clip_length_s}\n"
+        log += f"\nClip length (s): {dataset_metadata['clip_length_s']}\n"
         log += f"Patch length (s): {parser.patch_length_s}\n"
         log += f"Number of sleep stages (includes unknown): {NUM_SLEEP_STAGES}\n"
         log += f"Data type: {DATA_TYPE}\n"
@@ -307,8 +313,7 @@ def parse_arguments():
     parser.add_argument('--num_clips', help='Number of clips to use for training + validation. Defaults to 3000.', default=3000, type=int)
     parser.add_argument('--input_dataset', help='Filepath of the dataset used for training and validation.', type=str)
     parser.add_argument('--input_channel', help='Name of the channel to use for training and validation.', type=str)
-    parser.add_argument('--clip_length_s', help='Clip length (in sec). Must match input dataset clip length. Must be one of 3.25, 5, 7.5, 10, 15, 30. Defaults to 15s.', default=15, type=float)
-    parser.add_argument('--patch_length_s', help='Patch length (in sec). Must be integer multiple of clip_length_s. Defaults to 0.5s.', default=0.5, type=float)
+    parser.add_argument('--patch_length_s', help='Patch length (in sec). Must be integer multiple of clip length. Defaults to 0.5s.', default=0.5, type=float)
     parser.add_argument('--num_layers', help='Number of encoder layer. Defaults to 8.', default=8, type=int)
     parser.add_argument('--embedding_depth', help='Depth of the embedding layer. Defaults to 32.', default=32, type=int)
     parser.add_argument('--num_heads', help='Number of multi-attention heads. Defaults to 8.', default=8, type=int)
@@ -340,15 +345,12 @@ def parse_arguments():
         print(f"{arg}: {getattr(args, arg)}")
 
     # Check validity of arguments
-    if args.clip_length_s % args.patch_length_s != 0:
-        raise ValueError(f"patch_length_s ({args.patch_length_s}s) should be an integer multiple of clip_length_s ({args.clip_length_s}s))")
-
     if len(args.class_weights) != NUM_SLEEP_STAGES:
         raise ValueError(f"Number of class weights ({len(args.class_weights)}) should be equal to number of sleep stages ({NUM_SLEEP_STAGES})")
 
     return args
 
-def train_model(args, signals_train, sleep_stages_train, mlp_dense_activation):
+def train_model(args, data:dict, mlp_dense_activation:str):
     try:
         model = VisionTransformer(args, mlp_dense_activation)
     except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to initialize model.")
@@ -366,8 +368,8 @@ def train_model(args, signals_train, sleep_stages_train, mlp_dense_activation):
 
     args.class_weights = {i: weight for i, weight in enumerate(args.class_weights)}
     try:
-        fit_history = model.fit(x=signals_train, y=sleep_stages_train, epochs=int(args.num_epochs), batch_size=args.batch_size,
-                                callbacks=[tensorboard_callback], class_weight=args.class_weights, verbose=2)
+        fit_history = model.fit(x=data["signals_train"], y=data["sleep_stages_train"], validation_data=(data["signals_val"], data["sleep_stages_val"]),
+                                epochs=args.num_epochs, batch_size=args.batch_size, callbacks=[tensorboard_callback], class_weight=args.class_weights, verbose=2)
     except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to fit model.")
 
     return model, fit_history
@@ -482,7 +484,7 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
         self.embedding_depth = embedding_depth
         self.num_heads = num_heads
         self.projection_dimension = self.embedding_depth // self.num_heads
-        self.clip_length_num_samples = int(args.clip_length_s * SAMPLING_FREQUENCY_HZ)
+        self.clip_length_num_samples = CLIP_LENGTH_NUM_SAMPLES
         self.patch_length_num_samples = int(args.patch_length_s * SAMPLING_FREQUENCY_HZ)
         self.num_patches = int(self.clip_length_num_samples / self.patch_length_num_samples)
         self.use_class_embedding = args.use_class_embedding
@@ -566,7 +568,7 @@ class Encoder(tf.keras.layers.Layer):
         self.dropout_rate = args.dropout_rate
         self.history_length = NUM_SLEEP_STAGE_HISTORY
         self.mlp_dense_activation = mlp_dense_activation
-        self.clip_length_num_samples = int(args.clip_length_s * SAMPLING_FREQUENCY_HZ)
+        self.clip_length_num_samples = CLIP_LENGTH_NUM_SAMPLES
         self.patch_length_num_samples = int(args.patch_length_s * SAMPLING_FREQUENCY_HZ)
         self.num_patches = int(self.clip_length_num_samples / self.patch_length_num_samples)
         self.use_class_embedding = args.use_class_embedding
@@ -622,7 +624,7 @@ class VisionTransformer(tf.keras.Model):
         super(VisionTransformer, self).__init__()
 
         # Hyperparameters
-        self.clip_length_num_samples = int(args.clip_length_s * SAMPLING_FREQUENCY_HZ)
+        self.clip_length_num_samples = CLIP_LENGTH_NUM_SAMPLES
         self.patch_length_num_samples = int(args.patch_length_s * SAMPLING_FREQUENCY_HZ)
         self.num_encoder_layers = args.num_layers
         self.num_classes = NUM_SLEEP_STAGES
@@ -809,7 +811,7 @@ def main():
     mlp_dense_act = "swish"
     if args.load_model_filepath == None:
         print(f"[{(time.time()-start_time):.2f}s] Dataset ready. Starting training with {int(data['signals_train'].shape[0])} clips.")
-        model, fit_history = train_model(args, data['signals_train'], data['sleep_stages_train'], mlp_dense_act)
+        model, fit_history = train_model(args, data, mlp_dense_act)
     else: model = tf.keras.models.load_model(args.load_model_filepath, custom_objects={"CustomSchedule": CustomSchedule})
 
     # Make results directory. Check whether folder with the same name already exist and append counter if necessary
