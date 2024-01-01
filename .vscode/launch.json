@@ -21,10 +21,10 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": ["--enable_dataset_resample_replacement", "--batch_size=16", "--learning_rate=1e-3", "--num_epochs=1",
-                     "--input_channel=EEG Cz-LER", "--num_clips=115200", "--embedding_depth=64", "--num_layers=4", "--num_heads=16", "--mlp_dim=32", "--save_model",
-                     "--input_dataset=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF_Tensorized_deep_only_combine-stg_30-0s_256Hz",
-                     "--class_weights", "1", "1", "1", "1", "1", "1", "--historical_lookback_DNN_depth=0",
-                     "--training_set_target_count", "4600", "4600", "4600", "4600", "4600", "--dataset_resample_algo=ADASYN"]
+                     "--input_channel=EEG Cz-LER", "--num_clips=5000", "--embedding_depth=64", "--num_layers=4", "--num_heads=16", "--mlp_dim=32", "--save_model",
+                     "--input_dataset=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF_Tensorized_both_light_deep_combine-stg_30-0s_256Hz",
+                     "--class_weights", "1", "1", "1", "1", "1", "--historical_lookback_DNN_depth=0",
+                     "--training_set_target_count", "4600", "4600", "4600", "4600", "--dataset_resample_algo=ADASYN"]
                     // "--enable_input_rescale", "--output_edgetpu_data"
         },
         {
@@ -36,7 +36,7 @@
             "justMyCode": true,
             "args": ["--type=EDF", "--clip_length_s=30", "--num_files=100", "--directory_psg=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF",
                      "--directory_labels=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF", "--export_directory=/mnt/data/tristan/engsci_thesis_python_prototype_data",
-                     "--downsampling_freq_hz=256", "--enable_multiprocessing", "--sleep_map_name=deep_only_combine"]
+                     "--downsampling_freq_hz=256", "--enable_multiprocessing", "--sleep_map_name=both_light_deep_combine"]
         },
         {
             "name": "Utilities",

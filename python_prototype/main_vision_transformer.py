@@ -304,7 +304,7 @@ def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_
         with open(out_fp+"/info.txt", 'w') as file: file.write(log)
         print(f"[{(time.time()-start_time):.2f}s] Saved model summary to {out_fp}/info.txt.")
 
-    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to export summary.")
+    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description=f"[{(time.time()-start_time):.2f}s] Failed to export summary.")
 
 def parse_arguments():
     """"
@@ -343,7 +343,7 @@ def parse_arguments():
     try:
         args = parser.parse_args()
     except Exception as e:
-        utilities.log_error_and_exit(e)
+        utilities.log_error_and_exit(exception=e, manual_description=f"[{(time.time()-start_time):.2f}s] Failed to parse arguments.")
 
     # Print arguments received
     for arg in vars(args):
@@ -354,7 +354,7 @@ def parse_arguments():
 def train_model(args, data:dict, mlp_dense_activation:str):
     try:
         model = VisionTransformer(args, mlp_dense_activation)
-    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to initialize model.")
+    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description=f"[{(time.time()-start_time):.2f}s] Failed to initialize model.")
 
     try:
         model.compile(
@@ -362,7 +362,7 @@ def train_model(args, data:dict, mlp_dense_activation:str):
             optimizer=tf.keras.optimizers.Adam(CustomSchedule(args.embedding_depth), beta_1=0.9, beta_2=0.98, epsilon=1e-9),
             metrics=["accuracy"],
         )
-    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to compile model.")
+    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description=f"[{(time.time()-start_time):.2f}s] Failed to compile model.")
 
     tensorboard_log_dir = "logs/fit/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=tensorboard_log_dir, histogram_freq=1)
@@ -371,7 +371,7 @@ def train_model(args, data:dict, mlp_dense_activation:str):
     try:
         fit_history = model.fit(x=data["signals_train"], y=data["sleep_stages_train"], validation_data=(data["signals_val"], data["sleep_stages_val"]),
                                 epochs=args.num_epochs, batch_size=args.batch_size, callbacks=[tensorboard_callback], class_weight=args.class_weights, verbose=2)
-    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description="Failed to fit model.")
+    except Exception as e: utilities.log_error_and_exit(exception=e, manual_description=f"[{(time.time()-start_time):.2f}s] Failed to fit model.")
 
     return model, fit_history
 
@@ -400,6 +400,19 @@ def export_plots(pred:list, ground_truth:list, accuracy:float, log_file_path:str
     fig = go.Figure(data=[trace1, trace2], layout=layout) # Create a Figure and add the traces
     fig.update_layout(yaxis=dict(tickmode='array', tickvals=np.arange(0, sleep_map.get_num_stages()+1, step=1), ticktext=sleep_map.get_name_map()))
     fig.write_html(log_file_path.replace(".ext", ".html")) # Save the figure as an HTML file
+
+def export_training_val_plot(out_fp:str, fit_history):
+    plt.figure(figsize=(10, 6), dpi=300) # Width, height in inches
+    plt.title(f"Validation set accuracy and loss during training")
+    plt.plot(fit_history.history['val_accuracy'], label='Validation accuracy')
+    plt.plot(fit_history.history['val_loss'], label='Validation loss')
+    plt.xlabel('Epoch')
+    plt.legend()
+    plt.grid()
+    max_y1_tick = utilities.round_up_to_nearest_tenth(max(fit_history.history["val_accuracy"]))
+    max_y2_tick = utilities.round_up_to_nearest_tenth(max(fit_history.history["val_loss"]))
+    plt.yticks(np.arange(0,max([max_y1_tick+0.1, max_y2_tick+0.1, 1+0.1]), step=0.1))
+    plt.savefig(f"{out_fp}/models/train_val_accuracy.png")
 
 def manual_val(model, type:str, data:dict, whole_night_indices:dict, out_fp:str, ds_metadata:dict):
     total_correct = 0
@@ -884,17 +897,7 @@ def main():
     export_summary(out_fp, args, models["tf"], fit_history, acc, original_sleep_stage_cnt, sleep_stages_cnt_train, sleep_stages_cnt_val, pred_cnt, mlp_dense_act, dataset_metadata, note)
 
     # Plot validation accuracy and loss during training
-    plt.figure(figsize=(10, 6), dpi=300) # Width, height in inches
-    plt.title(f"Validation set accuracy and loss during training")
-    plt.plot(fit_history.history['val_accuracy'], label='Validation accuracy')
-    plt.plot(fit_history.history['val_loss'], label='Validation loss')
-    plt.xlabel('Epoch')
-    plt.legend()
-    plt.grid()
-    max_y1_tick = utilities.round_up_to_nearest_tenth(max(fit_history.history["val_accuracy"]))
-    max_y2_tick = utilities.round_up_to_nearest_tenth(max(fit_history.history["val_loss"]))
-    plt.yticks(np.arange(0,max([max_y1_tick+0.1, max_y2_tick+0.1, 1+0.1]), step=0.1))
-    plt.savefig(f"{out_fp}/models/train_val_accuracy.png") # Export the plot
+    export_training_val_plot(out_fp, fit_history=fit_history)
 
     print(f"[{(time.time()-start_time):.2f}s] Done. Good bye.")
 

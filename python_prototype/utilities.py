@@ -182,10 +182,10 @@ def log_error_and_exit(exception, manual_description:str="", additional_msg:str=
     elif socket.gethostname() == "MBP_Tristan":             error_log = find_txt_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/Users/tristan/Desktop/engsci-thesis/python_prototype/error_logs/")
     elif "cedar.computecanada.ca" in socket.gethostname():  error_log = find_txt_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/error_logs/")
 
-    print(f"Received error: {exception}")
+    print(f"{manual_description} Received error: {exception}")
 
     with open(error_log, 'w') as f:
-        f.write(manual_description)
+        f.write(f"{manual_description} ")
         f.write(f"Exception: {str(exception)}")
         f.write(additional_msg)
     exit()
@@ -254,26 +254,24 @@ def run_tflite_model(model_fp:str, data:str, whole_night_indices:list, data_type
     output_filter = MovingAverage(num_output_filtering)
     if num_sleep_stage_history > 0: historical_pred = tf.zeros(shape=(1, num_sleep_stage_history), dtype=data_type)
 
-    try:
-        for x, y in zip(data["signals_val"], data["sleep_stages_val"]):
-            if (data_type == tf.int8):
-                x = x / 2**15 * 2**7
-            x = tf.cast(x=x, dtype=data_type)
-            x = tf.reshape(x, [1, x.shape[0]]) # Prepend 1 to shape to make it a batch of 1
+    for x, y in zip(data["signals_val"], data["sleep_stages_val"]):
+        if (data_type == tf.int8):
+            x = x / 2**15 * 2**7
+        x = tf.cast(x=x, dtype=data_type)
+        x = tf.reshape(x, [1, x.shape[0]]) # Prepend 1 to shape to make it a batch of 1
 
-            if num_sleep_stage_history > 0:
-                x = tf.concat([x[:,:-num_sleep_stage_history], historical_pred], axis=1) # Concatenate historical prediction to input
-                if whole_night_indices[total].numpy()[0] == 1.0: historical_pred = tf.zeros(shape=(1, num_sleep_stage_history)) # Reset historical prediction at 0 (unknown) if at the start a new night
+        if num_sleep_stage_history > 0:
+            x = tf.concat([x[:,:-num_sleep_stage_history], historical_pred], axis=1) # Concatenate historical prediction to input
+            if whole_night_indices[total].numpy()[0] == 1.0: historical_pred = tf.zeros(shape=(1, num_sleep_stage_history)) # Reset historical prediction at 0 (unknown) if at the start a new night
 
-            interpreter.set_tensor(input_details[0]['index'], x)
-            interpreter.invoke()
-            sleep_stage_pred = interpreter.get_tensor(output_details[0]['index'])
-            sleep_stage_pred = tf.argmax(sleep_stage_pred, axis=1)
-            sleep_stage_pred = tf.cast(output_filter.filter(sleep_stage_pred), dtype=data_type) # Filter sleep stage
-            if num_sleep_stage_history > 0: historical_pred = tf.concat([tf.expand_dims(sleep_stage_pred, axis=1), historical_pred[:, 0:num_sleep_stage_history-1]], axis=1)
-            predictions.append(int(sleep_stage_pred[0].numpy()))
-            total += 1
-    except Exception as e: log_error_and_exit(exception=e, manual_description="Failed to manually run model.")
+        interpreter.set_tensor(input_details[0]['index'], x)
+        interpreter.invoke()
+        sleep_stage_pred = interpreter.get_tensor(output_details[0]['index'])
+        sleep_stage_pred = tf.argmax(sleep_stage_pred, axis=1)
+        sleep_stage_pred = tf.cast(output_filter.filter(sleep_stage_pred), dtype=data_type) # Filter sleep stage
+        if num_sleep_stage_history > 0: historical_pred = tf.concat([tf.expand_dims(sleep_stage_pred, axis=1), historical_pred[:, 0:num_sleep_stage_history-1]], axis=1)
+        predictions.append(int(sleep_stage_pred[0].numpy()))
+        total += 1
 
     return predictions
 
