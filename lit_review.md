@@ -14,7 +14,7 @@
     - Make a design space solver by defining legal parameter values, and run simulations for each
 - **Results**:
     - Used very aggressive sparsity of 90%
-    - ~2x the speed-up of using GPU
+    - ~2x speedup over of using GPU
 
 ###  FTRANS: Energy-Efficient Acceleration of Transformers using FPGA
 - **Main ideas**:
@@ -85,3 +85,15 @@
         - During compute, the (local) weights are loaded into MAC input and the input is broadcast serially on "global bit lines" and each MAC that needs it grabs it (good for parallelization)
         - MAC stack + activation function compute embedded in memory increase memory size by 12%
     - Future work: Thermal and metal area constraints, OS and compiler support
+
+### CoMeFa: Compute-in-Memory Blocks for FPGA
+- **Results**
+    - Throughput increases 1.3x-2x depending on benchmark
+    - Energy reduction of ~55%
+- **Main ideas**
+    - Design new block RAM (20kbit) with configurable processing element (160 or 80 PEs per BRAM) to allow for CiM. BRAM has bank of operands 1, operands 2 and results
+    - Perform operations bit-serial instead of bit-parallel for higher throughput (but higher per-operation latency)
+    - Key: The processing elements are 1b and the BRAM is passed a 40b instruction. The precision is adjustable simply by passing different sequence of instruction.
+    - Latencies: (Integer): Add = n+1 cycles, Mult = n^2+3n-2 cycles. (Float): Add = 2ME+9M+7E+12, Mult = M^2+7M+3E+5 (M=# of mantissa bits, W=# of exponent bits)
+    - Also developed a "swizzle" module to interface data from DRAM to CoFeMa RAM
+    - Tools: Verilog-to-Routing, COFFE for area and delay value and FreePDK45 for SPICE

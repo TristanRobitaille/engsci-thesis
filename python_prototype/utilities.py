@@ -52,7 +52,53 @@ class MovingAverage():
         if len(self.samples) > self.num_samples:
             self.samples.pop(0)
         return tf.reduce_mean(self.samples, axis=0)
+
+class SleepStageMap():
+    """
+    Class serves as easy way to map sleep stages between raw value found from data annotations, numerical values used in model and name used in plots.
+    Light sleep stages: 1 and 2
+    Deep sleep stages: 3 and 4
+    Others: REM, wake and unknown
+    """
+
+    _allowed_maps = ["no_combine", "light_only_combine", "deep_only_combine", "both_light_deep_combine"]
+
+    def __init__(self, map_name:str="no_combine"):
+        assert (map_name in self._allowed_maps), (f"Mapping name '{map_name}' not in allowed mappings ({self._allowed_maps})") 
+        self.map_name = map_name
+
+    def set_map_name(self, map_name:str):
+        self.map_name = map_name
     
+    def get_map_name(self):
+        return self.map_name
+
+    def get_numerical_map(self):
+        """
+        Returns a dictionary mapping the label name found in data to numerical value used in model.
+        """
+        if   (self.map_name == "no_combine"):           return {"Sleep stage 1":4, "Sleep stage 2":3, "Sleep stage 3":2, "Sleep stage 4":1, "Sleep stage R":5, "Sleep stage W":6, "Sleep stage ?":0}
+        elif (self.map_name == "light_only_combine"):   return {"Sleep stage 1":3, "Sleep stage 2":3, "Sleep stage 3":2, "Sleep stage 4":1, "Sleep stage R":4, "Sleep stage W":5, "Sleep stage ?":0}
+        elif (self.map_name == "deep_only_combine"):    return {"Sleep stage 1":3, "Sleep stage 2":2, "Sleep stage 3":1, "Sleep stage 4":1, "Sleep stage R":4, "Sleep stage W":5, "Sleep stage ?":0}
+        else:                                           return {"Sleep stage 1":2, "Sleep stage 2":2, "Sleep stage 3":1, "Sleep stage 4":1, "Sleep stage R":3, "Sleep stage W":4, "Sleep stage ?":0}
+
+    def get_name_map(self):
+        """
+        Returns list of sleep stages name (useful for plot labels). It is ordered from deepest to lightest stage.
+        """
+        if   (self.map_name == "no_combine"):           return ["Unknown", "N4 (deep)",   "N3 (deep)",    "N2 (light)",   "N1 (light)", "REM", "Wake"]
+        elif (self.map_name == "light_only_combine"):   return ["Unknown", "N4 (deep)",   "N3 (deep)",    "N1/2 (light)", "REM",        "Wake"]
+        elif (self.map_name == "deep_only_combine"):    return ["Unknown", "N3/4 (deep)", "N2 (light)",   "N1 (light)",   "REM",        "Wake"]
+        else:                                           return ["Unknown", "N3/4 (deep)", "N1/2 (light)", "REM", "Wake"]
+    
+    def get_num_stages(self):
+        """
+        Returns the number of sleep stages (excluding the 'unknown' stage)
+        """
+        if   (self.map_name == "no_combine"):               return 6
+        elif (self.map_name == "both_light_deep_combine"):  return 4
+        else:                                               return 5 # One of light or deep combined
+
 #--- FUNCTIONS ---#
 def plot_1D_tensor(input_tensor: tf.Tensor):
     """
@@ -246,6 +292,11 @@ def shuffle(signal:tf.Tensor, sleep_stages:tf.Tensor, random_seed:int):
     signal_shuffled = tf.gather(signal, shuffled_indices)
     sleep_stages_shuffled = tf.gather(sleep_stages, shuffled_indices)
     return signal_shuffled, sleep_stages_shuffled
+
+def round_up_to_nearest_tenth(input) -> float:
+    rounded_input = round(input, 1) # Round to nearest 0.1
+    rounded_up_input = rounded_input if (rounded_input > input) else (rounded_input + 0.1) # Round up to nearest tenth
+    return rounded_up_input
 
 def main():
     print("Nothing to do in utilities main.")

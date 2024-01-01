@@ -1,4 +1,4 @@
-#!/bin/bash
+# #!/bin/bash
 
 # First set
 python3 /home/trobitaille/engsci-thesis/python_prototype/main_vision_transformer.py \
@@ -14,10 +14,10 @@ python3 /home/trobitaille/engsci-thesis/python_prototype/main_vision_transformer
 --mlp_dim=32 \
 --historical_lookback_DNN_depth=32 \
 --dropout_rate=0.3 \
---class_weights 1 1 1 1 1 1 \
---input_dataset="/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF_Tensorized_5-stg_60-0s_256Hz" \
+--class_weights 1 1 1 1 1 1 1 \
+--input_dataset="/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF_Tensorized_no_combine-stg_30-0s_256Hz" \
 --dataset_resample_algo="ADASYN" \
---training_set_target_count 4600   4600   4600   4600   4600 \
+--training_set_target_count 4600   4600   4600   4600   4600   4600   4600 \
 --save_model \
 --enable_dataset_resample_replacement \
 --use_class_embedding \

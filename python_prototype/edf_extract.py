@@ -29,19 +29,11 @@ SLEEP_STAGE_ANNOTATONS_CHANNEL = 2 #Channel of sleep stages in annotations file
 NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE = 5000 #Number of pseudo-random clips to generate for each sleep stage
 MAX_VOLTAGE = 2**15 - 1
 MIN_VOLTAGE = 0
-NUM_SLEEP_STAGES = 5 #Excluding 'unknown'
 ONE_HOT_OUTPUT = False #If true, sleep stages are exported as their one-hot classes tensor, else they are reported as a scalar
 NUM_PROCESSES = 22
 DATA_TYPE = tf.uint16
 
-sleep_stage_annotation_to_int = { #Note: Stages 3 and 4 are combined and '0' is reserved for unknown
-                                    "Sleep stage 1": 3,
-                                    "Sleep stage 2": 2,
-                                    "Sleep stage 3": 1,
-                                    "Sleep stage 4": 1,
-                                    "Sleep stage R": 4,
-                                    "Sleep stage W": 5,
-                                    "Sleep stage ?": 0}
+sleep_map = utilities.SleepStageMap()
 
 def signals_processing(signals:List) -> List:
     """
@@ -56,10 +48,10 @@ def signals_processing(signals:List) -> List:
 
 def scalar_to_one_hot(input:int) -> List:
     """
-    Returns the one-hot representation of the class number as a list of dimension NUM_SLEEP_STAGES
+    Returns the one-hot representation of the class number as a list of dimension num_sleep_stage
     """
 
-    return [1 if i == input else 0 for i in range(NUM_SLEEP_STAGES+1)] #The +1 is to account for the 'unknown' class
+    return [1 if i == input else 0 for i in range(sleep_map.get_num_stages()+1)] #The +1 is to account for the 'unknown' class
 
 def pseudo_random_clip(sleep_stage:int, clip_length_num_samples:int, max_min:tuple, stddev:float=2000) -> tf.Tensor:
     """
@@ -86,10 +78,10 @@ def pseudo_random_dataset(num_clips_per_sleep_stage:int, clip_length_num_samples
     output = {"sleep_stage":[], "pseudo_random":[]}
 
     for _ in range(num_clips_per_sleep_stage):
-        for sleep_stage in range(1, NUM_SLEEP_STAGES+1):
+        for sleep_stage in range(1, sleep_map.get_num_stages()+1):
             output["sleep_stage"].append(sleep_stage)
 
-            new_clip = pseudo_random_clip(sleep_stage, clip_length_num_samples, max_min=(MAX_VOLTAGE, MIN_VOLTAGE, NUM_SLEEP_STAGES, 1))
+            new_clip = pseudo_random_clip(sleep_stage, clip_length_num_samples, max_min=(MAX_VOLTAGE, MIN_VOLTAGE, sleep_map.get_num_stages(), 1))
             output["pseudo_random"].append(new_clip)
 
     # Convert to tensor
@@ -105,8 +97,9 @@ def prune_unknown(sleep_stages, signals):
     """
 
     clips_to_remove = []
+    sleep_map_dict = sleep_map.get_numerical_map()
     for sleep_stage_number in range(len(sleep_stages)):
-        if (sleep_stages[sleep_stage_number] == sleep_stage_annotation_to_int["Sleep stage ?"]): clips_to_remove.append(sleep_stage_number)
+        if (sleep_stages[sleep_stage_number] == sleep_map_dict["Sleep stage ?"]): clips_to_remove.append(sleep_stage_number)
             
     clips_to_remove.sort(reverse=True)
 
@@ -164,8 +157,9 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
         print(f"Could not read file '{annotations_filepath}'! Skipping file.")
         return -1
     
+    sleep_map_dict = sleep_map.get_numerical_map()
     sleep_stages = list(sleep_stages.readAnnotations()[SLEEP_STAGE_ANNOTATONS_CHANNEL])
-    sleep_stages = [sleep_stage_annotation_to_int[item] for item in sleep_stages]
+    sleep_stages = [sleep_map_dict[item] for item in sleep_stages]
     
     try: signal_reader = EdfReader(psg_filepath)
     except:
@@ -175,7 +169,7 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
     signals = list()
     channels = list(signal_reader.getSignalLabels())
 
-    total_raw_clips = math.floor(signal_reader.getFileDuration() / args.clip_length_s)
+    total_raw_clips = min(math.floor(signal_reader.getFileDuration() / args.clip_length_s), len(sleep_stages))
     clip_duration_samples = int(args.clip_length_s * NOMINAL_FREQUENCY_HZ)
 
     # Extract clips for each channel
@@ -198,8 +192,6 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
 
         signals.append(temp_clip)
 
-    del(signal_reader) # Free memory
-
     # Duplicate sleep stages to account for stages being shorter than the nominal 30s
     sleep_stages = resample_sleep_stages(sleep_stages, args.clip_length_s)
     sleep_stages = sleep_stages[0:total_raw_clips] #On some files, sleep stages are longer than PSG signals so we slice it. Assume that they line up at the lowest index.
@@ -214,7 +206,7 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
             sleep_stage_history = list()
 
             if i < historical_lookback_length:
-                sleep_stage_history = [sleep_stage_annotation_to_int["Sleep stage ?"] for _ in range(historical_lookback_length-i)]
+                sleep_stage_history = [sleep_map_dict["Sleep stage ?"] for _ in range(historical_lookback_length-i)]
                 sleep_stage_history = sleep_stages[0:i] + sleep_stage_history
             else:
                 sleep_stage_history = [sleep_stages[i-j] for j in range(historical_lookback_length)]
@@ -224,7 +216,7 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
     # Generate pseudo-random signal
     pseudo_random_list = list()
     for sleep_stage in sleep_stages:
-        new_clip = pseudo_random_clip(sleep_stage, int(float(args.clip_length_s) * args.downsampling_freq_hz), max_min=(MAX_VOLTAGE, MIN_VOLTAGE, NUM_SLEEP_STAGES, 0))
+        new_clip = pseudo_random_clip(sleep_stage, int(args.clip_length_s * args.downsampling_freq_hz), max_min=(MAX_VOLTAGE, MIN_VOLTAGE, sleep_map.get_num_stages(), 0))
         pseudo_random_list.append(new_clip)
 
     # Downsample
@@ -243,6 +235,8 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
 
     for i in range(len(channels_to_read)):
         signals[i] = tf.convert_to_tensor(signals[i], dtype=DATA_TYPE, name=channels_to_read[i])      
+
+    assert len(signals[0]) == len(sleep_stages), f"Sleep stages and PSG clips are not the same length ({len(sleep_stages)} vs. {len(signals[0])})"
 
     signals = dict(zip(channels_to_read, signals)) #Convert to dictionary
     signals["pseudo_random"] = pseudo_random_list
@@ -282,7 +276,7 @@ def process_dispatch(args, PSG_file_list, labels_file_list, channels_to_read, re
     except Exception as e:
         print(f"Error in child process {os.getpid()}: {e}")
 
-def read_all_nights_from_directory(args, channels_to_read:List[str]) -> (tf.Tensor, tf.Tensor, List[str]):
+def read_all_nights_from_directory(args, channels_to_read:List[str]) -> (dict, List[str], int):
     """
     Calls read_single_whole_night() for all files in folder and returns a dictionary of all channels and sleep stages concatenated along with an error flag.
 
@@ -374,7 +368,8 @@ def parse_arguments():
     # Parser
     parser = ArgumentParser(description='Script to extract data from EDF files and export to a Tensorflow dataset.')
     parser.add_argument('--type', help='Type of generation: "EDF" (read PSG files and format their data) or "pseudo_random" (generate pseudo-random data for each sleep stage and equal number of sleep stages in dataset). Defaults to "EDF".', choices=["EDF", "pseudo_random"], default='EDF')
-    parser.add_argument('--clip_length_s', help='Clip length (in sec). Must be one of 3.25, 5, 7.5, 10, 15, 30, 60, 90, 120.', choices=[3.25, 5, 7.5, 10, 15, 30, 60, 90, 120], default=30, type=float)
+    parser.add_argument('--clip_length_s', help='Clip length (in sec).', choices=[3.25, 5, 7.5, 10, 15, 30, 60, 90, 120], default=30, type=float)
+    parser.add_argument('--sleep_map_name', help='Choice of sleep stage mapping from raw data. Defaults to "no_combine"', choices=["no_combine", "deep_only_combine", "light_only_combine", "both_light_deep_combine"], default="no_combine", type=str)
     parser.add_argument('--directory_psg', help='Directory from which to fetch the PSG EDF files. Searches current workding directory by default.', default="")
     parser.add_argument('--directory_labels', help='Directory from which to fetch the PSG label files. Defaults to --directory_psg.', default="")
     parser.add_argument('--export_directory', help='Location to export dataset. Defaults to cwd.', default="")
@@ -390,6 +385,9 @@ def parse_arguments():
     if args.export_directory == "": args.export_directory = os.getcwd()
     print(f"[{(time.time()-start_time):.2f}s] Arguments loaded. Started dataset generation.")
 
+    # Update sleep map
+    sleep_map.set_map_name(args.sleep_map_name)
+
     return args
 
 def get_dir_size(path:str):
@@ -402,7 +400,7 @@ def get_dir_size(path:str):
                 total += get_dir_size(entry.path)
     return total
 
-def save_metadata_json(ds_filepath:str, args, channels_to_read:list, stages_cnt:list):
+def save_metadata_json(ds_filepath:str, args, channels_to_read:list, stages_cnt:list, num_files_used:int):
     """
     Make and save .json file containing metadata about the dataset.
     """
@@ -410,14 +408,16 @@ def save_metadata_json(ds_filepath:str, args, channels_to_read:list, stages_cnt:
     json_metadata = {
         "single_channel": (len(channels_to_read) == 1),
         "historical_lookback_length": HISTORICAL_LOOKBACK_LENGTH,
-        "num_stages": NUM_SLEEP_STAGES,
+        "num_stages": sleep_map.get_num_stages(),
+        "num_files_used": num_files_used,
         "one_hot_encoding": ONE_HOT_OUTPUT,
         "clip_length_s": args.clip_length_s,
         "sampling_freq_Hz": args.downsampling_freq_hz,
         "type": args.type,
         "data_type": str(DATA_TYPE),
         "time_to_export": f"{(time.time()-start_time):.2f}s",
-        "sleep_stages_mapping": sleep_stage_annotation_to_int,
+        "sleep_stages_numerical_map": sleep_map.get_numerical_map(),
+        "sleep_stages_map_name": sleep_map.get_map_name(),
         "total_clips": sum(stages_cnt),
         "sleep_stages_cnt": stages_cnt,
         "dataset_filesize_GB": round(get_dir_size(path=ds_filepath)/2**30, ndigits=2)
@@ -433,7 +433,7 @@ def main():
     # Generate data dictionary
     if args.type == "pseudo_random":
         print(f"Will generate {NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE} pseudo-random clips per sleep stage.")
-        output, return_code = pseudo_random_dataset(num_clips_per_sleep_stage=NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE, clip_length_num_samples=NOMINAL_FREQUENCY_HZ*float(args.clip_length_s), data_type=DATA_TYPE)
+        output, return_code = pseudo_random_dataset(num_clips_per_sleep_stage=NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE, clip_length_num_samples=NOMINAL_FREQUENCY_HZ*args.clip_length_s, data_type=DATA_TYPE)
 
     elif args.type == "EDF":
         # Load data
@@ -452,11 +452,11 @@ def main():
 
         # Make dataset filepath
         if args.type == 'pseudo_random':
-            ds_filepath = f"{args.export_directory}/Pseudo_Random_Tensorized_{NUM_SLEEP_STAGES}-stg_{args.clip_length_s}s"
+            ds_filepath = f"{args.export_directory}/Pseudo_Random_Tensorized_{sleep_map.get_map_name()}_{args.clip_length_s}s"
         elif "filter" in os.path.basename(args.directory_psg):
-            ds_filepath = f"{args.export_directory}/SS3_EDF_filtered_Tensorized_{NUM_SLEEP_STAGES}-stg_{args.clip_length_s}s"
+            ds_filepath = f"{args.export_directory}/SS3_EDF_filtered_Tensorized_{sleep_map.get_map_name()}_{args.clip_length_s}s"
         else:
-            ds_filepath = f"{args.export_directory}/SS3_EDF_Tensorized_{NUM_SLEEP_STAGES}-stg_{args.clip_length_s}s"
+            ds_filepath = f"{args.export_directory}/SS3_EDF_Tensorized_{sleep_map.get_map_name()}-stg_{args.clip_length_s}s"
 
         ds_filepath = ds_filepath + f'_{args.downsampling_freq_hz}Hz'
         if ONE_HOT_OUTPUT: ds_filepath = ds_filepath + '_one-hot'
@@ -471,8 +471,8 @@ def main():
         tf.data.Dataset.save(ds, compression=None, path=ds_filepath)
 
         # Save metadata JSON
-        stages_cnt = utilities.count_instances_per_class(output['sleep_stage'], NUM_SLEEP_STAGES+1)
-        save_metadata_json(ds_filepath=ds_filepath, args=args, channels_to_read=channels_to_read, stages_cnt=stages_cnt)
+        stages_cnt = utilities.count_instances_per_class(output['sleep_stage'], sleep_map.get_num_stages()+1) # +1 is to account for unknown sleep stage
+        save_metadata_json(ds_filepath=ds_filepath, args=args, channels_to_read=channels_to_read, stages_cnt=stages_cnt, num_files_used=len(labels_file_list))
 
         print(f"[{(time.time()-start_time):.2f}s] Dataset saved at: {ds_filepath}. It contains {output['sleep_stage'].shape[0]} clips.")
     else:
