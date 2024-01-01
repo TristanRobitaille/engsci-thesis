@@ -6,7 +6,7 @@ import io
 import git
 import sys
 import json
-# import math
+import socket
 import sklearn
 import datetime
 import imblearn
@@ -162,7 +162,10 @@ def load_from_dataset(args):
         raise ValueError(f"Number of class weights ({len(args.class_weights)}) should be equal to number of sleep stages ({sleep_map.get_num_stages()+1})")
 
     # Load dataset
-    data = tf.data.Dataset.load(args.input_dataset)
+    if "cedar.computecanada.ca" in socket.gethostname(): # Compute Canada (aka running on GPU needs Tensorflow 2.8.0) needs a Tensorflow downgrade (or gets a compilation error)
+        data = tf.data.experimental.load(args.input_dataset)
+    else: data = tf.data.Dataset.load(args.input_dataset)
+
     data = next(iter(data))
 
     sleep_stages = data['sleep_stage']
@@ -815,7 +818,7 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
 def main():
     # Parse arguments
     args = parse_arguments()
-    print(f"[{(time.time()-start_time):.2f}s] Arguments parsed; starting dataset load.")
+    print(f"[{(time.time()-start_time):.2f}s] Arguments parsed; starting dataset load.\n")
 
     # Load data
     try: data, start_of_night_markers, original_sleep_stage_cnt, dataset_metadata = load_from_dataset(args=args)
@@ -842,7 +845,8 @@ def main():
         model.save(f"{out_fp}/models/model.tf", save_format="tf")
         print(f"[{(time.time()-start_time):.2f}s] Saved model to {out_fp}/models/model.tf")
 
-        tf.keras.utils.plot_model(model.build_graph(), to_file=f"{out_fp}/model_architecture.png", expand_nested=True, show_trainable=True, show_shapes=True, show_layer_activations=True, dpi=300, show_dtype=True)
+        if "cedar.computecanada.ca" not in socket.gethostname(): # Only export model if not running on Cedar (aka running TF 2.8) since it doesn't support it
+            tf.keras.utils.plot_model(model.build_graph(), to_file=f"{out_fp}/model_architecture.png", expand_nested=True, show_trainable=True, show_shapes=True, show_layer_activations=True, dpi=300, show_dtype=True)
 
         # Convert to Tensorflow Lite model and save
         converter = tf.lite.TFLiteConverter.from_keras_model(model)

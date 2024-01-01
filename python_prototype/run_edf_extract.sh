@@ -9,14 +9,8 @@
 module load cuda cudnn 
 source ~/tensorflow/bin/activate
 
-python /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/edf_extract.py \
---type=EDF --clip_length_s=30 --num_files=100 --directory_psg=/home/tristanr/projects/def-xilinliu/data/SS3_EDF \
---directory_labels=/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/data --export_directory=/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/data
-
-python /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/edf_extract.py \
---type=EDF --clip_length_s=15 --num_files=100 --directory_psg=/home/tristanr/projects/def-xilinliu/data/SS3_EDF \
---directory_labels=/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/data --export_directory=/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/data
-
-python /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/edf_extract.py \
---type=EDF --clip_length_s=7.5 --num_files=100 --directory_psg=/home/tristanr/projects/def-xilinliu/data/SS3_EDF \
---directory_labels=/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/data --export_directory=/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/data
+python3 /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/edf_extract.py \
+--type=EDF --clip_length_s=30 --num_files=100 --sleep_map_name=light_only_combine --enable_multiprocessing --sampling_freq_hz=256 \
+--directory_psg=/home/tristanr/projects/def-xilinliu/data/SS3_EDF \
+--directory_labels=/home/tristanr/projects/def-xilinliu/data/SS3_EDF \
+--export_directory=/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/data

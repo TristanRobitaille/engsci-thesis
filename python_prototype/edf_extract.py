@@ -9,6 +9,7 @@ import glob
 import math
 import json
 import shutil
+import socket
 import utilities
 
 from typing import List
@@ -216,14 +217,14 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
     # Generate pseudo-random signal
     pseudo_random_list = list()
     for sleep_stage in sleep_stages:
-        new_clip = pseudo_random_clip(sleep_stage, int(args.clip_length_s * args.downsampling_freq_hz), max_min=(MAX_VOLTAGE, MIN_VOLTAGE, sleep_map.get_num_stages(), 0))
+        new_clip = pseudo_random_clip(sleep_stage, int(args.clip_length_s * args.sampling_freq_hz), max_min=(MAX_VOLTAGE, MIN_VOLTAGE, sleep_map.get_num_stages(), 0))
         pseudo_random_list.append(new_clip)
 
     # Downsample
-    if (args.downsampling_freq_hz != NOMINAL_FREQUENCY_HZ):
+    if (args.sampling_freq_hz != NOMINAL_FREQUENCY_HZ):
         for channel_index in range(len(signals)):
             for clip_index in range(len(signals[channel_index])):
-                signals[channel_index][clip_index] = resample_list(input=signals[channel_index][clip_index], input_freq=NOMINAL_FREQUENCY_HZ, target_freq=args.downsampling_freq_hz)
+                signals[channel_index][clip_index] = resample_list(input=signals[channel_index][clip_index], input_freq=NOMINAL_FREQUENCY_HZ, target_freq=args.sampling_freq_hz)
 
     # Convert to tensors
     sleep_stages = tf.convert_to_tensor(sleep_stages, dtype=tf.int8, name="sleep_stage")
@@ -375,7 +376,7 @@ def parse_arguments():
     parser.add_argument('--export_directory', help='Location to export dataset. Defaults to cwd.', default="")
     parser.add_argument('--num_files', help='Number of files to parse. Parsed in alphabetical order. Defaults to 5 files.', type=int, default=5)
     parser.add_argument('--enable_multiprocessing', help='Enables multiprocessing of data. Defaults to False if argument unused.', action='store_true')
-    parser.add_argument('--downsampling_freq_hz', help='Desired sampling frequency (Hz) at which to downsample. Frequencies that are not an integer multiple of the original frequency result in \
+    parser.add_argument('--sampling_freq_hz', help='Desired sampling frequency (Hz) at which to resample (up- or downsample). Frequencies that are not an integer multiple of the original frequency result in \
                         interpolated samples.', type=int, default=NOMINAL_FREQUENCY_HZ)
 
     # Parse arguments
@@ -383,10 +384,15 @@ def parse_arguments():
     if args.directory_psg == "": args.directory_psg = os.getcwd()
     if args.directory_labels == "": args.directory_labels = args.directory_psg
     if args.export_directory == "": args.export_directory = os.getcwd()
-    print(f"[{(time.time()-start_time):.2f}s] Arguments loaded. Started dataset generation.")
 
     # Update sleep map
     sleep_map.set_map_name(args.sleep_map_name)
+
+    # Print arguments received
+    for arg in vars(args):
+        print(f"{arg}: {getattr(args, arg)}")
+
+    print(f"[{(time.time()-start_time):.2f}s] Arguments loaded. Started dataset generation.")
 
     return args
 
@@ -412,7 +418,7 @@ def save_metadata_json(ds_filepath:str, args, channels_to_read:list, stages_cnt:
         "num_files_used": num_files_used,
         "one_hot_encoding": ONE_HOT_OUTPUT,
         "clip_length_s": args.clip_length_s,
-        "sampling_freq_Hz": args.downsampling_freq_hz,
+        "sampling_freq_Hz": args.sampling_freq_hz,
         "type": args.type,
         "data_type": str(DATA_TYPE),
         "time_to_export": f"{(time.time()-start_time):.2f}s",
@@ -458,7 +464,7 @@ def main():
         else:
             ds_filepath = f"{args.export_directory}/SS3_EDF_Tensorized_{sleep_map.get_map_name()}-stg_{args.clip_length_s}s"
 
-        ds_filepath = ds_filepath + f'_{args.downsampling_freq_hz}Hz'
+        ds_filepath = ds_filepath + f'_{args.sampling_freq_hz}Hz'
         if ONE_HOT_OUTPUT: ds_filepath = ds_filepath + '_one-hot'
         if HISTORICAL_LOOKBACK_LENGTH > 0: ds_filepath = ds_filepath + f'_history_{HISTORICAL_LOOKBACK_LENGTH}-steps'
         if len(channels_to_read) == 1: ds_filepath = ds_filepath + f"_{channels_to_read[0]}"
@@ -468,7 +474,10 @@ def main():
         # Save dataset
         if os.path.exists(path=ds_filepath): 
             shutil.rmtree(path=ds_filepath) # Delete file if it exists
-        tf.data.Dataset.save(ds, compression=None, path=ds_filepath)
+        
+        if "cedar.computecanada.ca" in socket.gethostname(): # Compute Canada (aka running on GPU needs Tensorflow 2.8.0) needs a Tensorflow downgrade (or gets a compilation error)
+            tf.data.experimental.save(ds, compression=None, path=ds_filepath)
+        else: tf.data.Dataset.save(ds, compression=None, path=ds_filepath)
 
         # Save metadata JSON
         stages_cnt = utilities.count_instances_per_class(output['sleep_stage'], sleep_map.get_num_stages()+1) # +1 is to account for unknown sleep stage
