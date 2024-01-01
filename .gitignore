@@ -27,6 +27,21 @@ latex/proposal/proposal.log
 latex/proposal/proposal.run.xml
 latex/proposal/proposal.synctex.gz
 
+# Interim report
+latex/interim_report/interim_report.aux
+latex/interim_report/interim_report.bbl
+latex/interim_report/interim_report.bcf
+latex/interim_report/interim_report.fls
+latex/interim_report/interim_report.lof
+latex/interim_report/interim_report.log
+latex/interim_report/interim_report.lot
+latex/interim_report/interim_report.blg
+latex/interim_report/interim_report.out
+latex/interim_report/interim_report.fdb_latexmk
+latex/interim_report/interim_report.run.xml
+latex/interim_report/interim_report.synctex.gz
+latex/interim_report/interim_report.toc
+
 ### Tensorflow
 python_prototype/*.out
 python_prototype/log*
