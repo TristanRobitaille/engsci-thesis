@@ -230,12 +230,12 @@ def run_model(model, data:dict, whole_night_indices:list, data_type:tf.DType, nu
 
             if num_sleep_stage_history > 0:
                 x = tf.concat([x[:,:-num_sleep_stage_history], historical_pred], axis=1) # Concatenate historical prediction to input
-                if whole_night_indices[total].numpy()[0] == 1.0: historical_pred = tf.zeros(shape=(1, num_sleep_stage_history)) # Reset historical prediction at 0 (unknown) if at the start a new night
+                if total in whole_night_indices: historical_pred = tf.zeros(shape=(1, num_sleep_stage_history)) # Reset historical prediction at 0 (unknown) if at the start a new night
 
             sleep_stage_pred = model(x, training=False)
             sleep_stage_pred = tf.argmax(sleep_stage_pred, axis=1)
 
-            if whole_night_indices[total].numpy()[0] == 1.0: output_filter.reset() # Reset filter if starting a new night
+            if total in whole_night_indices: output_filter.reset() # Reset filter if starting a new night
             sleep_stage_pred = tf.cast(output_filter.filter(sleep_stage_pred), dtype=data_type) # Filter sleep stage
             
             if num_sleep_stage_history > 0: historical_pred = tf.concat([tf.expand_dims(sleep_stage_pred, axis=1), historical_pred[:, 0:num_sleep_stage_history-1]], axis=1)
@@ -266,14 +266,14 @@ def run_tflite_model(model_fp:str, data:str, whole_night_indices:list, data_type
 
         if num_sleep_stage_history > 0:
             x = tf.concat([x[:,:-num_sleep_stage_history], historical_pred], axis=1) # Concatenate historical prediction to input
-            if whole_night_indices[total].numpy()[0] == 1.0: historical_pred = tf.zeros(shape=(1, num_sleep_stage_history)) # Reset historical prediction at 0 (unknown) if at the start a new night
+            if total in whole_night_indices: historical_pred = tf.zeros(shape=(1, num_sleep_stage_history)) # Reset historical prediction at 0 (unknown) if at the start a new night
 
         interpreter.set_tensor(input_details[0]['index'], x)
         interpreter.invoke()
         sleep_stage_pred = interpreter.get_tensor(output_details[0]['index'])
         sleep_stage_pred = tf.argmax(sleep_stage_pred, axis=1)
 
-        if whole_night_indices[total].numpy()[0] == 1.0: output_filter.reset() # Reset filter if starting a new night
+        if total in whole_night_indices: output_filter.reset() # Reset filter if starting a new night
         sleep_stage_pred = tf.cast(output_filter.filter(sleep_stage_pred), dtype=data_type) # Filter sleep stage
 
         if num_sleep_stage_history > 0: historical_pred = tf.concat([tf.expand_dims(sleep_stage_pred, axis=1), historical_pred[:, 0:num_sleep_stage_history-1]], axis=1)

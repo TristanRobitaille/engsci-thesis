@@ -122,7 +122,7 @@ def split_whole_night_validation_set(signals, args, sleep_stages, whole_night_ma
     Split the dataset into whole nights for validation
     """
    
-    whole_night_indices = [i for i, x in enumerate(whole_night_markers.numpy()) if x == True]
+    whole_night_indices = [i for i, x in enumerate(whole_night_markers.numpy()) if x == 1]
     last_k_fold_set = (NUM_NIGHTS_VALIDATION*args.k_fold_val_set + NUM_NIGHTS_VALIDATION) >= len(whole_night_indices) # Last k-fold validation set
     start_of_1st_val_night = whole_night_indices[NUM_NIGHTS_VALIDATION*args.k_fold_val_set] # Index of the first clip in the first validation night
     
@@ -138,7 +138,11 @@ def split_whole_night_validation_set(signals, args, sleep_stages, whole_night_ma
         signals_val = signals[start_of_1st_val_night:]
         sleep_stages_val = sleep_stages[start_of_1st_val_night:]
 
-    return signals_train, signals_val, sleep_stages_train, sleep_stages_val
+    # Update new night markers to match indices of validation data
+    whole_night_indices = whole_night_indices[NUM_NIGHTS_VALIDATION*args.k_fold_val_set : NUM_NIGHTS_VALIDATION*args.k_fold_val_set + NUM_NIGHTS_VALIDATION]
+    whole_night_indices = [index - start_of_1st_val_night for index in whole_night_indices]
+
+    return signals_train, signals_val, sleep_stages_train, sleep_stages_val, whole_night_indices
 
 def load_from_dataset(args):
     """
@@ -208,8 +212,7 @@ def load_from_dataset(args):
     if NUM_SLEEP_STAGE_HISTORY > 0: signals = np.concatenate((signals, sleep_stages_history), axis=1)
 
     # Split into training and validation sets
-    signals_train, signals_val, sleep_stages_train, sleep_stages_val = split_whole_night_validation_set(signals, args, sleep_stages, start_of_night_markers)
-    start_of_night_markers = start_of_night_markers[len(signals_train):args.num_clips]
+    signals_train, signals_val, sleep_stages_train, sleep_stages_val, start_of_val_night_indices = split_whole_night_validation_set(signals, args, sleep_stages, start_of_night_markers)
 
     # Shuffle training data
     if SHUFFLE_TRAINING_CLIPS: signals_train, sleep_stages_train = utilities.shuffle(signals_train, sleep_stages_train, RANDOM_SEED)
@@ -237,7 +240,7 @@ def load_from_dataset(args):
     sleep_stages_val = tf.cast(sleep_stages_val, dtype=DATA_TYPE)
     data_dict = {"signals_train":signals_train, "signals_val":signals_val, "sleep_stages_train":sleep_stages_train, "sleep_stages_val":sleep_stages_val}
 
-    return data_dict, start_of_night_markers, original_sleep_stage_count, dataset_metadata
+    return data_dict, start_of_val_night_indices, original_sleep_stage_count, dataset_metadata
 
 def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_stage_count:list, sleep_stages_count_training:list,
                    sleep_stages_count_val:list, pred_cnt:dict, mlp_dense_activation, dataset_metadata:dict, note:str="", model_specific_only:bool=False) -> None:
@@ -429,7 +432,7 @@ def export_training_val_plot(out_fp:str, fit_history):
     plt.yticks(np.arange(0,max([max_y1_tick+0.1, max_y2_tick+0.1, 1+0.1]), step=0.1))
     plt.savefig(f"{out_fp}/models/train_val_accuracy.png")
 
-def manual_val(model, args, type:str, data:dict, whole_night_indices:dict, out_fp:str, ds_metadata:dict):
+def manual_val(model, args, type:str, data:dict, whole_night_indices:list, out_fp:str, ds_metadata:dict):
     total_correct = 0
     accuracy = 0
     pred_cnt = [0 for _ in range(sleep_map.get_num_stages()+1)]
@@ -892,7 +895,7 @@ def main():
     print(f"[{(time.time()-start_time):.2f}s] Arguments parsed; starting dataset load.\n")
 
     # Load data
-    try: data, start_of_night_markers, original_sleep_stage_cnt, dataset_metadata = load_from_dataset(args=args)
+    try: data, start_of_val_night_indices, original_sleep_stage_cnt, dataset_metadata = load_from_dataset(args=args)
     except Exception as e: utilities.log_error_and_exit(exception=e, manual_description=f"[{(time.time()-start_time):.2f}s] Failed to load data from dataset.")
     global train_signals_representative_dataset
     train_signals_representative_dataset = data["signals_train"]
@@ -912,56 +915,56 @@ def main():
 
     # Save models to disk
     models = {"tf":model, "tflite":-1, "tflite (quant)":-1, "tflite (full quant)":-1, "tflite (16bx8b full quant)":-1}
-    # if args.save_model:
-    #     model.save(f"{out_fp}/models/model.tf", save_format="tf")
-    #     print(f"[{(time.time()-start_time):.2f}s] Saved model to {out_fp}/models/model.tf")
+    if args.save_model:
+        model.save(f"{out_fp}/models/model.tf", save_format="tf")
+        print(f"[{(time.time()-start_time):.2f}s] Saved model to {out_fp}/models/model.tf")
 
-    #     if "cedar.computecanada.ca" not in socket.gethostname(): # Only export model if not running on Cedar (aka running TF 2.8) since it doesn't support it
-    #         tf.keras.utils.plot_model(model.build_graph(), to_file=f"{out_fp}/model_architecture.png", expand_nested=True, show_trainable=True, show_shapes=True, show_layer_activations=True, dpi=300, show_dtype=True)
+        if "cedar.computecanada.ca" not in socket.gethostname(): # Only export model if not running on Cedar (aka running TF 2.8) since it doesn't support it
+            tf.keras.utils.plot_model(model.build_graph(), to_file=f"{out_fp}/model_architecture.png", expand_nested=True, show_trainable=True, show_shapes=True, show_layer_activations=True, dpi=300, show_dtype=True)
 
-    #     # Convert to Tensorflow Lite model and save
-    #     converter = tf.lite.TFLiteConverter.from_keras_model(model)
-    #     tflite_model = converter.convert()
-    #     models["tflite"] = f"{out_fp}/models/model.tflite"
-    #     with open(f"{out_fp}/models/model.tflite", "wb") as f:
-    #         f.write(tflite_model)
-    #     print(f"[{(time.time()-start_time):.2f}s] Saved TensorFlow Lite model to {out_fp}/models/model.tflite.")
+        # Convert to Tensorflow Lite model and save
+        converter = tf.lite.TFLiteConverter.from_keras_model(model)
+        tflite_model = converter.convert()
+        models["tflite"] = f"{out_fp}/models/model.tflite"
+        with open(f"{out_fp}/models/model.tflite", "wb") as f:
+            f.write(tflite_model)
+        print(f"[{(time.time()-start_time):.2f}s] Saved TensorFlow Lite model to {out_fp}/models/model.tflite.")
 
-    #     # Convert to quantized Tensorflow Lite model and save
-    #     converter.optimizations = [tf.lite.Optimize.DEFAULT]
-    #     tflite_quant_model = converter.convert()
-    #     models["tflite (quant)"] = f"{out_fp}/models/model_quant.tflite"
-    #     with open(f"{out_fp}/models/model_quant.tflite", "wb") as f:
-    #         f.write(tflite_quant_model)
-    #     print(f"[{(time.time()-start_time):.2f}s] Saved quantized TensorFlow Lite model to {out_fp}/models/model_quant.tflite.")
+        # Convert to quantized Tensorflow Lite model and save
+        converter.optimizations = [tf.lite.Optimize.DEFAULT]
+        tflite_quant_model = converter.convert()
+        models["tflite (quant)"] = f"{out_fp}/models/model_quant.tflite"
+        with open(f"{out_fp}/models/model_quant.tflite", "wb") as f:
+            f.write(tflite_quant_model)
+        print(f"[{(time.time()-start_time):.2f}s] Saved quantized TensorFlow Lite model to {out_fp}/models/model_quant.tflite.")
 
-    #     # Convert to full quantized Tensorflow Lite model and save
-    #     converter.optimizations = [tf.lite.Optimize.DEFAULT]
-    #     converter.representative_dataset = representative_dataset
-    #     converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
-    #     converter.inference_input_type = tf.uint8
-    #     converter.inference_output_type = tf.uint8
-    #     tflite_full_quant_model = converter.convert()
-    #     models["tflite (full quant)"] = f"{out_fp}/models/model_full_quant.tflite"
-    #     with open(f"{out_fp}/models/model_full_quant.tflite", "wb") as f:
-    #         f.write(tflite_full_quant_model)
-    #     print(f"[{(time.time()-start_time):.2f}s] Saved fully quantized TensorFlow Lite model to {out_fp}/models/model_full_quant.tflite.")
+        # Convert to full quantized Tensorflow Lite model and save
+        converter.optimizations = [tf.lite.Optimize.DEFAULT]
+        converter.representative_dataset = representative_dataset
+        converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
+        converter.inference_input_type = tf.uint8
+        converter.inference_output_type = tf.uint8
+        tflite_full_quant_model = converter.convert()
+        models["tflite (full quant)"] = f"{out_fp}/models/model_full_quant.tflite"
+        with open(f"{out_fp}/models/model_full_quant.tflite", "wb") as f:
+            f.write(tflite_full_quant_model)
+        print(f"[{(time.time()-start_time):.2f}s] Saved fully quantized TensorFlow Lite model to {out_fp}/models/model_full_quant.tflite.")
 
-    #     # Convert to full quantized Tensorflow Lite model with 16b activations and 8b weights and save
-    #     converter.inference_input_type = tf.float32
-    #     converter.inference_output_type = tf.float32
-    #     converter.target_spec.supported_ops = [tf.lite.OpsSet.EXPERIMENTAL_TFLITE_BUILTINS_ACTIVATIONS_INT16_WEIGHTS_INT8]
-    #     tflite_16x8_full_quant_model = converter.convert()
-    #     models["tflite (16bx8b full quant)"] = f"{out_fp}/models/model_full_quant_16bx8b.tflite"
-    #     with open(f"{out_fp}/models/model_full_quant_16bx8b.tflite", "wb") as f:
-    #         f.write(tflite_16x8_full_quant_model)
-    #     print(f"[{(time.time()-start_time):.2f}s] Saved fully quantized TensorFlow Lite model (16b activations and 8b weights) to {out_fp}/models/model_full_quant_16bx8b.tflite.")
+        # Convert to full quantized Tensorflow Lite model with 16b activations and 8b weights and save
+        converter.inference_input_type = tf.float32
+        converter.inference_output_type = tf.float32
+        converter.target_spec.supported_ops = [tf.lite.OpsSet.EXPERIMENTAL_TFLITE_BUILTINS_ACTIVATIONS_INT16_WEIGHTS_INT8]
+        tflite_16x8_full_quant_model = converter.convert()
+        models["tflite (16bx8b full quant)"] = f"{out_fp}/models/model_full_quant_16bx8b.tflite"
+        with open(f"{out_fp}/models/model_full_quant_16bx8b.tflite", "wb") as f:
+            f.write(tflite_16x8_full_quant_model)
+        print(f"[{(time.time()-start_time):.2f}s] Saved fully quantized TensorFlow Lite model (16b activations and 8b weights) to {out_fp}/models/model_full_quant_16bx8b.tflite.")
 
     # Manual validation
     acc = {"tf":5, "tflite":5, "tflite (quant)":5, "tflite (full quant)":5, "tflite (16bx8b full quant)":5}
     pred_cnt = {"tf":[], "tflite":[], "tflite (quant)":[], "tflite (full quant)":[], "tflite (16bx8b full quant)":[]}
-    # for model_type, model in models.items():
-    #     acc[model_type], pred_cnt[model_type] = manual_val(model, args=args, type=model_type, data=data, whole_night_indices=start_of_night_markers, out_fp=out_fp, ds_metadata=dataset_metadata)
+    for model_type, model in models.items():
+        acc[model_type], pred_cnt[model_type] = manual_val(model, args=args, type=model_type, data=data, whole_night_indices=start_of_val_night_indices, out_fp=out_fp, ds_metadata=dataset_metadata)
 
     # Count sleep stages in training and validation datasets
     sleep_stages_cnt_train = utilities.count_instances_per_class(data['sleep_stages_train'], sleep_map.get_num_stages()+1)
@@ -973,7 +976,7 @@ def main():
     print(f"[{(time.time()-start_time):.2f}s] Saved model summary to {out_fp}/info.txt.")
 
     # Plot validation accuracy and loss during training
-    # export_training_val_plot(out_fp, fit_history=fit_history)
+    export_training_val_plot(out_fp, fit_history=fit_history)
 
     # Write to k-fold validation file
     if K_FOLD_OUTPUT_TO_FILE:
