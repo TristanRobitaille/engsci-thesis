@@ -3,11 +3,11 @@ start_time = time.time()
 
 import os
 import io
+import csv
 import git
 import sys
 import json
 import socket
-import sklearn
 import datetime
 import imblearn
 import utilities
@@ -17,21 +17,20 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 
-MAX_VOLTAGE = 2**16-1 #Maximum ADC code output
+MAX_VOLTAGE = 2**16-1 # Maximum ADC code output
 DEFAULT_CLIP_LENGTH_S = int(30)
 SAMPLING_FREQUENCY_HZ = int(256)
 USE_SLEEP_STAGE_HISTORY = False
 NUM_SLEEP_STAGE_HISTORY = -1
-NUM_OUTPUT_FILTERING = 0
 DATA_TYPE = tf.float32
-TEST_SET_RATIO = 0.04 #Percentage of training data reserved for validation
+NUM_NIGHTS_VALIDATION = 2 # Number of nights used for validation
 RANDOM_SEED = 42
 NUM_WARMUP_STEPS = 4000
 VERBOSITY = 'QUIET' #'QUIET', 'NORMAL', 'DETAILED'
 RESAMPLE_TRAINING_DATASET = False
-WHOLE_NIGHT_VALIDATION = True #Whether to validate individual nights (sequentially) or a random subset of clips (if we use the prediction history, we need whole nights for validation)
 SHUFFLE_TRAINING_CLIPS = True
 NUM_CLIPS_PER_FILE_EDGETPU = 500 # Only valid for 256Hz
+K_FOLD_OUTPUT_TO_FILE = True # If true, will write validation accuracy to a CSV for complete k-fold validation
 
 train_signals_representative_dataset = None
 sleep_map = utilities.SleepStageMap()
@@ -118,19 +117,26 @@ def resample_clips(args, signals_train, labels_train):
 
     return signals_train, labels_train, original_sleep_stage_count
 
-def split_whole_night_validation_set(signals, sleep_stages, whole_night_markers):
+def split_whole_night_validation_set(signals, args, sleep_stages, whole_night_markers):
     """
     Split the dataset into whole nights for validation
     """
-
-    split_index = int((1-TEST_SET_RATIO) * len(sleep_stages))
+   
     whole_night_indices = [i for i, x in enumerate(whole_night_markers.numpy()) if x == True]
-    cutoff_night = min(whole_night_indices, key=lambda x: abs(x - split_index))
-
-    signals_train = signals[0:cutoff_night]
-    signals_val = signals[cutoff_night:]
-    sleep_stages_train = sleep_stages[0:cutoff_night]
-    sleep_stages_val = sleep_stages[cutoff_night:]
+    last_k_fold_set = (NUM_NIGHTS_VALIDATION*args.k_fold_val_set + NUM_NIGHTS_VALIDATION) >= len(whole_night_indices) # Last k-fold validation set
+    start_of_1st_val_night = whole_night_indices[NUM_NIGHTS_VALIDATION*args.k_fold_val_set] # Index of the first clip in the first validation night
+    
+    if (not last_k_fold_set):
+        end_of_last_val_night = whole_night_indices[NUM_NIGHTS_VALIDATION*args.k_fold_val_set + NUM_NIGHTS_VALIDATION] # Index of the first clip of the night after the last validation night
+        signals_train = np.concatenate((np.array(signals[0:start_of_1st_val_night]), signals[end_of_last_val_night:]))
+        sleep_stages_train = np.concatenate((np.array(sleep_stages[0:start_of_1st_val_night]), sleep_stages[end_of_last_val_night:]))
+        signals_val = signals[start_of_1st_val_night : end_of_last_val_night]
+        sleep_stages_val = sleep_stages[start_of_1st_val_night : end_of_last_val_night]
+    else:
+        signals_train = signals[0:start_of_1st_val_night]
+        sleep_stages_train = sleep_stages[0:start_of_1st_val_night]
+        signals_val = signals[start_of_1st_val_night:]
+        sleep_stages_val = sleep_stages[start_of_1st_val_night:]
 
     return signals_train, signals_val, sleep_stages_train, sleep_stages_val
 
@@ -140,7 +146,6 @@ def load_from_dataset(args):
     """
 
     global NUM_SLEEP_STAGE_HISTORY
-    global WHOLE_NIGHT_VALIDATION
     global SAMPLING_FREQUENCY_HZ
     global CLIP_LENGTH_NUM_SAMPLES
 
@@ -151,15 +156,21 @@ def load_from_dataset(args):
 
     SAMPLING_FREQUENCY_HZ = dataset_metadata["sampling_freq_Hz"]
     NUM_SLEEP_STAGE_HISTORY = dataset_metadata["historical_lookback_length"]
-    WHOLE_NIGHT_VALIDATION = WHOLE_NIGHT_VALIDATION or (NUM_SLEEP_STAGE_HISTORY > 0)
     CLIP_LENGTH_NUM_SAMPLES = int(dataset_metadata["clip_length_s"] * SAMPLING_FREQUENCY_HZ)
     sleep_map.set_map_name(dataset_metadata["sleep_stages_map_name"])
 
     # Check validity of arguments
+    val_nights = range(args.k_fold_val_set*NUM_NIGHTS_VALIDATION, args.k_fold_val_set*NUM_NIGHTS_VALIDATION+NUM_NIGHTS_VALIDATION)
     if (dataset_metadata["clip_length_s"] % args.patch_length_s != 0):
         raise ValueError(f"Patch length ({args.patch_length_s}s) needs to be a multiple of clip length ({dataset_metadata['clip_length_s']}s! Aborting.)")
     if len(args.class_weights) != (sleep_map.get_num_stages()+1):
         raise ValueError(f"Number of class weights ({len(args.class_weights)}) should be equal to number of sleep stages ({sleep_map.get_num_stages()+1})")
+    if (dataset_metadata["num_files_used"] % NUM_NIGHTS_VALIDATION != 0):
+        raise ValueError(f"Number of nights in dataset ({dataset_metadata['num_files_used']}) not a multiple of number of nights to use in validation ({NUM_NIGHTS_VALIDATION})!")
+    if not os.path.exists(os.path.dirname(args.k_fold_val_results_fp)):
+        raise ValueError(f"Base path for k-fold validation results ({os.path.dirname(args.k_fold_val_results_fp)}) doesn't exist!")
+    if max(val_nights) >= dataset_metadata["num_files_used"]:
+        raise ValueError(f"One of more nights used for validation ({list(val_nights)}) exceeds number of files in dataset ({dataset_metadata['num_files_used']})!")
 
     # Load dataset
     if "cedar.computecanada.ca" in socket.gethostname(): # Compute Canada (aka running on GPU needs Tensorflow 2.8.0) needs a Tensorflow downgrade (or gets a compilation error)
@@ -197,10 +208,8 @@ def load_from_dataset(args):
     if NUM_SLEEP_STAGE_HISTORY > 0: signals = np.concatenate((signals, sleep_stages_history), axis=1)
 
     # Split into training and validation sets
-    if WHOLE_NIGHT_VALIDATION:
-        signals_train, signals_val, sleep_stages_train, sleep_stages_val = split_whole_night_validation_set(signals, sleep_stages, start_of_night_markers)
-        start_of_night_markers = start_of_night_markers[len(signals_train):args.num_clips]
-    else: signals_train, signals_val, sleep_stages_train, sleep_stages_val = sklearn.model_selection.train_test_split(signals, sleep_stages, test_size=TEST_SET_RATIO, random_state=RANDOM_SEED)
+    signals_train, signals_val, sleep_stages_train, sleep_stages_val = split_whole_night_validation_set(signals, args, sleep_stages, start_of_night_markers)
+    start_of_night_markers = start_of_night_markers[len(signals_train):args.num_clips]
 
     # Shuffle training data
     if SHUFFLE_TRAINING_CLIPS: signals_train, sleep_stages_train = utilities.shuffle(signals_train, sleep_stages_train, RANDOM_SEED)
@@ -231,7 +240,7 @@ def load_from_dataset(args):
     return data_dict, start_of_night_markers, original_sleep_stage_count, dataset_metadata
 
 def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_stage_count:list, sleep_stages_count_training:list,
-                   sleep_stages_count_val:list, pred_cnt:dict, mlp_dense_activation, dataset_metadata:dict, note:str="") -> None:
+                   sleep_stages_count_val:list, pred_cnt:dict, mlp_dense_activation, dataset_metadata:dict, note:str="", model_specific_only:bool=False) -> None:
     """
     Saves model and training summary to file
     """
@@ -251,19 +260,21 @@ def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_
 
         log = "VISION TRANSFORMER MODEL TRAINING SUMMARY\n"
         log += f"Git hash: {repo.head.object.hexsha}\n"
-        log += f"Time to complete: {(time.time()-start_time):.2f}s\n"
+        if not model_specific_only: log += f"Time to complete: {(time.time()-start_time):.2f}s\n"
         log += model_summary
         log += f"\nDataset: {parser.input_dataset}\n"
         log += f"Number of operations: {model.calculate_ops()}\n"
         log += f"Save model: {parser.save_model}\n"
         log += f"File path of model to load (model trained if empty string): {parser.load_model_filepath}\n"
         log += f"Channel: {parser.input_channel}\n"
-        for model_type, acc in acc.items(): log += f"Validation set accuracy ({model_type}): {acc:.4f}\n"
-        log += f"Training accuracy: {[round(accuracy, 4) for accuracy in fit_history.history['accuracy']]}\n"
-        log += f"Validation accuracy (while training): {[round(accuracy, 4) for accuracy in fit_history.history['val_accuracy']]}\n"
-        log += f"Training loss: {[round(loss, 4) for loss in fit_history.history['loss']]}\n"
-        log += f"Validation loss (while training): {[round(loss, 4) for loss in fit_history.history['val_loss']]}\n"
+        if not model_specific_only:
+            for model_type, acc in acc.items(): log += f"Validation set accuracy ({model_type}): {acc}\n"
+            log += f"Training accuracy: {[round(accuracy, 4) for accuracy in fit_history.history['accuracy']]}\n"
+            log += f"Validation accuracy (while training): {[round(accuracy, 4) for accuracy in fit_history.history['val_accuracy']]}\n"
+            log += f"Training loss: {[round(loss, 4) for loss in fit_history.history['loss']]}\n"
+            log += f"Validation loss (while training): {[round(loss, 4) for loss in fit_history.history['val_loss']]}\n"
         log += f"Number of epochs: {parser.num_epochs}\n\n"
+        log += f"# of nights in validation: {NUM_NIGHTS_VALIDATION}\n"
 
         log += f"Training set resampling: {RESAMPLE_TRAINING_DATASET}\n"
         log += f"Training set resampling replacement: {parser.enable_dataset_resample_replacement}\n"
@@ -273,14 +284,13 @@ def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_
         log += f"Use sleep stage history: {USE_SLEEP_STAGE_HISTORY}\n"
         log += f"Number of historical sleep stages: {NUM_SLEEP_STAGE_HISTORY}\n"
         log += f"Dataset split random seed: {RANDOM_SEED}\n"
-        log += f"Whole-night validation: {WHOLE_NIGHT_VALIDATION}\n"
         log += f"Dataset metadata {json.dumps(dataset_metadata, indent=4)}\n\n"
 
-        log += f"Requested number of training clips: {int(TEST_SET_RATIO*parser.num_clips)}\n"
         if (original_sleep_stage_count != -1): log += f"Sleep stages count in original dataset ({num_clips_original_dataset}): {original_sleep_stage_count} ({[round(num / num_clips_training, 4) for num in original_sleep_stage_count]})\n"
-        log += f"Sleep stages count in training data ({num_clips_training}): {sleep_stages_count_training} ({[round(num / num_clips_training, 4) for num in sleep_stages_count_training]})\n"
-        log += f"Sleep stages count in validation set input ({num_clips_validation}): {sleep_stages_count_val} ({[round(num / num_clips_validation, 4) for num in sleep_stages_count_val]})\n"
-        for model_type, pred_cnt in pred_cnt.items(): log += f"Sleep stages count in validation set prediction ({num_clips_validation}, {model_type}): {pred_cnt} ({[round(num / num_clips_validation, 4) for num in pred_cnt]})\n"
+        if not model_specific_only: log += f"Sleep stages count in training data ({num_clips_training}): {sleep_stages_count_training} ({[round(num / num_clips_training, 4) for num in sleep_stages_count_training]})\n"
+        if not model_specific_only: log += f"Sleep stages count in validation set input ({num_clips_validation}): {sleep_stages_count_val} ({[round(num / num_clips_validation, 4) for num in sleep_stages_count_val]})\n"
+        if not model_specific_only: 
+            for model_type, pred_cnt in pred_cnt.items(): log += f"Sleep stages count in validation set prediction ({num_clips_validation}, {model_type}): {pred_cnt} ({[round(num / num_clips_validation, 4) for num in pred_cnt]})\n"
 
         log += f"\nClip length (s): {dataset_metadata['clip_length_s']}\n"
         log += f"Patch length (s): {parser.patch_length_s}\n"
@@ -299,13 +309,12 @@ def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_
         log += f"Rescale layer enabled: {parser.enable_input_rescale}\n"
         log += f"Use classification token: {parser.use_class_embedding}\n"
         log += f"Positional embedding enabled: {parser.enable_positional_embedding}\n"
-        log += f"Number of samples in output filtering: {NUM_OUTPUT_FILTERING}\n"
+        log += f"Number of samples in output filtering: {parser.num_out_filter}\n"
         log += f"Model loss type: {model.loss.name}\n"
         log += f"Note: {note}\n"
 
         # Save to file
         with open(out_fp+"/info.txt", 'w') as file: file.write(log)
-        print(f"[{(time.time()-start_time):.2f}s] Saved model summary to {out_fp}/info.txt.")
 
     except Exception as e: utilities.log_error_and_exit(exception=e, manual_description=f"[{(time.time()-start_time):.2f}s] Failed to export summary.")
 
@@ -341,6 +350,9 @@ def parse_arguments():
     parser.add_argument('--historical_lookback_DNN_depth', help='Internal size of the output DNN for historical lookback. Defaults to 64.', default=64, type=int)
     parser.add_argument('--output_edgetpu_data', help='Select whether to output Numpy arrays when parsing input data to run on edge TPU.', action='store_true')
     parser.add_argument('--use_class_embedding', help='Select whether to use classification token in model.', action='store_true')
+    parser.add_argument('--k_fold_val_set', help='Set number used for k-fold validation. Starts at and defaults to 0th set.', default=0, type=int)
+    parser.add_argument('--num_out_filter', help='Number of averages in output moving average filter. Set to 0 to disable. Defaults to 0.', default=0, type=int)
+    parser.add_argument('--k_fold_val_results_fp', help='Filepath of CSV file used for k-fold validation results. Also exports model details to .txt of the same path.', type=str)
 
     # Parse arguments
     try:
@@ -417,7 +429,7 @@ def export_training_val_plot(out_fp:str, fit_history):
     plt.yticks(np.arange(0,max([max_y1_tick+0.1, max_y2_tick+0.1, 1+0.1]), step=0.1))
     plt.savefig(f"{out_fp}/models/train_val_accuracy.png")
 
-def manual_val(model, type:str, data:dict, whole_night_indices:dict, out_fp:str, ds_metadata:dict):
+def manual_val(model, args, type:str, data:dict, whole_night_indices:dict, out_fp:str, ds_metadata:dict):
     total_correct = 0
     accuracy = 0
     pred_cnt = [0 for _ in range(sleep_map.get_num_stages()+1)]
@@ -427,17 +439,17 @@ def manual_val(model, type:str, data:dict, whole_night_indices:dict, out_fp:str,
     # Run model
     try:
         if (type == "tf"):
-            sleep_stages_pred = utilities.run_model(model, data=data, whole_night_indices=whole_night_indices, data_type=DATA_TYPE, num_output_filtering=NUM_OUTPUT_FILTERING, num_sleep_stage_history=NUM_SLEEP_STAGE_HISTORY)
+            sleep_stages_pred = utilities.run_model(model, data=data, whole_night_indices=whole_night_indices, data_type=DATA_TYPE, num_output_filtering=args.num_out_filter, num_sleep_stage_history=NUM_SLEEP_STAGE_HISTORY)
         elif (type == "tflite") or (type == "tflite (quant)") or (type == "tflite (16bx8b full quant)"):
-            sleep_stages_pred = utilities.run_tflite_model(model, data=data, whole_night_indices=whole_night_indices, data_type=DATA_TYPE, num_output_filtering=NUM_OUTPUT_FILTERING, num_sleep_stage_history=NUM_SLEEP_STAGE_HISTORY)
+            sleep_stages_pred = utilities.run_tflite_model(model, data=data, whole_night_indices=whole_night_indices, data_type=DATA_TYPE, num_output_filtering=args.num_out_filter, num_sleep_stage_history=NUM_SLEEP_STAGE_HISTORY)
         elif type == "tflite (full quant)":
-            sleep_stages_pred = utilities.run_tflite_model(model, data=data, whole_night_indices=whole_night_indices, data_type=tf.uint8, num_output_filtering=NUM_OUTPUT_FILTERING, num_sleep_stage_history=NUM_SLEEP_STAGE_HISTORY)
+            sleep_stages_pred = utilities.run_tflite_model(model, data=data, whole_night_indices=whole_night_indices, data_type=tf.uint8, num_output_filtering=args.num_out_filter, num_sleep_stage_history=NUM_SLEEP_STAGE_HISTORY)
 
         # Check accuracy
         for i in range(len(sleep_stages_pred)):
             total_correct += (sleep_stages_pred[i] == data["sleep_stages_val"][i][0].numpy())
             pred_cnt[sleep_stages_pred[i]] += 1
-        accuracy = total_correct/len(sleep_stages_pred)
+        accuracy = round(total_correct/len(sleep_stages_pred), ndigits=4)
 
         # Export plots
         export_plots(pred=sleep_stages_pred, ground_truth=data["sleep_stages_val"].numpy(), accuracy=accuracy, log_file_path=f"{out_fp}/models/{type}_man_val.ext", ds_metadata=ds_metadata)
@@ -489,6 +501,65 @@ def increment_ops(ops_dict:dict, in_shape, out_shape, layer_type:str, activation
         ops_dict["adds"] += y_in * (x_in - 1)
         ops_dict["incrs"] += 2 * y_in * (x_in - 1)
 
+def extract_avg_accuracies(rows:dict):
+    avg_acc = {}
+    for key in rows[0].keys(): 
+        if key != 'k-fold set': avg_acc.update({key:[]}) # Reset accuracies
+
+    for row in rows:
+        if row[key] == '': break # We've hit the blank row, so stop
+        for key in avg_acc.keys(): avg_acc[key].append(float(row[key]))
+
+    for key, value in avg_acc.items():
+        avg_acc[key] = sum(value) / len(value)
+
+    return avg_acc
+
+def export_k_fold_results(args, acc:dict):
+        rows = [] 
+        data_to_write = {'k-fold set':args.k_fold_val_set}
+        data_to_write.update(acc)
+        blank_row = dict.fromkeys(data_to_write.keys())
+
+        # If file doesn't exist, create it
+        if not os.path.isfile(args.k_fold_val_results_fp):
+            with open(args.k_fold_val_results_fp, mode='w', newline='') as file:
+                writer = csv.DictWriter(file, fieldnames=data_to_write.keys())
+                writer.writeheader()
+                writer.writerow(data_to_write)
+                writer.writerow(blank_row)
+                acc.update({'k-fold set': 'Average'})
+                writer.writerow(acc)
+
+            return
+
+        # File already exists
+        with open(args.k_fold_val_results_fp, mode='r', newline='') as file:
+            reader = csv.DictReader(file)
+            rows = list(reader)
+
+            # Check if row already exists, and update it if so
+            row_found = False
+            for row in rows:
+                if row['k-fold set'] == str(args.k_fold_val_set):
+                    row.update(data_to_write)
+                    row_found = True
+                    break
+            if not row_found: rows.insert(0, data_to_write)
+
+        with open(args.k_fold_val_results_fp, mode='w', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=data_to_write.keys())
+            writer.writeheader()
+            
+            for row in rows:
+                if row["k-fold set"] == 'Average': break # We've hit the last row, don't write it
+                writer.writerow(row)
+            
+            # Writing additional blank row and average accuracies row
+            avg_accuracies = extract_avg_accuracies(rows)  # Function to calculate average accuracies
+            avg_accuracies.update({'k-fold set': 'Average'})
+            writer.writerow(avg_accuracies)
+
 #--- APTx activation ---#
 def aptx(x):
     return (1 + tf.keras.activations.tanh(0.5*x)) * (0.5*x)
@@ -496,7 +567,7 @@ tf.keras.utils.get_custom_objects().update({'aptx': aptx})
 
 #--- Multi-Head Attention ---#
 class MultiHeadSelfAttention(tf.keras.layers.Layer):
-    def __init__(self, args, embedding_depth:int, num_heads:int=8):
+    def __init__(self, args, embedding_depth:int, num_heads:int):
         super(MultiHeadSelfAttention, self).__init__()
 
         # Hyperparameters
@@ -835,62 +906,62 @@ def main():
 
     # Make results directory. Check whether folder with the same name already exist and append counter if necessary
     time_of_export = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    out_fp = utilities.find_folder_path(utilities.folder_base_path()+f"{time_of_export}_vision", utilities.folder_base_path())
+    out_fp = utilities.find_folder_path(utilities.folder_base_path()+f"results/{time_of_export}_vision", utilities.folder_base_path()+"results")
     os.makedirs(out_fp, exist_ok=True)
     os.makedirs(out_fp+"/models", exist_ok=True)
 
     # Save models to disk
     models = {"tf":model, "tflite":-1, "tflite (quant)":-1, "tflite (full quant)":-1, "tflite (16bx8b full quant)":-1}
-    if args.save_model:
-        model.save(f"{out_fp}/models/model.tf", save_format="tf")
-        print(f"[{(time.time()-start_time):.2f}s] Saved model to {out_fp}/models/model.tf")
+    # if args.save_model:
+    #     model.save(f"{out_fp}/models/model.tf", save_format="tf")
+    #     print(f"[{(time.time()-start_time):.2f}s] Saved model to {out_fp}/models/model.tf")
 
-        if "cedar.computecanada.ca" not in socket.gethostname(): # Only export model if not running on Cedar (aka running TF 2.8) since it doesn't support it
-            tf.keras.utils.plot_model(model.build_graph(), to_file=f"{out_fp}/model_architecture.png", expand_nested=True, show_trainable=True, show_shapes=True, show_layer_activations=True, dpi=300, show_dtype=True)
+    #     if "cedar.computecanada.ca" not in socket.gethostname(): # Only export model if not running on Cedar (aka running TF 2.8) since it doesn't support it
+    #         tf.keras.utils.plot_model(model.build_graph(), to_file=f"{out_fp}/model_architecture.png", expand_nested=True, show_trainable=True, show_shapes=True, show_layer_activations=True, dpi=300, show_dtype=True)
 
-        # Convert to Tensorflow Lite model and save
-        converter = tf.lite.TFLiteConverter.from_keras_model(model)
-        tflite_model = converter.convert()
-        models["tflite"] = f"{out_fp}/models/model.tflite"
-        with open(f"{out_fp}/models/model.tflite", "wb") as f:
-            f.write(tflite_model)
-        print(f"[{(time.time()-start_time):.2f}s] Saved TensorFlow Lite model to {out_fp}/models/model.tflite.")
+    #     # Convert to Tensorflow Lite model and save
+    #     converter = tf.lite.TFLiteConverter.from_keras_model(model)
+    #     tflite_model = converter.convert()
+    #     models["tflite"] = f"{out_fp}/models/model.tflite"
+    #     with open(f"{out_fp}/models/model.tflite", "wb") as f:
+    #         f.write(tflite_model)
+    #     print(f"[{(time.time()-start_time):.2f}s] Saved TensorFlow Lite model to {out_fp}/models/model.tflite.")
 
-        # Convert to quantized Tensorflow Lite model and save
-        converter.optimizations = [tf.lite.Optimize.DEFAULT]
-        tflite_quant_model = converter.convert()
-        models["tflite (quant)"] = f"{out_fp}/models/model_quant.tflite"
-        with open(f"{out_fp}/models/model_quant.tflite", "wb") as f:
-            f.write(tflite_quant_model)
-        print(f"[{(time.time()-start_time):.2f}s] Saved quantized TensorFlow Lite model to {out_fp}/models/model_quant.tflite.")
+    #     # Convert to quantized Tensorflow Lite model and save
+    #     converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    #     tflite_quant_model = converter.convert()
+    #     models["tflite (quant)"] = f"{out_fp}/models/model_quant.tflite"
+    #     with open(f"{out_fp}/models/model_quant.tflite", "wb") as f:
+    #         f.write(tflite_quant_model)
+    #     print(f"[{(time.time()-start_time):.2f}s] Saved quantized TensorFlow Lite model to {out_fp}/models/model_quant.tflite.")
 
-        # Convert to full quantized Tensorflow Lite model and save
-        converter.optimizations = [tf.lite.Optimize.DEFAULT]
-        converter.representative_dataset = representative_dataset
-        converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
-        converter.inference_input_type = tf.uint8
-        converter.inference_output_type = tf.uint8
-        tflite_full_quant_model = converter.convert()
-        models["tflite (full quant)"] = f"{out_fp}/models/model_full_quant.tflite"
-        with open(f"{out_fp}/models/model_full_quant.tflite", "wb") as f:
-            f.write(tflite_full_quant_model)
-        print(f"[{(time.time()-start_time):.2f}s] Saved fully quantized TensorFlow Lite model to {out_fp}/models/model_full_quant.tflite.")
+    #     # Convert to full quantized Tensorflow Lite model and save
+    #     converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    #     converter.representative_dataset = representative_dataset
+    #     converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
+    #     converter.inference_input_type = tf.uint8
+    #     converter.inference_output_type = tf.uint8
+    #     tflite_full_quant_model = converter.convert()
+    #     models["tflite (full quant)"] = f"{out_fp}/models/model_full_quant.tflite"
+    #     with open(f"{out_fp}/models/model_full_quant.tflite", "wb") as f:
+    #         f.write(tflite_full_quant_model)
+    #     print(f"[{(time.time()-start_time):.2f}s] Saved fully quantized TensorFlow Lite model to {out_fp}/models/model_full_quant.tflite.")
 
-        # Convert to full quantized Tensorflow Lite model with 16b activations and 8b weights and save
-        converter.inference_input_type = tf.float32
-        converter.inference_output_type = tf.float32
-        converter.target_spec.supported_ops = [tf.lite.OpsSet.EXPERIMENTAL_TFLITE_BUILTINS_ACTIVATIONS_INT16_WEIGHTS_INT8]
-        tflite_16x8_full_quant_model = converter.convert()
-        models["tflite (16bx8b full quant)"] = f"{out_fp}/models/model_full_quant_16bx8b.tflite"
-        with open(f"{out_fp}/models/model_full_quant_16bx8b.tflite", "wb") as f:
-            f.write(tflite_16x8_full_quant_model)
-        print(f"[{(time.time()-start_time):.2f}s] Saved fully quantized TensorFlow Lite model (16b activations and 8b weights) to {out_fp}/models/model_full_quant_16bx8b.tflite.")
+    #     # Convert to full quantized Tensorflow Lite model with 16b activations and 8b weights and save
+    #     converter.inference_input_type = tf.float32
+    #     converter.inference_output_type = tf.float32
+    #     converter.target_spec.supported_ops = [tf.lite.OpsSet.EXPERIMENTAL_TFLITE_BUILTINS_ACTIVATIONS_INT16_WEIGHTS_INT8]
+    #     tflite_16x8_full_quant_model = converter.convert()
+    #     models["tflite (16bx8b full quant)"] = f"{out_fp}/models/model_full_quant_16bx8b.tflite"
+    #     with open(f"{out_fp}/models/model_full_quant_16bx8b.tflite", "wb") as f:
+    #         f.write(tflite_16x8_full_quant_model)
+    #     print(f"[{(time.time()-start_time):.2f}s] Saved fully quantized TensorFlow Lite model (16b activations and 8b weights) to {out_fp}/models/model_full_quant_16bx8b.tflite.")
 
     # Manual validation
-    acc = {"tf":-1, "tflite":-1, "tflite (quant)":-1, "tflite (full quant)":-1, "tflite (16bx8b full quant)":-1}
-    pred_cnt = {"tf":-1, "tflite":-1, "tflite (quant)":-1, "tflite (full quant)":-1, "tflite (16bx8b full quant)":-1}
-    for model_type, model in models.items():
-        acc[model_type], pred_cnt[model_type] = manual_val(model, type=model_type, data=data, whole_night_indices=start_of_night_markers, out_fp=out_fp, ds_metadata=dataset_metadata)
+    acc = {"tf":5, "tflite":5, "tflite (quant)":5, "tflite (full quant)":5, "tflite (16bx8b full quant)":5}
+    pred_cnt = {"tf":[], "tflite":[], "tflite (quant)":[], "tflite (full quant)":[], "tflite (16bx8b full quant)":[]}
+    # for model_type, model in models.items():
+    #     acc[model_type], pred_cnt[model_type] = manual_val(model, args=args, type=model_type, data=data, whole_night_indices=start_of_night_markers, out_fp=out_fp, ds_metadata=dataset_metadata)
 
     # Count sleep stages in training and validation datasets
     sleep_stages_cnt_train = utilities.count_instances_per_class(data['sleep_stages_train'], sleep_map.get_num_stages()+1)
@@ -898,10 +969,18 @@ def main():
 
     # Save accuracy and model details to log file
     note = ""
-    export_summary(out_fp, args, models["tf"], fit_history, acc, original_sleep_stage_cnt, sleep_stages_cnt_train, sleep_stages_cnt_val, pred_cnt, mlp_dense_act, dataset_metadata, note)
+    # export_summary(out_fp, args, models["tf"], fit_history, acc, original_sleep_stage_cnt, sleep_stages_cnt_train, sleep_stages_cnt_val, pred_cnt, mlp_dense_act, dataset_metadata, note)
+    print(f"[{(time.time()-start_time):.2f}s] Saved model summary to {out_fp}/info.txt.")
 
     # Plot validation accuracy and loss during training
-    export_training_val_plot(out_fp, fit_history=fit_history)
+    # export_training_val_plot(out_fp, fit_history=fit_history)
+
+    # Write to k-fold validation file
+    if K_FOLD_OUTPUT_TO_FILE:
+        export_summary(os.path.dirname(args.k_fold_val_results_fp), args, models["tf"], fit_history, acc, original_sleep_stage_cnt, sleep_stages_cnt_train, 
+                       sleep_stages_cnt_val, pred_cnt, mlp_dense_act, dataset_metadata, note, model_specific_only=True)
+        export_k_fold_results(args, acc)
+        print(f"[{(time.time()-start_time):.2f}s] Wrote to k-fold results file.")
 
     print(f"[{(time.time()-start_time):.2f}s] Done. Good bye.")
 

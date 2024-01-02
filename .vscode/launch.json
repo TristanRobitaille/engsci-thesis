@@ -20,9 +20,10 @@
             "program": "${workspaceFolder}/python_prototype/main_vision_transformer.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--enable_dataset_resample_replacement", "--batch_size=16", "--learning_rate=1e-3", "--num_epochs=1",
-                     "--input_channel=EEG Cz-LER", "--num_clips=5000", "--embedding_depth=64", "--num_layers=4", "--num_heads=16", "--mlp_dim=32", "--save_model",
+            "args": ["--enable_dataset_resample_replacement", "--batch_size=16", "--learning_rate=1e-3", "--num_epochs=1", "--k_fold_val_set=0", "--num_out_filter=2",
+                     "--input_channel=EEG Cz-LER", "--num_clips=8000", "--embedding_depth=64", "--num_layers=4", "--num_heads=16", "--mlp_dim=32", "--save_model",
                      "--input_dataset=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF_Tensorized_both_light_deep_combine-stg_30-0s_256Hz",
+                     "--k_fold_val_results_fp=${workspaceFolder}/python_prototype/results/k_fold_val_results/val_1.csv",
                      "--class_weights", "1", "1", "1", "1", "1", "--historical_lookback_DNN_depth=0",
                      "--training_set_target_count", "4600", "4600", "4600", "4600", "--dataset_resample_algo=ADASYN"]
                     // "--enable_input_rescale", "--output_edgetpu_data"

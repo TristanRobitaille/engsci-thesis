@@ -9,7 +9,7 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 
 """
-Some utility functions used by models.
+Some utility function
 """
 
 #--- CLASSES ---#
@@ -52,6 +52,9 @@ class MovingAverage():
         if len(self.samples) > self.num_samples:
             self.samples.pop(0)
         return tf.reduce_mean(self.samples, axis=0)
+    
+    def reset(self):
+        self.samples = []
 
 class SleepStageMap():
     """
@@ -100,7 +103,7 @@ class SleepStageMap():
         else:                                               return 5 # One of light or deep combined
 
 #--- FUNCTIONS ---#
-def plot_1D_tensor(input_tensor: tf.Tensor):
+def plot_1D_tensor(input_tensor: tf.Tensor) -> None:
     """
     Simply plots a given tensor and prints its min, max and dimensions.
     Plot blocks execution of script until the window is closed.
@@ -111,8 +114,6 @@ def plot_1D_tensor(input_tensor: tf.Tensor):
     plt.plot(data)
     plt.title(f"min: {min(data)}, max: {max(data)}, shape: {data.shape}")
     plt.show(block=True)
-
-    return
 
 def random_dataset(clip_length_num_samples:int, max_min:tuple, num_clips:int=1000) -> (tf.Tensor, tf.Tensor):
     """
@@ -190,7 +191,7 @@ def log_error_and_exit(exception, manual_description:str="", additional_msg:str=
         f.write(additional_msg)
     exit()
 
-def get_weight_distribution(model:tf.keras.Model):
+def get_weight_distribution(model:tf.keras.Model) -> None:
     """
     Plots the distribution of weights in a given model.
     """
@@ -233,7 +234,10 @@ def run_model(model, data:dict, whole_night_indices:list, data_type:tf.DType, nu
 
             sleep_stage_pred = model(x, training=False)
             sleep_stage_pred = tf.argmax(sleep_stage_pred, axis=1)
+
+            if whole_night_indices[total].numpy()[0] == 1.0: output_filter.reset() # Reset filter if starting a new night
             sleep_stage_pred = tf.cast(output_filter.filter(sleep_stage_pred), dtype=data_type) # Filter sleep stage
+            
             if num_sleep_stage_history > 0: historical_pred = tf.concat([tf.expand_dims(sleep_stage_pred, axis=1), historical_pred[:, 0:num_sleep_stage_history-1]], axis=1)
             sleep_stages_pred.append(int(sleep_stage_pred[0].numpy()))
             total += 1
@@ -268,19 +272,22 @@ def run_tflite_model(model_fp:str, data:str, whole_night_indices:list, data_type
         interpreter.invoke()
         sleep_stage_pred = interpreter.get_tensor(output_details[0]['index'])
         sleep_stage_pred = tf.argmax(sleep_stage_pred, axis=1)
+
+        if whole_night_indices[total].numpy()[0] == 1.0: output_filter.reset() # Reset filter if starting a new night
         sleep_stage_pred = tf.cast(output_filter.filter(sleep_stage_pred), dtype=data_type) # Filter sleep stage
+
         if num_sleep_stage_history > 0: historical_pred = tf.concat([tf.expand_dims(sleep_stage_pred, axis=1), historical_pred[:, 0:num_sleep_stage_history-1]], axis=1)
         predictions.append(int(sleep_stage_pred[0].numpy()))
         total += 1
 
     return predictions
 
-def folder_base_path():
-    if socket.gethostname() == "claude-ryzen":              return f"/home/trobitaille/engsci-thesis/python_prototype/results/"
-    elif socket.gethostname() == "MBP_Tristan":             return f"/Users/tristan/Desktop/engsci-thesis/python_prototype/results/"
-    elif "cedar.computecanada.ca" in socket.gethostname():  return f"/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/results/"
+def folder_base_path() -> str:
+    if socket.gethostname() == "claude-ryzen":              return f"/home/trobitaille/engsci-thesis/python_prototype/"
+    elif socket.gethostname() == "MBP_Tristan":             return f"/Users/tristan/Desktop/engsci-thesis/python_prototype/"
+    elif "cedar.computecanada.ca" in socket.gethostname():  return f"/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/"
 
-def shuffle(signal:tf.Tensor, sleep_stages:tf.Tensor, random_seed:int):
+def shuffle(signal:tf.Tensor, sleep_stages:tf.Tensor, random_seed:int) -> (tf.Tensor, tf.Tensor):
     """
     Shuffles two input tensors in the same way s.t. corresponding pairs remain
     """
