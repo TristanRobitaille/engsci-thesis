@@ -23,8 +23,9 @@ Execution instructions for Tensorflow model on Compute Canada Cedar:
     Other
     -View current jobs: $ sq
     -Cancel job: $ scancel <NODEID>
-    -View job stats: seff <JOBID>
-    -Interactive job: salloc --time=02:00:00 --mem-per-cpu=48G --ntasks=2 --account=def-xilinliu
+    -View job stats: $ seff <JOBID>
+    -Interactive job: $ salloc --time=02:00:00 --mem-per-cpu=48G --ntasks=2 --account=def-xilinliu
+    -View usage stats $ sacct -j <JOBID>
 
 Other useful commands
 tmux:

@@ -30,7 +30,7 @@ VERBOSITY = 'QUIET' #'QUIET', 'NORMAL', 'DETAILED'
 RESAMPLE_TRAINING_DATASET = False
 SHUFFLE_TRAINING_CLIPS = True
 NUM_CLIPS_PER_FILE_EDGETPU = 500 # Only valid for 256Hz
-K_FOLD_OUTPUT_TO_FILE = True # If true, will write validation accuracy to a CSV for complete k-fold validation
+K_FOLD_OUTPUT_TO_FILE = False # If true, will write validation accuracy to a CSV for complete k-fold validation
 
 train_signals_representative_dataset = None
 sleep_map = utilities.SleepStageMap()
@@ -243,7 +243,7 @@ def load_from_dataset(args):
     return data_dict, start_of_val_night_indices, original_sleep_stage_count, dataset_metadata
 
 def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_stage_count:list, sleep_stages_count_training:list,
-                   sleep_stages_count_val:list, pred_cnt:dict, mlp_dense_activation, dataset_metadata:dict, note:str="", model_specific_only:bool=False) -> None:
+                   sleep_stages_count_val:list, pred_cnt:dict, mlp_dense_activation, dataset_metadata:dict, model_specific_only:bool=False) -> None:
     """
     Saves model and training summary to file
     """
@@ -268,9 +268,11 @@ def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_
         log += f"\nDataset: {parser.input_dataset}\n"
         log += f"Number of operations: {model.calculate_ops()}\n"
         log += f"Save model: {parser.save_model}\n"
+        log += f"Save k-fold validation file: {K_FOLD_OUTPUT_TO_FILE}\n"
         log += f"File path of model to load (model trained if empty string): {parser.load_model_filepath}\n"
         log += f"Channel: {parser.input_channel}\n"
         if not model_specific_only:
+            log += f"k-fold validation set: {parser.k_fold_val_set}\n"
             for model_type, acc in acc.items(): log += f"Validation set accuracy ({model_type}): {acc}\n"
             log += f"Training accuracy: {[round(accuracy, 4) for accuracy in fit_history.history['accuracy']]}\n"
             log += f"Validation accuracy (while training): {[round(accuracy, 4) for accuracy in fit_history.history['val_accuracy']]}\n"
@@ -303,7 +305,8 @@ def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_
         log += f"Embedding depth: {parser.embedding_depth}\n"
         log += f"MHA number of heads: {parser.num_heads}\n"
         log += f"Number of layers: {parser.num_layers}\n"
-        log += f"MLP dimensions: {parser.mlp_dim}\n"
+        log += f"MLP dimension: {parser.mlp_dim}\n"
+        log += f"Number of dense (+ dropout) layers in MLP head before softmax: {parser.mlp_head_num_dense}\n"
         log += f"Dropout rate: {parser.dropout_rate:.3f}\n"
         log += f"Historical prediction lookback DNN depth: {parser.historical_lookback_DNN_depth}\n"
         log += f"Activation function of first dense layer in MLP layer and MLP head: {mlp_dense_activation}\n"
@@ -314,10 +317,10 @@ def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_
         log += f"Positional embedding enabled: {parser.enable_positional_embedding}\n"
         log += f"Number of samples in output filtering: {parser.num_out_filter}\n"
         log += f"Model loss type: {model.loss.name}\n"
-        log += f"Note: {note}\n"
+        log += f"Note: {parser.note}\n"
 
         # Save to file
-        with open(out_fp+"/info.txt", 'w') as file: file.write(log)
+        with open(out_fp, 'w') as file: file.write(log)
 
     except Exception as e: utilities.log_error_and_exit(exception=e, manual_description=f"[{(time.time()-start_time):.2f}s] Failed to export summary.")
 
@@ -338,6 +341,7 @@ def parse_arguments():
     parser.add_argument('--embedding_depth', help='Depth of the embedding layer. Defaults to 32.', default=32, type=int)
     parser.add_argument('--num_heads', help='Number of multi-attention heads. Defaults to 8.', default=8, type=int)
     parser.add_argument('--mlp_dim', help='Dimension of the MLP layer. Defaults to 32.', default=32, type=int)
+    parser.add_argument('--mlp_head_num_dense', help="Number of dense layers (with its dropout) to add before softmax layer in MLP head. Defaults to 1.", default=1, type=int)
     parser.add_argument('--num_epochs', help='Number of training epochs. Defaults to 25.', default=25, type=int)
     parser.add_argument('--batch_size', help='Batch size for training. Defaults to 8.', default=8, type=int)
     parser.add_argument('--learning_rate', help='Learning rate for training. Defaults to 1e-4.', default=1e-4, type=float)
@@ -356,12 +360,19 @@ def parse_arguments():
     parser.add_argument('--k_fold_val_set', help='Set number used for k-fold validation. Starts at and defaults to 0th set.', default=0, type=int)
     parser.add_argument('--num_out_filter', help='Number of averages in output moving average filter. Set to 0 to disable. Defaults to 0.', default=0, type=int)
     parser.add_argument('--k_fold_val_results_fp', help='Filepath of CSV file used for k-fold validation results. Also exports model details to .txt of the same path.', type=str)
+    parser.add_argument('--note', help="Optional note to write info textfile. Defaults to None.", default="", type=str )
 
     # Parse arguments
     try:
         args = parser.parse_args()
     except Exception as e:
         utilities.log_error_and_exit(exception=e, manual_description=f"[{(time.time()-start_time):.2f}s] Failed to parse arguments.")
+
+    print(f"CAUTION: Dividing dropout rate by 20 in order to use SLURM array!")
+    args.dropout_rate /= 20 
+
+    print(f"CAUTION: Dividing patch length by 32 in order to use SLURM array!")
+    args.patch_length_s /= 32 
 
     # Print arguments received
     for arg in vars(args):
@@ -519,49 +530,53 @@ def extract_avg_accuracies(rows:dict):
     return avg_acc
 
 def export_k_fold_results(args, acc:dict):
-        rows = [] 
-        data_to_write = {'k-fold set':args.k_fold_val_set}
-        data_to_write.update(acc)
-        blank_row = dict.fromkeys(data_to_write.keys())
+    fp = args.k_fold_val_results_fp + ".csv"
+    rows = []
+    data_to_write = {'k-fold set':args.k_fold_val_set}
+    data_to_write.update(acc)
+    blank_row = dict.fromkeys(data_to_write.keys())
 
-        # If file doesn't exist, create it
-        if not os.path.isfile(args.k_fold_val_results_fp):
-            with open(args.k_fold_val_results_fp, mode='w', newline='') as file:
-                writer = csv.DictWriter(file, fieldnames=data_to_write.keys())
-                writer.writeheader()
-                writer.writerow(data_to_write)
-                writer.writerow(blank_row)
-                acc.update({'k-fold set': 'Average'})
-                writer.writerow(acc)
-
-            return
-
-        # File already exists
-        with open(args.k_fold_val_results_fp, mode='r', newline='') as file:
-            reader = csv.DictReader(file)
-            rows = list(reader)
-
-            # Check if row already exists, and update it if so
-            row_found = False
-            for row in rows:
-                if row['k-fold set'] == str(args.k_fold_val_set):
-                    row.update(data_to_write)
-                    row_found = True
-                    break
-            if not row_found: rows.insert(0, data_to_write)
-
-        with open(args.k_fold_val_results_fp, mode='w', newline='') as file:
+    # If file doesn't exist, create it
+    if not os.path.isfile(fp):
+        with open(fp, mode='w', newline='') as file:
             writer = csv.DictWriter(file, fieldnames=data_to_write.keys())
             writer.writeheader()
-            
-            for row in rows:
-                if row["k-fold set"] == 'Average': break # We've hit the last row, don't write it
-                writer.writerow(row)
-            
-            # Writing additional blank row and average accuracies row
-            avg_accuracies = extract_avg_accuracies(rows)  # Function to calculate average accuracies
-            avg_accuracies.update({'k-fold set': 'Average'})
-            writer.writerow(avg_accuracies)
+            writer.writerow(data_to_write)
+            writer.writerow(blank_row)
+            acc.update({'k-fold set': 'Average'})
+            writer.writerow(acc)
+        return
+
+    # File already exists. Keep trying to open it if it's already opened by another process.
+    while True:
+        try:
+            with open(fp, mode='r', newline='') as file:
+                reader = csv.DictReader(file)
+                rows = list(reader)
+
+                # Check if row already exists, and update it if so
+                row_found = False
+                for row in rows:
+                    if row['k-fold set'] == str(args.k_fold_val_set):
+                        row.update(data_to_write)
+                        row_found = True
+                        break
+                if not row_found: rows.insert(0, data_to_write)
+                break
+        except PermissionError: time.sleep(1)
+
+    with open(fp, mode='w', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=data_to_write.keys())
+        writer.writeheader()
+        
+        for row in rows:
+            if row["k-fold set"] == 'Average': break # We've hit the last row, don't write it
+            writer.writerow(row)
+        
+        # Writing additional blank row and average accuracies row
+        avg_accuracies = extract_avg_accuracies(rows)  # Function to calculate average accuracies
+        avg_accuracies.update({'k-fold set': 'Average'})
+        writer.writerow(avg_accuracies)
 
 #--- APTx activation ---#
 def aptx(x):
@@ -594,7 +609,7 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
     def attention(self, query, key, value):
         score = tf.matmul(query, key, transpose_b=True) #score = (batch_size, embedding_depth/num_heads, num_patches+1, num_patches+1)
         dim_key = tf.cast(tf.shape(key)[-1], dtype=DATA_TYPE)
-        assert (self.num_heads == 16) or (self.num_heads == 4), "num_heads not 4 or 16, as needed to simplify attention calculations."
+        # assert (self.num_heads == 16) or (self.num_heads == 4), "num_heads not 4 or 16, as needed to simplify attention calculations."
         scaled_score = score / tf.math.sqrt(dim_key) #scaled_score = (batch_size, embedding_depth/num_heads, num_patches+1, num_patches+1)
         weights = tf.nn.softmax(logits=scaled_score, axis=-1) #weights = (batch_size, embedding_depth/num_heads, num_patches+1, num_patches+1)
         output = tf.matmul(weights, value) #output = (batch_size, embedding_depth/num_heads, num_patches+1, num_heads)
@@ -733,6 +748,7 @@ class VisionTransformer(tf.keras.Model):
         self.enable_positional_embedding = args.enable_positional_embedding
         self.use_class_embedding = args.use_class_embedding
         self.mlp_dense_activation = mlp_dense_activation
+        self.mlp_head_num_dense = args.mlp_head_num_dense
 
         # Layers
         self.patch_projection = tf.keras.layers.Dense(self.embedding_depth, name="patch_projection_dense")
@@ -740,20 +756,14 @@ class VisionTransformer(tf.keras.Model):
         if self.use_class_embedding: self.class_embedding = self.add_weight("class_emb", shape=(1, 1, self.embedding_depth))
         if self.enable_positional_embedding: self.positional_embedding = self.add_weight("pos_emb", shape=(1, self.num_patches+self.use_class_embedding+(self.history_length > 0), self.embedding_depth)) #+1 for the trainable classification token, +1 for historical lookback
         self.encoder_layers = [Encoder(args, mlp_dense_activation=self.mlp_dense_activation) for _ in range(self.num_encoder_layers)]
-        self.mlp_head = tf.keras.Sequential([
-            tf.keras.layers.LayerNormalization(epsilon=1e-6, name="mlp_head_layerNorm"),
-            tf.keras.layers.Dense(self.mlp_dim, activation=self.mlp_dense_activation, name="mlp_head_dense1"),
-            tf.keras.layers.Dropout(self.dropout_rate, seed=RANDOM_SEED, name="mlp_head_dropout"),
-            tf.keras.layers.Dense(self.num_classes, activation="softmax", name="mlp_head_dense2"),
-        ], name="mlp_head")
-        # self.historical_lookback = tf.keras.Sequential([
-        #     tf.keras.layers.Dense(self.historical_lookback_DNN_depth, activation=tf.keras.activations.relu),
-        #     tf.keras.layers.Dense(2 * self.historical_lookback_DNN_depth, activation=tf.keras.activations.relu),
-        #     tf.keras.layers.Dropout(self.dropout_rate, seed=RANDOM_SEED),
-        #     tf.keras.layers.Dense(self.num_classes, activation='softmax')
-        # ], name="historical_lookback")
+        self.mlp_head = [tf.keras.layers.LayerNormalization(epsilon=1e-6, name="mlp_head_layerNorm")]
+        for i in range(self.mlp_head_num_dense):
+            self.mlp_head.append(tf.keras.layers.Dense(self.mlp_dim, activation=self.mlp_dense_activation, name=f"mlp_head_dense{i+1}"))
+            self.mlp_head.append(tf.keras.layers.Dropout(self.dropout_rate, seed=RANDOM_SEED, name=f"mlp_head_dropout{i+1}"))
+        self.mlp_head.append(tf.keras.layers.Dense(self.num_classes, activation="softmax", name="mlp_head_softmax"))
+        self.mlp_head = tf.keras.Sequential(self.mlp_head, name="mlp_head")
 
-    def extract_patches(self, batch_size:int, clips):
+    def extract_patches(self, batch_size:int, clips, training:bool=False):
         patches = tf.reshape(clips, [batch_size, -1, self.patch_length_num_samples])
         return patches
 
@@ -860,7 +870,8 @@ class VisionTransformer(tf.keras.Model):
         # MLP head
         x_in, y_in = self.num_patches+self.use_class_embedding, y_out
         increment_ops(ops_dict=ops, in_shape=(x_in,y_in,0), out_shape=(x_in,y_in,0), layer_type="LayerNorm")
-        increment_ops(ops_dict=ops, in_shape=(x_in,y_in,0), out_shape=(y_in,self.mlp_dim,0), layer_type="Dense", activation=True)
+        for _ in self.mlp_head_num_dense:
+            increment_ops(ops_dict=ops, in_shape=(x_in,y_in,0), out_shape=(y_in,self.mlp_dim,0), layer_type="Dense", activation=True)
         increment_ops(ops_dict=ops, in_shape=(y_in,self.mlp_dim,0), out_shape=(1, sleep_map.get_num_stages()+1,0), layer_type="Dense", activation=True)
 
         for op in ops.keys(): ops[op] = int(ops[op])
@@ -971,8 +982,7 @@ def main():
     sleep_stages_cnt_val = utilities.count_instances_per_class(data['sleep_stages_val'], sleep_map.get_num_stages()+1)
 
     # Save accuracy and model details to log file
-    note = ""
-    # export_summary(out_fp, args, models["tf"], fit_history, acc, original_sleep_stage_cnt, sleep_stages_cnt_train, sleep_stages_cnt_val, pred_cnt, mlp_dense_act, dataset_metadata, note)
+    export_summary(out_fp+"/info.txt", args, models["tf"], fit_history, acc, original_sleep_stage_cnt, sleep_stages_cnt_train, sleep_stages_cnt_val, pred_cnt, mlp_dense_act, dataset_metadata)
     print(f"[{(time.time()-start_time):.2f}s] Saved model summary to {out_fp}/info.txt.")
 
     # Plot validation accuracy and loss during training
@@ -980,8 +990,8 @@ def main():
 
     # Write to k-fold validation file
     if K_FOLD_OUTPUT_TO_FILE:
-        export_summary(os.path.dirname(args.k_fold_val_results_fp), args, models["tf"], fit_history, acc, original_sleep_stage_cnt, sleep_stages_cnt_train, 
-                       sleep_stages_cnt_val, pred_cnt, mlp_dense_act, dataset_metadata, note, model_specific_only=True)
+        export_summary(args.k_fold_val_results_fp+".txt", args, models["tf"], fit_history, acc, original_sleep_stage_cnt, sleep_stages_cnt_train, 
+                       sleep_stages_cnt_val, pred_cnt, mlp_dense_act, dataset_metadata, model_specific_only=True)
         export_k_fold_results(args, acc)
         print(f"[{(time.time()-start_time):.2f}s] Wrote to k-fold results file.")
 
