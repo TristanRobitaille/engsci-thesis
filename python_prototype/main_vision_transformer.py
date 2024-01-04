@@ -30,7 +30,7 @@ VERBOSITY = 'QUIET' #'QUIET', 'NORMAL', 'DETAILED'
 RESAMPLE_TRAINING_DATASET = False
 SHUFFLE_TRAINING_CLIPS = True
 NUM_CLIPS_PER_FILE_EDGETPU = 500 # Only valid for 256Hz
-K_FOLD_OUTPUT_TO_FILE = False # If true, will write validation accuracy to a CSV for complete k-fold validation
+K_FOLD_OUTPUT_TO_FILE = False # If true, will write validation accuracy to a CSV for k-fold sweep validation
 
 train_signals_representative_dataset = None
 sleep_map = utilities.SleepStageMap()
@@ -165,8 +165,6 @@ def load_from_dataset(args):
 
     # Check validity of arguments
     val_nights = range(args.k_fold_val_set*NUM_NIGHTS_VALIDATION, args.k_fold_val_set*NUM_NIGHTS_VALIDATION+NUM_NIGHTS_VALIDATION)
-    if (dataset_metadata["clip_length_s"] % args.patch_length_s != 0):
-        raise ValueError(f"Patch length ({args.patch_length_s}s) needs to be a multiple of clip length ({dataset_metadata['clip_length_s']}s! Aborting.)")
     if len(args.class_weights) != (sleep_map.get_num_stages()+1):
         raise ValueError(f"Number of class weights ({len(args.class_weights)}) should be equal to number of sleep stages ({sleep_map.get_num_stages()+1})")
     if (dataset_metadata["num_files_used"] % NUM_NIGHTS_VALIDATION != 0):
@@ -175,6 +173,8 @@ def load_from_dataset(args):
         raise ValueError(f"Base path for k-fold validation results ({os.path.dirname(args.k_fold_val_results_fp)}) doesn't exist!")
     if max(val_nights) >= dataset_metadata["num_files_used"]:
         raise ValueError(f"One of more nights used for validation ({list(val_nights)}) exceeds number of files in dataset ({dataset_metadata['num_files_used']})!")
+    if (CLIP_LENGTH_NUM_SAMPLES % args.patch_length != 0):
+        raise ValueError(f"Patch length (# of samples; {args.patch_length}) needs to be an integer divisor of clip length (# of samples; {CLIP_LENGTH_NUM_SAMPLES}s! Aborting.)")
 
     # Load dataset
     if "cedar.computecanada.ca" in socket.gethostname(): # Compute Canada (aka running on GPU needs Tensorflow 2.8.0) needs a Tensorflow downgrade (or gets a compilation error)
@@ -298,7 +298,7 @@ def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_
             for model_type, pred_cnt in pred_cnt.items(): log += f"Sleep stages count in validation set prediction ({num_clips_validation}, {model_type}): {pred_cnt} ({[round(num / num_clips_validation, 4) for num in pred_cnt]})\n"
 
         log += f"\nClip length (s): {dataset_metadata['clip_length_s']}\n"
-        log += f"Patch length (s): {parser.patch_length_s}\n"
+        log += f"Patch length (# of samples): {parser.patch_length}\n"
         log += f"Number of sleep stages (includes unknown): {sleep_map.get_num_stages()+1}\n"
         log += f"Data type: {DATA_TYPE}\n"
         log += f"Batch size: {parser.batch_size}\n"
@@ -307,7 +307,7 @@ def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_
         log += f"Number of layers: {parser.num_layers}\n"
         log += f"MLP dimension: {parser.mlp_dim}\n"
         log += f"Number of dense (+ dropout) layers in MLP head before softmax: {parser.mlp_head_num_dense}\n"
-        log += f"Dropout rate: {parser.dropout_rate:.3f}\n"
+        log += f"Dropout rate: {parser.dropout_rate_percent:.3f}\n"
         log += f"Historical prediction lookback DNN depth: {parser.historical_lookback_DNN_depth}\n"
         log += f"Activation function of first dense layer in MLP layer and MLP head: {mlp_dense_activation}\n"
         log += f"Class training weights: {parser.class_weights}\n"
@@ -336,7 +336,7 @@ def parse_arguments():
     parser.add_argument('--num_clips', help='Number of clips to use for training + validation. Defaults to 3000.', default=3000, type=int)
     parser.add_argument('--input_dataset', help='Filepath of the dataset used for training and validation.', type=str)
     parser.add_argument('--input_channel', help='Name of the channel to use for training and validation.', type=str)
-    parser.add_argument('--patch_length_s', help='Patch length (in sec). Must be integer multiple of clip length. Defaults to 0.5s.', default=0.5, type=float)
+    parser.add_argument('--patch_length', help='Patch length (in # of samples). Must be integer divisor of sampling_freq*clip_length_s. Defaults to 256.', default=256, type=float)
     parser.add_argument('--num_layers', help='Number of encoder layer. Defaults to 8.', default=8, type=int)
     parser.add_argument('--embedding_depth', help='Depth of the embedding layer. Defaults to 32.', default=32, type=int)
     parser.add_argument('--num_heads', help='Number of multi-attention heads. Defaults to 8.', default=8, type=int)
@@ -351,7 +351,7 @@ def parse_arguments():
     parser.add_argument('--training_set_target_count', help='Target number of clips per class in training set. Defaults to [3500, 5000, 4000, 4250, 3750].', nargs='+', default=[3500, 5000, 4000, 4250, 3750], type=int)
     parser.add_argument('--enable_input_rescale', help='Enables layer rescaling inputs between [0, 1] at input.', action='store_true')
     parser.add_argument('--enable_positional_embedding', help='Enables positional embedding.', action='store_true')
-    parser.add_argument('--dropout_rate', help='Dropout rate for all dropout layers. Defaults to 0.1.', default=0.1 , type=float)
+    parser.add_argument('--dropout_rate_percent', help='Dropout rate for all dropout layers (in integer %). Defaults to 10%.', default=10 , type=int)
     parser.add_argument('--save_model', help='Saves model to disk.', action='store_true')
     parser.add_argument('--load_model_filepath', help='Indicates, if not empty, the filepath of a model to load rather than training it. Defaults to None.', default=None, type=str)
     parser.add_argument('--historical_lookback_DNN_depth', help='Internal size of the output DNN for historical lookback. Defaults to 64.', default=64, type=int)
@@ -368,11 +368,8 @@ def parse_arguments():
     except Exception as e:
         utilities.log_error_and_exit(exception=e, manual_description=f"[{(time.time()-start_time):.2f}s] Failed to parse arguments.")
 
-    print(f"CAUTION: Dividing dropout rate by 20 in order to use SLURM array!")
-    args.dropout_rate /= 20 
-
-    print(f"CAUTION: Dividing patch length by 32 in order to use SLURM array!")
-    args.patch_length_s /= 32 
+    # Scale arguments
+    args.dropout_rate_percent /= 100 
 
     # Print arguments received
     for arg in vars(args):
@@ -591,10 +588,10 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
         # Hyperparameters
         self.embedding_depth = embedding_depth
         self.num_heads = num_heads
-        self.projection_dimension = self.embedding_depth // self.num_heads
+        self.projection_dimension = int(self.embedding_depth // self.num_heads)
         self.clip_length_num_samples = CLIP_LENGTH_NUM_SAMPLES
-        self.patch_length_num_samples = int(args.patch_length_s * SAMPLING_FREQUENCY_HZ)
-        self.num_patches = int(self.clip_length_num_samples / self.patch_length_num_samples)
+        self.patch_length = args.patch_length
+        self.num_patches = int(self.clip_length_num_samples / self.patch_length)
         self.use_class_embedding = args.use_class_embedding
 
         if self.embedding_depth % num_heads != 0:
@@ -673,27 +670,27 @@ class Encoder(tf.keras.layers.Layer):
         self.embedding_depth = args.embedding_depth
         self.num_heads = args.num_heads
         self.mlp_dim = args.mlp_dim
-        self.dropout_rate = args.dropout_rate
+        self.dropout_rate_percent = args.dropout_rate_percent
         self.history_length = NUM_SLEEP_STAGE_HISTORY
         self.mlp_dense_activation = mlp_dense_activation
         self.clip_length_num_samples = CLIP_LENGTH_NUM_SAMPLES
-        self.patch_length_num_samples = int(args.patch_length_s * SAMPLING_FREQUENCY_HZ)
-        self.num_patches = int(self.clip_length_num_samples / self.patch_length_num_samples)
+        self.patch_length = args.patch_length
+        self.num_patches = int(self.clip_length_num_samples / self.patch_length)
         self.use_class_embedding = args.use_class_embedding
 
         # Layers
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layerNorm1_encoder")
         self.mhsa = MultiHeadSelfAttention(self.args, self.embedding_depth, self.num_heads)
-        self.dropout1 = tf.keras.layers.Dropout(self.dropout_rate, seed=RANDOM_SEED, name="dropout1_encoder")
+        self.dropout1 = tf.keras.layers.Dropout(self.dropout_rate_percent, seed=RANDOM_SEED, name="dropout1_encoder")
 
         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layerNorm2_encoder")
         self.mlp = tf.keras.Sequential([
             tf.keras.layers.Dense(self.mlp_dim, activation=self.mlp_dense_activation, name="mlp_dense1_encoder"),
-            tf.keras.layers.Dropout(self.dropout_rate, seed=RANDOM_SEED, name="mlp_dropout1_encoder"),
+            tf.keras.layers.Dropout(self.dropout_rate_percent, seed=RANDOM_SEED, name="mlp_dropout1_encoder"),
             tf.keras.layers.Dense(self.embedding_depth, name="mlp_dense2_encoder"),
-            tf.keras.layers.Dropout(self.dropout_rate, seed=RANDOM_SEED, name="mlp_dropout2_encoder"),
+            tf.keras.layers.Dropout(self.dropout_rate_percent, seed=RANDOM_SEED, name="mlp_dropout2_encoder"),
         ], name="mlp_encoder")
-        self.dropout2 = tf.keras.layers.Dropout(self.dropout_rate, seed=RANDOM_SEED, name="dropout2_encoder")
+        self.dropout2 = tf.keras.layers.Dropout(self.dropout_rate_percent, seed=RANDOM_SEED, name="dropout2_encoder")
 
     def call(self, inputs, training):
         inputs_norm = self.layernorm1(inputs) #inputs_norm = (batch_size, num_patches+1, embedding_depth)
@@ -733,14 +730,14 @@ class VisionTransformer(tf.keras.Model):
 
         # Hyperparameters
         self.clip_length_num_samples = CLIP_LENGTH_NUM_SAMPLES
-        self.patch_length_num_samples = int(args.patch_length_s * SAMPLING_FREQUENCY_HZ)
+        self.patch_length = int(args.patch_length)
         self.num_encoder_layers = args.num_layers
         self.num_classes = sleep_map.get_num_stages()+1
         self.embedding_depth = args.embedding_depth
         self.num_heads = args.num_heads
         self.mlp_dim = args.mlp_dim
-        self.dropout_rate = args.dropout_rate
-        self.num_patches = int(self.clip_length_num_samples / self.patch_length_num_samples)
+        self.dropout_rate_percent = args.dropout_rate_percent
+        self.num_patches = int(self.clip_length_num_samples / self.patch_length)
         self.history_length = NUM_SLEEP_STAGE_HISTORY
         self.historical_lookback_DNN = False and (True if self.history_length > 0 else False)
         self.historical_lookback_DNN_depth = args.historical_lookback_DNN_depth
@@ -759,19 +756,19 @@ class VisionTransformer(tf.keras.Model):
         self.mlp_head = [tf.keras.layers.LayerNormalization(epsilon=1e-6, name="mlp_head_layerNorm")]
         for i in range(self.mlp_head_num_dense):
             self.mlp_head.append(tf.keras.layers.Dense(self.mlp_dim, activation=self.mlp_dense_activation, name=f"mlp_head_dense{i+1}"))
-            self.mlp_head.append(tf.keras.layers.Dropout(self.dropout_rate, seed=RANDOM_SEED, name=f"mlp_head_dropout{i+1}"))
+            self.mlp_head.append(tf.keras.layers.Dropout(self.dropout_rate_percent, seed=RANDOM_SEED, name=f"mlp_head_dropout{i+1}"))
         self.mlp_head.append(tf.keras.layers.Dense(self.num_classes, activation="softmax", name="mlp_head_softmax"))
         self.mlp_head = tf.keras.Sequential(self.mlp_head, name="mlp_head")
 
     def extract_patches(self, batch_size:int, clips, training:bool=False):
-        patches = tf.reshape(clips, [batch_size, -1, self.patch_length_num_samples])
+        patches = tf.reshape(clips, [batch_size, -1, self.patch_length])
         return patches
 
     def call(self, input, training:bool=False):
         # Extract historical lookback (if present)
         if self.history_length > 0:
             clip, historical_lookback = tf.split(input, [self.clip_length_num_samples, self.history_length], axis=1)
-            historical_lookback_padding = tf.zeros(shape=(clip.shape[0], self.patch_length_num_samples - self.history_length), dtype=DATA_TYPE)
+            historical_lookback_padding = tf.zeros(shape=(clip.shape[0], self.patch_length - self.history_length), dtype=DATA_TYPE)
             historical_lookback_patch = tf.concat([historical_lookback, historical_lookback_padding], axis=1)
             historical_lookback_patch = tf.expand_dims(historical_lookback_patch, axis=1)
         else:
@@ -785,7 +782,7 @@ class VisionTransformer(tf.keras.Model):
         if self.enable_scaling: clip = self.rescale(clip)
 
         # Extract patches
-        patches = self.extract_patches(batch_size, clip) #patches = (batch_size, num_patches, patch_length_num_samples)
+        patches = self.extract_patches(batch_size, clip) #patches = (batch_size, num_patches, patch_length)
         if self.history_length > 0:
             patches = tf.concat([patches, historical_lookback_patch], axis=1)
 
@@ -824,13 +821,13 @@ class VisionTransformer(tf.keras.Model):
         config = {
             'name': 'VisionTransformer',
             'clip_length_num_samples': self.clip_length_num_samples,
-            'patch_length_num_samples': self.patch_length_num_samples,
+            'patch_length': self.patch_length,
             'num_encoder_layers': self.num_encoder_layers,
             'num_classes': self.num_classes,
             'embedding_depth': self.embedding_depth,
             'num_heads': self.num_heads,
             'mlp_dim': self.mlp_dim,
-            'dropout_rate': self.dropout_rate,
+            'dropout_rate_percent': self.dropout_rate_percent,
             'num_patches': self.num_patches,
             'history_length': self.history_length,
             'historical_lookback_DNN': self.historical_lookback_DNN,
@@ -855,7 +852,7 @@ class VisionTransformer(tf.keras.Model):
             ops["incrs"] += self.clip_length_num_samples
 
         # Patch embeddings
-        x_in, y_in = self.num_patches, self.patch_length_num_samples
+        x_in, y_in = self.num_patches, self.patch_length
         x_out, y_out = self.num_patches, self.embedding_depth
         increment_ops(ops_dict=ops, in_shape=(x_in,y_in,0), out_shape=(x_out,y_out,0), layer_type="Dense", activation=False)
 
@@ -870,7 +867,7 @@ class VisionTransformer(tf.keras.Model):
         # MLP head
         x_in, y_in = self.num_patches+self.use_class_embedding, y_out
         increment_ops(ops_dict=ops, in_shape=(x_in,y_in,0), out_shape=(x_in,y_in,0), layer_type="LayerNorm")
-        for _ in self.mlp_head_num_dense:
+        for _ in range(self.mlp_head_num_dense):
             increment_ops(ops_dict=ops, in_shape=(x_in,y_in,0), out_shape=(y_in,self.mlp_dim,0), layer_type="Dense", activation=True)
         increment_ops(ops_dict=ops, in_shape=(y_in,self.mlp_dim,0), out_shape=(1, sleep_map.get_num_stages()+1,0), layer_type="Dense", activation=True)
 

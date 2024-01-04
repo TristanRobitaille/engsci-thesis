@@ -31,7 +31,7 @@ NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE = 5000 #Number of pseudo-random clips to 
 MAX_VOLTAGE = 2**15 - 1
 MIN_VOLTAGE = 0
 ONE_HOT_OUTPUT = False #If true, sleep stages are exported as their one-hot classes tensor, else they are reported as a scalar
-NUM_PROCESSES = 22
+NUM_PROCESSES = 12
 DATA_TYPE = tf.uint16
 
 sleep_map = utilities.SleepStageMap()
@@ -170,7 +170,7 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
     signals = list()
     channels = list(signal_reader.getSignalLabels())
 
-    total_raw_clips = min(math.floor(signal_reader.getFileDuration() / args.clip_length_s), len(sleep_stages))
+    total_raw_clips = min(math.floor(signal_reader.getFileDuration() / args.clip_length_s), int(len(sleep_stages) * SLEEP_STAGE_RESOLUTION_SEC/args.clip_length_s))
     clip_duration_samples = int(args.clip_length_s * NOMINAL_FREQUENCY_HZ)
 
     # Extract clips for each channel

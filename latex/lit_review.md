@@ -97,3 +97,19 @@
     - Latencies: (Integer): Add = n+1 cycles, Mult = n^2+3n-2 cycles. (Float): Add = 2ME+9M+7E+12, Mult = M^2+7M+3E+5 (M=# of mantissa bits, W=# of exponent bits)
     - Also developed a "swizzle" module to interface data from DRAM to CoFeMa RAM
     - Tools: Verilog-to-Routing, COFFE for area and delay value and FreePDK45 for SPICE
+
+### Compute-Capable Block RAMs for Efficient Deep Leanring Acceleration on FPGAs
+- **Results**
+    - 1.6x and 2.3x speedup for int8 and bfp8 MACs at 1.8% increased area
+    - An IP CiM BRAM that can be instantiated with vendor's BRAM IP
+- **Main ideas**
+    - Present CiM BRAM design for FPGA (argue advantages of CiM are: high parallelism, tight integration and elimination of data movement)
+    - Their CiM BRAM module
+        - Bit-serial operation on transposed data (data bits are along bitline instead of wordline)
+        - Can do adds, multiplies, reduction and AND/NOR (on each bitline). Other bit-serial operations in [11]. Advantage of bit-serial is lower energy but at higher latency.
+        - Can function as traditional memory
+    - Explain block floating point: A block of floats share the same exponent such that only the mantissa needs to be computed (as integer operations).
+    - Their 64Kb BRAM for FPGA is ~11800um^2 (7.4% area increase for CiM overhead --> Decreases to 1.8% overall since BRAM is ~25% of FPGA area)
+    - BFP8 MAC: 113 cycles, INT8 MAC: 23 cycles
+    - Use elegant heatmaps for design space exploration
+    - Simulation with COFFE

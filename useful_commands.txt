@@ -1,4 +1,4 @@
-Execution instructions for Tensorflow model on Compute Canada Cedar:
+Execution instructions for Tensorflow model on Compute Canada node:
     1) $ cd ~/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype
     2) $ module load python/3
     3) $ source ~/tensorflow/bin/activate
@@ -11,7 +11,7 @@ Execution instructions for Tensorflow model on Compute Canada Cedar:
 
     More details: https://docs.alliancecan.ca/wiki/TensorFlow
 
-    For TensorBoard monitoring:
+    For TensorBoard monitoring (from Compute Canada node):
     1) $ sbatch run_tf_proto.sh
     2) $ sq
     3) Find hostname of compute node running the job in the 'NODELIST' column
@@ -24,7 +24,7 @@ Execution instructions for Tensorflow model on Compute Canada Cedar:
     -View current jobs: $ sq
     -Cancel job: $ scancel <NODEID>
     -View job stats: $ seff <JOBID>
-    -Interactive job: $ salloc --time=02:00:00 --mem-per-cpu=48G --ntasks=2 --account=def-xilinliu
+    -Interactive job: $ salloc --time=02:00:00 --mem-per-cpu=16G --ntasks=2 --account=def-xilinliu
     -View usage stats $ sacct -j <JOBID>
 
 Other useful commands
