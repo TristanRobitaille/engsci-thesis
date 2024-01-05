@@ -26,7 +26,7 @@ python3 /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_proto
 --mlp_head_num_dense=1 \
 --historical_lookback_DNN_depth=32 \
 --dropout_rate_percent=30 \
---class_weights 1 1 1 1.15 1 \
+--class_weights 1 1 1 1.2 1 \
 --input_dataset="/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/data/SS3_EDF_Tensorized_both_light_deep_combine-stg_30-0s_256Hz" \
 --dataset_resample_algo="ADASYN" \
 --training_set_target_count 4600 4600 4600 4600 4600 \
@@ -38,6 +38,7 @@ python3 /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_proto
 --k_fold_val_set=0 \
 --num_out_filter=$2 \
 --out_filter_type="${1}" \
+--filter_self_reset_threshold=-1 \
 --k_fold_val_results_fp="/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/results/k_fold_val_results/val_1" \
 --note=""
 # --output_edgetpu_data \

@@ -39,22 +39,46 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
         return config
 
 class MovingAverage():
-    def __init__(self, num_samples):
-        self.num_samples = num_samples
-        self.samples = []
+    def __init__(self, num_samples:int, self_reset_threshold:int=-1):
+        self.num_samples = num_samples # Number of desired samples in moving average
+        self.self_reset_enabled = (self_reset_threshold > 0)
+        self.self_reset_threshold = self_reset_threshold # After this number of samples with a constant sleep stage, we self reset the filter. This is to provide a sharp edge on transitions if the output has been stable.
 
-    def filter(self, new_sample:tf.Tensor):
+        self.output_samples = []
+        self.sleep_stage_samples = []
+
+    def filter(self, new_output:tf.Tensor):
         """ Returns a filtered (self.num_samples.shape[0], 1) tensor."""
         if self.num_samples == 0: # No filtering
-            return new_sample
+            return new_output
         
-        self.samples.append(new_sample)
-        if len(self.samples) > self.num_samples:
-            self.samples.pop(0)
-        return tf.reduce_mean(self.samples, axis=0)
+        if self.self_reset_enabled and (len(self.sleep_stage_samples) >= self.self_reset_threshold) and (self.is_sleep_stage_buffer_constant()): self.reset()
+
+        self.output_samples.append(new_output)
+        if len(self.output_samples) > self.num_samples: self.output_samples.pop(0)
+
+        return tf.reduce_mean(self.output_samples, axis=0)
     
     def reset(self):
-        self.samples = []
+        self.output_samples = []
+
+    def append_sleep_stage(self, new_sleep_stage:int):
+        self.sleep_stage_samples.append(new_sleep_stage)
+        if len(self.sleep_stage_samples) > self.self_reset_threshold: self.sleep_stage_samples.pop(0)
+
+    def is_sleep_stage_buffer_constant(self):
+        """ 
+        Returns whether the sleep stage prediction buffer contains only the same values, up to the self reset threshold
+        """
+
+        constant = True
+
+        for i in range(len(self.sleep_stage_samples)):
+            if self.sleep_stage_samples[-i-1] != self.sleep_stage_samples[-1]:
+                constant = False
+                break
+
+        return constant
 
 class SleepStageMap():
     """
@@ -214,14 +238,14 @@ def count_instances_per_class(input, num_classes) -> list:
         count[int(elem)] += 1
     return count
 
-def run_model(model, data:dict, whole_night_indices:list, data_type:tf.DType, num_output_filtering:int=0, filter_post_argmax:bool=True, num_sleep_stage_history:int=0) -> list:
+def run_model(model, data:dict, whole_night_indices:list, data_type:tf.DType, num_output_filtering:int=0, filter_post_argmax:bool=True, self_reset_threshold:int=-1, num_sleep_stage_history:int=0) -> list:
     # Load saved model (if argument is string)
     if (isinstance(model, str)):
         model = tf.keras.models.load_model(model, custom_objects={"CustomSchedule": CustomSchedule})
 
     sleep_stages_pred = []
     total = 0
-    output_filter = MovingAverage(num_output_filtering)
+    output_filter = MovingAverage(num_output_filtering, self_reset_threshold=self_reset_threshold)
     if num_sleep_stage_history > 0: historical_pred = tf.zeros(shape=(1, num_sleep_stage_history), dtype=data_type)
 
     try:
@@ -241,12 +265,13 @@ def run_model(model, data:dict, whole_night_indices:list, data_type:tf.DType, nu
 
             if num_sleep_stage_history > 0: historical_pred = tf.concat([tf.expand_dims(sleep_stage_pred, axis=1), historical_pred[:, 0:num_sleep_stage_history-1]], axis=1)
             sleep_stages_pred.append(int(sleep_stage_pred[0].numpy()))
+            output_filter.append_sleep_stage(int(sleep_stage_pred[0].numpy()))
             total += 1
     except Exception as e: log_error_and_exit(exception=e, manual_description="Failed to manually run model.")
 
     return sleep_stages_pred
 
-def run_tflite_model(model_fp:str, data:str, whole_night_indices:list, data_type:tf.DType, num_output_filtering:int=0, filter_post_argmax:bool=True, num_sleep_stage_history:int=0) -> list:
+def run_tflite_model(model_fp:str, data:str, whole_night_indices:list, data_type:tf.DType, num_output_filtering:int=0, filter_post_argmax:bool=True, self_reset_threshold:int=-1, num_sleep_stage_history:int=0) -> list:
     interpreter = tf.lite.Interpreter(model_path=model_fp)
     interpreter.allocate_tensors()
 
@@ -256,7 +281,7 @@ def run_tflite_model(model_fp:str, data:str, whole_night_indices:list, data_type
 
     predictions = []
     total = 0
-    output_filter = MovingAverage(num_output_filtering)
+    output_filter = MovingAverage(num_output_filtering, self_reset_threshold=self_reset_threshold)
     if num_sleep_stage_history > 0: historical_pred = tf.zeros(shape=(1, num_sleep_stage_history), dtype=data_type)
 
     for x, y in zip(data["signals_val"], data["sleep_stages_val"]):
@@ -281,6 +306,7 @@ def run_tflite_model(model_fp:str, data:str, whole_night_indices:list, data_type
 
         if num_sleep_stage_history > 0: historical_pred = tf.concat([tf.expand_dims(sleep_stage_pred, axis=1), historical_pred[:, 0:num_sleep_stage_history-1]], axis=1)
         predictions.append(int(sleep_stage_pred[0].numpy()))
+        output_filter.append_sleep_stage(int(sleep_stage_pred[0].numpy()))
         total += 1
 
     return predictions
