@@ -315,7 +315,8 @@ def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_
         log += f"Rescale layer enabled: {parser.enable_input_rescale}\n"
         log += f"Use classification token: {parser.use_class_embedding}\n"
         log += f"Positional embedding enabled: {parser.enable_positional_embedding}\n"
-        log += f"Number of samples in output filtering: {parser.num_out_filter}\n"
+        log += f"Output filter type: {parser.out_filter_type}\n"
+        log += f"Number of samples in output filter: {parser.num_out_filter}\n"
         log += f"Model loss type: {model.loss.name}\n"
         log += f"Note: {parser.note}\n"
 
@@ -361,7 +362,8 @@ def parse_arguments():
     parser.add_argument('--num_out_filter', help='Number of averages in output moving average filter. Set to 0 to disable. Defaults to 0.', default=0, type=int)
     parser.add_argument('--k_fold_val_results_fp', help='Filepath of CSV file used for k-fold validation results. Also exports model details to .txt of the same path.', type=str)
     parser.add_argument('--note', help="Optional note to write info textfile. Defaults to None.", default="", type=str )
-
+    parser.add_argument('--out_filter_type', help="Selects whether to filter the model output before the argmax operation on the softmax layer's output. Default to 'post_argmax'.", choices=["pre_argmax", "post_argmax"], default="post_argmax", type=str)
+    
     # Parse arguments
     try:
         args = parser.parse_args()
@@ -444,17 +446,18 @@ def manual_val(model, args, type:str, data:dict, whole_night_indices:list, out_f
     total_correct = 0
     accuracy = 0
     pred_cnt = [0 for _ in range(sleep_map.get_num_stages()+1)]
+    filter_post_argmax = (args.out_filter_type == 'post_argmax')
 
     print(f"[{(time.time()-start_time):.2f}s] Starting manual validation for model type '{type}'.")
 
     # Run model
     try:
         if (type == "tf"):
-            sleep_stages_pred = utilities.run_model(model, data=data, whole_night_indices=whole_night_indices, data_type=DATA_TYPE, num_output_filtering=args.num_out_filter, num_sleep_stage_history=NUM_SLEEP_STAGE_HISTORY)
+            sleep_stages_pred = utilities.run_model(model, data=data, whole_night_indices=whole_night_indices, data_type=DATA_TYPE, num_output_filtering=args.num_out_filter, filter_post_argmax=filter_post_argmax, num_sleep_stage_history=NUM_SLEEP_STAGE_HISTORY)
         elif (type == "tflite") or (type == "tflite (quant)") or (type == "tflite (16bx8b full quant)"):
-            sleep_stages_pred = utilities.run_tflite_model(model, data=data, whole_night_indices=whole_night_indices, data_type=DATA_TYPE, num_output_filtering=args.num_out_filter, num_sleep_stage_history=NUM_SLEEP_STAGE_HISTORY)
+            sleep_stages_pred = utilities.run_tflite_model(model, data=data, whole_night_indices=whole_night_indices, data_type=DATA_TYPE, num_output_filtering=args.num_out_filter, filter_post_argmax=filter_post_argmax, num_sleep_stage_history=NUM_SLEEP_STAGE_HISTORY)
         elif type == "tflite (full quant)":
-            sleep_stages_pred = utilities.run_tflite_model(model, data=data, whole_night_indices=whole_night_indices, data_type=tf.uint8, num_output_filtering=args.num_out_filter, num_sleep_stage_history=NUM_SLEEP_STAGE_HISTORY)
+            sleep_stages_pred = utilities.run_tflite_model(model, data=data, whole_night_indices=whole_night_indices, data_type=tf.uint8, num_output_filtering=args.num_out_filter, filter_post_argmax=filter_post_argmax, num_sleep_stage_history=NUM_SLEEP_STAGE_HISTORY)
 
         # Check accuracy
         for i in range(len(sleep_stages_pred)):

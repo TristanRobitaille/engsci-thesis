@@ -214,7 +214,7 @@ def count_instances_per_class(input, num_classes) -> list:
         count[int(elem)] += 1
     return count
 
-def run_model(model, data:dict, whole_night_indices:list, data_type:tf.DType, num_output_filtering:int=0, num_sleep_stage_history:int=0) -> list:
+def run_model(model, data:dict, whole_night_indices:list, data_type:tf.DType, num_output_filtering:int=0, filter_post_argmax:bool=True, num_sleep_stage_history:int=0) -> list:
     # Load saved model (if argument is string)
     if (isinstance(model, str)):
         model = tf.keras.models.load_model(model, custom_objects={"CustomSchedule": CustomSchedule})
@@ -227,17 +227,18 @@ def run_model(model, data:dict, whole_night_indices:list, data_type:tf.DType, nu
     try:
         for x, y in zip(data["signals_val"], data["sleep_stages_val"]):
             x = tf.reshape(x, [1, x.shape[0]]) # Prepend 1 to shape to make it a batch of 1
-
             if num_sleep_stage_history > 0:
                 x = tf.concat([x[:,:-num_sleep_stage_history], historical_pred], axis=1) # Concatenate historical prediction to input
                 if total in whole_night_indices: historical_pred = tf.zeros(shape=(1, num_sleep_stage_history)) # Reset historical prediction at 0 (unknown) if at the start a new night
+            if filter_post_argmax and (total in whole_night_indices): output_filter.reset() # Reset filter if starting a new night
 
             sleep_stage_pred = model(x, training=False)
+            if not filter_post_argmax: sleep_stage_pred = output_filter.filter(sleep_stage_pred) # Filter softmax output
             sleep_stage_pred = tf.argmax(sleep_stage_pred, axis=1)
 
-            if total in whole_night_indices: output_filter.reset() # Reset filter if starting a new night
-            sleep_stage_pred = tf.cast(output_filter.filter(sleep_stage_pred), dtype=data_type) # Filter sleep stage
-            
+            if filter_post_argmax: sleep_stage_pred = tf.cast(output_filter.filter(sleep_stage_pred), dtype=data_type) # Filter sleep stage
+            else: sleep_stage_pred = tf.cast(sleep_stage_pred, dtype=data_type)
+
             if num_sleep_stage_history > 0: historical_pred = tf.concat([tf.expand_dims(sleep_stage_pred, axis=1), historical_pred[:, 0:num_sleep_stage_history-1]], axis=1)
             sleep_stages_pred.append(int(sleep_stage_pred[0].numpy()))
             total += 1
@@ -245,7 +246,7 @@ def run_model(model, data:dict, whole_night_indices:list, data_type:tf.DType, nu
 
     return sleep_stages_pred
 
-def run_tflite_model(model_fp:str, data:str, whole_night_indices:list, data_type:tf.DType, num_output_filtering:int=0, num_sleep_stage_history:int=0) -> list:
+def run_tflite_model(model_fp:str, data:str, whole_night_indices:list, data_type:tf.DType, num_output_filtering:int=0, filter_post_argmax:bool=True, num_sleep_stage_history:int=0) -> list:
     interpreter = tf.lite.Interpreter(model_path=model_fp)
     interpreter.allocate_tensors()
 
@@ -267,14 +268,16 @@ def run_tflite_model(model_fp:str, data:str, whole_night_indices:list, data_type
         if num_sleep_stage_history > 0:
             x = tf.concat([x[:,:-num_sleep_stage_history], historical_pred], axis=1) # Concatenate historical prediction to input
             if total in whole_night_indices: historical_pred = tf.zeros(shape=(1, num_sleep_stage_history)) # Reset historical prediction at 0 (unknown) if at the start a new night
+        if total in whole_night_indices: output_filter.reset() # Reset filter if starting a new night
 
         interpreter.set_tensor(input_details[0]['index'], x)
         interpreter.invoke()
         sleep_stage_pred = interpreter.get_tensor(output_details[0]['index'])
+        if not filter_post_argmax: sleep_stage_pred = output_filter.filter(sleep_stage_pred) # Filter softmax output
         sleep_stage_pred = tf.argmax(sleep_stage_pred, axis=1)
 
-        if total in whole_night_indices: output_filter.reset() # Reset filter if starting a new night
-        sleep_stage_pred = tf.cast(output_filter.filter(sleep_stage_pred), dtype=data_type) # Filter sleep stage
+        if filter_post_argmax: tf.cast(output_filter.filter(sleep_stage_pred), dtype=data_type) # Filter sleep stage
+        else: sleep_stage_pred = tf.cast(sleep_stage_pred, dtype=data_type)
 
         if num_sleep_stage_history > 0: historical_pred = tf.concat([tf.expand_dims(sleep_stage_pred, axis=1), historical_pred[:, 0:num_sleep_stage_history-1]], axis=1)
         predictions.append(int(sleep_stage_pred[0].numpy()))

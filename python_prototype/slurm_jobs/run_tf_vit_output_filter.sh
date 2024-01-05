@@ -38,6 +38,7 @@ python3 /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_proto
 --enable_input_rescale \
 --k_fold_val_set=0 \
 --num_out_filter=$SLURM_ARRAY_TASK_ID \
+--out_filter_type="post_argmax" \
 --k_fold_val_results_fp="/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/results/k_fold_val_results/val_1" \
 --note="Output filter study"
 # --output_edgetpu_data \

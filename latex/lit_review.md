@@ -113,3 +113,10 @@
     - BFP8 MAC: 113 cycles, INT8 MAC: 23 cycles
     - Use elegant heatmaps for design space exploration
     - Simulation with COFFE
+
+### An Automated Approach to Compare Bit Serial and Bit Parallel In-Memory Computing for DNNs
+- **Results**
+    - BSA has 4x lower latency, BPA has 6x lower (dynamic) power --> BPA has 25% higher EDP (Energy Delay Product)
+- **Main ideas**
+    - Compare energy and latency of bit-parallel arithmetic (BPA) and bit-serial arithmetic (BSA) for CiM in DL benchmarks over ten different subarrays ranging from 128x128 to 2048x2048.
+    - Used CACTI for simulations

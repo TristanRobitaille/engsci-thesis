@@ -38,6 +38,7 @@ python3 /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_proto
 --enable_input_rescale \
 --k_fold_val_set=$SLURM_ARRAY_TASK_ID \
 --num_out_filter=1 \
+--out_filter_type="post_argmax" \
 --k_fold_val_results_fp="/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/results/k_fold_val_results/val_1" \
 --note="k-fold sweep validation"
 # --output_edgetpu_data \
