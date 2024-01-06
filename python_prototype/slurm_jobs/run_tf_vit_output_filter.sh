@@ -2,11 +2,11 @@
 #SBATCH --gres=gpu:4        # request GPU "generic resource"
 #SBATCH --cpus-per-task=6   # maximum CPU cores per GPU request: 6 on Cedar, 16 on Graham.
 #SBATCH --mem=16000M        # memory per node
-#SBATCH --time=00-2:59      # time (DD-HH:MM)
+#SBATCH --time=00-6:59      # time (DD-HH:MM)
 #SBATCH --output=%N-%j_output_filter.out  # %N for node name, %j for jobID
 #SBATCH --mail-user=tristan.robitaille@mail.utoronto.ca
 #SBATCH --mail-type=ALL
-#SBATCH --array=1-8
+#SBATCH --array=1-3
 
 module load cuda cudnn 
 module load python/3
@@ -27,7 +27,7 @@ python3 /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_proto
 --mlp_head_num_dense=4 \
 --historical_lookback_DNN_depth=32 \
 --dropout_rate_percent=30 \
---class_weights 1 1 1 0.7 1 \
+--class_weights 1 1 1 1.2 1 \
 --input_dataset="/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/data/SS3_EDF_Tensorized_both_light_deep_combine-stg_30-0s_256Hz" \
 --dataset_resample_algo="ADASYN" \
 --training_set_target_count 4600 4600 4600 4600 4600 \
@@ -38,7 +38,9 @@ python3 /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_proto
 --enable_input_rescale \
 --k_fold_val_set=0 \
 --num_out_filter=$SLURM_ARRAY_TASK_ID \
---out_filter_type="post_argmax" \
+--out_filter_type="pre_argmax" \
+--filter_self_reset_threshold=-1 \
 --k_fold_val_results_fp="/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/results/k_fold_val_results/val_1" \
+--num_runs=6 \
 --note="Output filter study"
 # --output_edgetpu_data \
