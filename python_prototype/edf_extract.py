@@ -13,6 +13,7 @@ import socket
 import utilities
 
 from typing import List
+from scipy import signal
 from pyedflib import EdfReader
 from argparse import ArgumentParser
 from scipy.interpolate import interp1d
@@ -33,17 +34,42 @@ MIN_VOLTAGE = 0
 ONE_HOT_OUTPUT = False #If true, sleep stages are exported as their one-hot classes tensor, else they are reported as a scalar
 NUM_PROCESSES = 12
 DATA_TYPE = tf.uint16
+AVAILABLE_SIGNAL_PROCESSING_OPS = ["15b_offset", "notch_60Hz", "0_3Hz-100Hz_bandpass", "0_5Hz-32Hz_bandpass"]
 
 sleep_map = utilities.SleepStageMap()
 
-def signals_processing(signals:List) -> List:
+def signals_processing(args, signals:List) -> List:
     """
-    Can apply data processing before exporting data.
-    Returns input tensor with processing applied.
+    Apply data processing before exporting data according to input arguments
     """
-    # Shift up signal to remove negative values
     signals = np.array(signals)
-    signals += 32768 # 15b shift
+
+    # 60Hz notch
+    if "notch_60Hz" in args.signal_processing_ops:
+        notch_freq = 60 # 60Hz
+        BW = 1 # -3dB bandwidth
+        b_notch, a_notch = signal.iirnotch(w0=notch_freq, Q=BW, fs=NOMINAL_FREQUENCY_HZ)
+        signals = signal.lfilter(b_notch, a_notch, signals) # Note: Could use sosfiltfilt to avoid phase-shift, but the hardware filter will have a phase shift so lfilter is more realistic
+
+    # 0.1-100Hz bandpass (used in: https://arxiv.org/pdf/1703.04046.pdf)
+    if "0_3Hz-100Hz_bandpass" in args.signal_processing_ops:
+        half_order = 4 # Order is 2*N
+        fc_lower = 0.3 # Hz
+        fc_upper = 100 # Hz
+        b_bp, a_bp = signal.butter(N=half_order, Wn=[fc_lower,fc_upper], btype='bandpass', analog=False, fs=NOMINAL_FREQUENCY_HZ)
+        signals = signal.lfilter(b_bp, a_bp, signals) # Note: Could use sosfiltfilt to avoid phase-shift, but the hardware filter will have a phase shift so lfilter is more realistic
+
+    # 0.5-32Hz bandpass (used in: https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9669456)
+    if "0_5Hz-32Hz_bandpass" in args.signal_processing_ops:
+        half_order = 4 # Order is 2*N
+        fc_lower = 0.5 # Hz
+        fc_upper = 32 # Hz
+        b_bp, a_bp = signal.butter(N=half_order, Wn=[fc_lower,fc_upper], btype='bandpass', analog=False, fs=NOMINAL_FREQUENCY_HZ)
+        signals = signal.lfilter(b_bp, a_bp, signals) # Note: Could use sosfiltfilt to avoid phase-shift, but the hardware filter will have a phase shift so lfilter is more realistic
+
+    # Shift up signal to remove negative values
+    if "15b_offset" in args.signal_processing_ops:
+        signals += 32768 # 15b shift
 
     return signals
 
@@ -182,9 +208,10 @@ def read_single_whole_night(args, psg_filepath:str, annotations_filepath:str, ch
         temp_clip = list()
         channel_number = channels.index(channel)
 
+        measurements = signals_processing(args=args, signals=signal_reader.readSignal(channel_number, digital=True))
+        
         for clip_number in range(total_raw_clips): #Split measurement list into clips of clip_length_s duration
-            measurement = signal_reader.readSignal(channel_number, start=clip_duration_samples*clip_number, n=clip_duration_samples, digital=True)
-            measurement = signals_processing(measurement)
+            measurement = measurements[clip_duration_samples*clip_number : clip_duration_samples*clip_number+clip_duration_samples]
             if DATA_TYPE == tf.uint16: measurement = measurement.astype(np.uint16)
             elif DATA_TYPE == tf.int16: measurement = measurement.astype(np.int16)
             elif DATA_TYPE == tf.float32: measurement = measurement.astype(np.float32)
@@ -378,12 +405,17 @@ def parse_arguments():
     parser.add_argument('--enable_multiprocessing', help='Enables multiprocessing of data. Defaults to False if argument unused.', action='store_true')
     parser.add_argument('--sampling_freq_hz', help='Desired sampling frequency (Hz) at which to resample (up- or downsample). Frequencies that are not an integer multiple of the original frequency result in \
                         interpolated samples.', type=int, default=NOMINAL_FREQUENCY_HZ)
+    parser.add_argument('--signal_processing_ops', help=f'List of signal processing operations to apply. May be one or more of: {AVAILABLE_SIGNAL_PROCESSING_OPS}', metavar="S", nargs="+")
 
     # Parse arguments
     args = parser.parse_args()
     if args.directory_psg == "": args.directory_psg = os.getcwd()
     if args.directory_labels == "": args.directory_labels = args.directory_psg
     if args.export_directory == "": args.export_directory = os.getcwd()
+
+    # Check validity of arguments
+    for op in args.signal_processing_ops:
+        if op not in AVAILABLE_SIGNAL_PROCESSING_OPS: raise ValueError(f"Signal processing operation '{op}' not in available operations ({AVAILABLE_SIGNAL_PROCESSING_OPS})! Aborting.")
 
     # Update sleep map
     sleep_map.set_map_name(args.sleep_map_name)
@@ -426,7 +458,8 @@ def save_metadata_json(ds_filepath:str, args, channels_to_read:list, stages_cnt:
         "sleep_stages_map_name": sleep_map.get_map_name(),
         "total_clips": sum(stages_cnt),
         "sleep_stages_cnt": stages_cnt,
-        "dataset_filesize_GB": round(get_dir_size(path=ds_filepath)/2**30, ndigits=2)
+        "dataset_filesize_GB": round(get_dir_size(path=ds_filepath)/2**30, ndigits=2),
+        "signal_processing_operations": args.signal_processing_ops
         }
 
     with open(ds_filepath+".json", 'w') as json_file:
@@ -468,6 +501,7 @@ def main():
         if ONE_HOT_OUTPUT: ds_filepath = ds_filepath + '_one-hot'
         if HISTORICAL_LOOKBACK_LENGTH > 0: ds_filepath = ds_filepath + f'_history_{HISTORICAL_LOOKBACK_LENGTH}-steps'
         if len(channels_to_read) == 1: ds_filepath = ds_filepath + f"_{channels_to_read[0]}"
+        for op in args.signal_processing_ops: ds_filepath = ds_filepath + f"_{op}"
         if args.num_files == 1: ds_filepath = ds_filepath + f"_{os.path.basename(labels_file_list[0]).split(' ')[0]}"
         ds_filepath = ds_filepath.replace('.', '-')
 
