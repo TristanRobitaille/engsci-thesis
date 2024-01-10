@@ -120,3 +120,46 @@
 - **Main ideas**
     - Compare energy and latency of bit-parallel arithmetic (BPA) and bit-serial arithmetic (BSA) for CiM in DL benchmarks over ten different subarrays ranging from 128x128 to 2048x2048.
     - Used CACTI for simulations
+
+### MultiChannelSleepNet: A Transformer-Based Model for Automatic Sleep Stage Classification With PSG
+- **Results**
+    - Obtain higher accuracy than both single-channel and multichannel (that use simpler channel fusion) model:
+        - 87.2% on SleepEDF-20 (next best is 86.4%), 85.0% on SleepEDF-78 (next best is 84.0) and 87.5% on SHHS (next best is 84.2%)
+- **Main ideas**
+    - Their model: Individial encoder stack for each channel --> multichannel feature fusion --> classification
+    - Input is "time-frequency" (SHHS to yield image with 128 frequency bins and 29 time points), not just raw ADC code
+    - Use three datasets: SleepEDF-20 (20 nights), SleepEDF-78 (153 nights) and SHHS (329 nights)
+    - Use AdamW and early stopping. Best input channel (their base) is Fpz-Cz EEG
+    - Explain that first deep learning models were CNN, but limited accuracy because convolution is good at spatial patterns, not sequential
+    - [26], [24] use transformers. [20], [21] and [24] uses single-channel
+
+### SleepTransformer: Automatic Sleep Staging With Interpreatibility and Uncertainty Quantification
+- **Results**
+    - 87.7% and 84.9% accuracy on SHHS and SleepEDF-78
+    - Very cool graphs showing model's uncertainty for each epoch as a way for sleep experts reviewing the data to know which epoch they should manually classify
+- **Main ideas**
+    - Manual annotation by experts takes 2h/night. Experts are sceptical of letting the task to AI as it feels like a black box. Need some "interpretability" and "uncertainty quantification"
+        - Interpretability: Colour the input signal with heat map with self-attention weights to indicate which parts of the clip was most used for prediction
+        - Uncertainty quantification: Use "entropy" metric on the softmax output vector
+    - See [18] for DNN, [17], [19]-[22] for CNN and [23] for RNN. [15] is seminal for seq-to-seq model. See [28]-[30] for transfer learning.
+    - Use 1st round of SHHS dataset (C4-A1 EEG) and SleepEDF-78 (Fpz-Cz EEG). They transfer learned from SHHS to train on SleepEDF-78 (i.e. start training on a model trained on SHHS). Boosted SleepEDF-78 accuracy by 3.5%.
+    - Note: Model is not suitable for live, in-situ inference as it uses 21 epochs as once and outputs 21 sleep stages (seq-to-seq)
+    - Table III gives model size for different sleep stage classification models in the literature
+
+### Automatic sleep staging of EEG signals: recent development, challenges, and future directions (literature review)
+- **Main ideas**
+    - Technical term of classification of sleep stage based on PSG data is "sleep staging"
+    - Motivation for automatic sleep staging: 1) Very time-consuming to do manually by experts, 2) variations between scorers and 3) since PSG is "unwieldy and invasive", clinicians "will usually have to 'make do' with a single (at most two) nights of data", 4) can enable more subtle sleep analysis that isn't practical to do manually
+    - Deep learning for automatic sleep staging only started around 2017: DNN (2018), CNN (2016/17/18), RNN (2018) --> Problem: Doesn't use the long-context dependencies of 30s epochs
+    - Since 2018, 'sequence-to-sequence' models to use long-context --> Significantly boosted accuracy
+    - Authors believe automatic sleep staging in healthy people has been solved (i.e. accuracy has reached 'Cohen's kappa' for 'almost perfect'. For human scoring, it is ~0.76)
+    - Future:
+        - Longitudinal monitoring: Wearable sleep monitors can solve the issue of the cumbersome-ness of PSG, which has a trickle of benefits: 1) per-patient training, 2) detection of changes in sleep patterns
+        - Models dealing with low signal quality from at-house wearable devices
+        - Models dealing with small amount of data
+        - Privacy preservations, since identity, age, gender, emotions, preference, personality can be deciphered from brain waves. Local inference is needed.
+        - Models capable of dealing with sleep disorders
+        - Models that provide more interpretability to clinicians so accelerate adoption in clinics
+        - Data mismatch due to distributional shifts between datasets/cohorts
+        - Heterogeneity: a challenge beyond data mismatch
+        - Subjectivity in model building

@@ -1,43 +1,12 @@
-% \documentclass[12pt]{article}
-
-% % Packages
-% \usepackage[backend=biber, citestyle=ieee]{biblatex}
-% \usepackage[letterpaper, margin=0.75in]{geometry}
-% \usepackage{fancyhdr}
-% \usepackage{lipsum}
-
-% \addbibresource{../references.bib}
-
-% % Frontpage matters
-% \lhead{ESC499 EngSci Thesis Interim Report}
-% \title{Edge AI-optimized ASIC Prototype for Sleep Stage Detection}
-% \author{Tristan Robitaille (1006343397)}
-% \date{}
-
-% % Document
-% \begin{document}
-% \maketitle
-
-% \thispagestyle{fancy}
-
-% % Main text
-% \section{Methodology}
-% To achieve the aforementioned objectives, a three-step plan is proposed. First, a prototype Python model will be developed, trained, evaluated and optimized until its accuracy surpasses existing solutions and size cannot be reduced further. Then, this model will be translated into C.
-% Finally, the model and associated system architecture will be designed, implemented on FPGA, benchmarked and continuously optimized for low power consumption and area.
-% Most of the effort of this project will be spent on architectural optimizations. This high- to low-level approach will provide gradually increasing exposure to the computations involved and opportunities for design improvements while still providing relatively rapid debugging and optimization cycles.
-% This final model will be benchmarked against published research and an equivalent model running on Google Coral.
-
-% % Bibliography
-% \newpage
-% \printbibliography
-% \end{document}
-
 \documentclass[12pt]{article}
-\usepackage{times} % Times New Roman
 \usepackage{setspace} % Line spacing
 \usepackage{fancyhdr} % Headers and footers
 \usepackage{lipsum} % Dummy text
 \usepackage{hyperref} % Links in the document
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{multirow} % Table
 \usepackage[nottoc,numbib]{tocbibind} % Bibliography in table of contents
 \usepackage[backend=biber, citestyle=ieee]{biblatex}
 \usepackage{tocloft}
@@ -53,7 +22,8 @@
     % Title Page
     \begin{titlepage}
         \centering
-        {\LARGE\bfseries ESC499 EngSci Thesis Interim Report\par}
+        {\LARGE\bfseries ESC499 Thesis Interim Report\par}
+        {\Large Automatic sleep staging transformer model and hardware accelerator\par}
         \vspace*{\fill}
         \vspace{1cm}
         {\Large Tristan Robitaille (1006343397)\par}
@@ -72,9 +42,9 @@
     % Page style
     \pagestyle{fancy}
     \fancyhf{}
-    \renewcommand{\headrulewidth}{0pt} % no header line
-    \rfoot{\thepage} % page number at the right side in the footer
-
+    \renewcommand{\headrulewidth}{0pt} % No header line
+    \rfoot{\thepage} % Page number at the right side in the footer
+    
     % Table of Contents
     \tableofcontents
     \newpage
@@ -88,12 +58,64 @@
 
     % Content
     \pagenumbering{arabic}
-    \section{Introduction}
-    \lipsum[1-2]
 
-    \section{Methodology}
-    This is an example citation: \cite*{li2020ftrans}
-    \lipsum[3-4]
+    % Introduction
+    \section{Introduction}
+    As reported by Chaput \textit{et al.} \cite{insomnia_prevalence}, insomnia impacts around 24\% of Canadians adults. Detection and classification of sleep stages, known as \textit{sleep staging}, followed by neuromodulation has been recently found by Yoon \cite{yoon2021neuromodulation} to be a promising
+    treatment against insomnia. The current stage-of-the-art for sleep staging involves the use of polysomnography to measure biosignals (at least 19 sensors are required, as explained by Levin and Chauvel \cite{RUNDO2019381}) and manual annotation by a sleep expert, which requires, on average, 2 hours of work \cite{phan2022automatic}.
+    This technique also does not provide neuromodulation. Thus, there is a need to develop an in-ear device performing electroencaphalogram (EEG) sensing, sleep staging and neuromodulation. To maximize treatment potential, the device should be as small and portable as possible such that it can be used at home.
+    
+    This thesis focuses on the development of a deep learning model to perform sleep staging and on the design of an accelerator ASIC module to perform in-situ inference of said model. In the end, we aim to prove, by simulations, the merit of such an accelerator in order to potentially integrate it in the in-ear device.
+    Multiple authors \cite{dutt2023sleepxai, fu2021deep, eldele2021attention} have published high-accuracy results using a deep learning approach to sleep staging, and have done so with significantly fewer sensors than polysomnography. However, these AI models run on standard computers as software frameworks and are
+    thus unsuitable for a lightweight integrated solution. Google sells small custom AI-accelerators (such as the Coral Edge TPU) that could run these AI models, but they still consume too much power (2W, \cite{coral_datasheet}) and do not readily integrate with custom neuromodulation hardware.
+    
+    The proposed solution should match or exceed the accuracy of traditional polysomnography and published models in the literature with a power consumption low enough that the whole system can be powered for at least a full-night on a battery that fits in-ear.
+
+    This document serves to report the current state of literature in both sleep staging using deep learning and AI accelerator hardware in order to define a gap that is filled by this project. It also discusses the progress made to date and the work that is left.
+
+    % Lit review: Deep learning for sleep staging
+    \section{Literature review: ML for sleep staging}
+    Deep learning for sleep staging has been studied since around 2017. Broadly speaking, basic deep neural networks (DNN) cames first, followed by convolutional neural networks (CNN) and recurrent neural-networks (RNN) \cite{phan2022sleeptransformer}.
+    The transformer is a relatively new type of neural network based around the concept of "attention" and particularly suited for sequence inputs \cite{han2022survey}. Since its introduction in 2017 \cite{vaswani2017attention}, the transformer has been used for sleep staging tasks. Indeed, Dai \textit{et al.} developed a transformer-like
+    model without decoders which used three input EEG channels and achieved an impressive 87.2\% accuracy on the popular SleepEDF-20 dataset \cite{dai2023multichannelsleepnet}. Similarly, Phan \textit{et al.} developed a model with a focus on outputting easily-interpretable confidence metrics for clinicians. Their model ingests multiple 
+    sleep "epochs" (small segments of EEG signals, typically 30s in length) for each inference, which allowed the team to achieve 84.9\% accuracy on the SleepEDF-78 dataset. Eldele \textit{et al.} managed an accuracy of 85.6\% on SleepEDF-78 using a single-channel, single-epoch attention-based model \cite{eldele2021attention}.
+
+    In recent years, the accuracy of sleep staging by ML models has plateaued. In fact, Phan \textit{et al.} claim that AI-based sleep-staging in heathly patients has been solved fully as the accuracy has reached the 'almost perfect' level of Cohen's kappa \cite{phan2022automatic}. However, none of the models presented above meet
+    our constraints. Indeed, we require a lightweight, single-channel, single-epoch model. Most models above are have more than 1M parameters \cite{phan2022sleeptransformer}; even the smallest model by Eldele \textit{et al.} has above 500k parameters. Furthermore, none have been optimized to run on custom hardware. Thus, there is a need to develop a novel
+    lightweight transformer.
+
+    % Lit review: AI accelerator ASIC
+    \section{Literature review: AI accelerator hardware}
+    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Phasellus vitae odio eget neque lacinia posuere. Donec et massa ut turpis interdum lobortis. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Fusce eu aliquet quam, et sodales est. Duis vel elit nec odio ultricies ultrices. Nulla facilisi. Nullam eu ex eu odio volutpat efficitur.
+
+    % Detailed design constraints and direction
+    \section{Detailed design constraints and direction}
+    Table \ref{tab:design_goals} indicates precise design goals and their justification, which helps guide design decision and development effort. For example, to reach the target model size, time will be spent evaluating
+    the impact of hyperparameters to find the combination that gives the lowest size while meeting the desired accuracy. Furthermore, quantization and pruning will be explored to reduce model size. For the AI accelerator, 
+    since inference power and frequency are inversely proportional, we must focus on reducing energy per inference. From first principles, this implies reducing the amount of charge that is displaced within the chip. Since
+    the physical properties are locked for the target 65nm node, we focus on reducing the number of operations, simplifying operations, limiting data movement and reducing control logic.
+
+    \begin{table}[ht]
+        \centering
+        \renewcommand{\arraystretch}{1.5} % Increase the vertical spacing
+        \setlength{\arrayrulewidth}{1.5pt} % Increase the thickness of vertical lines
+        \caption{Design goals for AI model and ASIC accelerator}
+        \resizebox{\textwidth}{!}{
+            \begin{tabular}{@{} *7l @{}} 
+                \toprule
+                Type        & Goals                                     & Justification &&&  \\\midrule
+                \multirow{2}{*}{Model}
+                            & Size $<$ 200\,kB                          & Help reach ASIC area/power goals \\
+                            & Accuracy $>$ 80\%                         & Competitive with state-of-the-art \\ \bottomrule
+                \multirow{3}{*}{ASIC}
+                            & $P_{\mathrm{avg}} < 1\,\mathrm{mW}$       & System to function for whole night \\ 
+                            & $T_{\mathrm{inference}} < 30\,\mathrm{s}$ & Sleep epochs are 30s \\ 
+                            & $A_{\mathrm{total}} < 1\,\mathrm{mm}^2$   & Minimize cost (65nm node) \\
+                \hline
+            \end{tabular}%
+        }
+        \label{tab:design_goals}
+    \end{table}
 
     % Bibliography
     \newpage
