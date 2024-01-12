@@ -50,9 +50,9 @@ Notes for writing interim report, due January 19, 2024.
 - Data processing/extraction
 - Model architecture
 - SLURM tooling
+- Quantization
 - Hyperparameter search to increase accuracy and reduce size
 - Further methods to reduce model size:
-    - Quantization
     - [Need to do] Pruning
 
 ### Edge TPU

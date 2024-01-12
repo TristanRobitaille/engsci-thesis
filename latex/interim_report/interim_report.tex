@@ -59,8 +59,8 @@
     % Content
     \pagenumbering{arabic}
 
-    % Introduction
-    \section{Introduction}
+% Introduction
+    \section[Introduction]{Introduction\footnote{Adapted from the \textit{Thesis Proposal}, submitted in October 2023.}}
     As reported by Chaput \textit{et al.} \cite{insomnia_prevalence}, insomnia impacts around 24\% of Canadians adults. Detection and classification of sleep stages, known as \textit{sleep staging}, followed by neuromodulation has been recently found by Yoon \cite{yoon2021neuromodulation} to be a promising
     treatment against insomnia. The current stage-of-the-art for sleep staging involves the use of polysomnography to measure biosignals (at least 19 sensors are required, as explained by Levin and Chauvel \cite{RUNDO2019381}) and manual annotation by a sleep expert, which requires, on average, 2 hours of work \cite{phan2022automatic}.
     This technique also does not provide neuromodulation. Thus, there is a need to develop an in-ear device performing electroencaphalogram (EEG) sensing, sleep staging and neuromodulation. To maximize treatment potential, the device should be as small and portable as possible such that it can be used at home.
@@ -73,7 +73,7 @@
 
     This document serves to report the current state of literature in both sleep staging using deep learning and AI accelerator hardware in order to define a gap that is filled by this project. It also discusses the progress made to date and the work that is left.
 
-    % Lit review: Deep learning for sleep staging
+% Lit review: Deep learning for sleep staging
     \section{Literature review: ML for sleep staging}
     Deep learning for sleep staging has been studied since around 2017. Broadly speaking, basic deep neural networks (DNN) cames first, followed by convolutional neural networks (CNN) and recurrent neural-networks (RNN) \cite{phan2022sleeptransformer}.
     The transformer is a relatively new type of neural network based around the concept of "attention" and particularly suited for sequence inputs \cite{han2022survey}. Since its introduction in 2017 \cite{vaswani2017attention}, the transformer has been used for sleep staging tasks. Indeed, Dai \textit{et al.} developed a transformer-like
@@ -81,14 +81,15 @@
     sleep "epochs" (small segments of EEG signals, typically 30s in length) for each inference, which allowed the team to achieve 84.9\% accuracy on the SleepEDF-78 dataset. Eldele \textit{et al.} managed an accuracy of 85.6\% on SleepEDF-78 using a single-channel, single-epoch attention-based model \cite{eldele2021attention}.
 
     In recent years, the accuracy of sleep staging by ML models has plateaued. In fact, Phan \textit{et al.} claim that AI-based sleep-staging in heathly patients has been solved fully as the accuracy has reached the 'almost perfect' level of Cohen's kappa \cite{phan2022automatic}. However, none of the models presented above meet
-    our constraints. Indeed, we require a lightweight, single-channel, single-epoch model. Most models above are have more than 1M parameters \cite{phan2022sleeptransformer}; even the smallest model by Eldele \textit{et al.} has above 500k parameters. Furthermore, none have been optimized to run on custom hardware. Thus, there is a need to develop a novel
+    our constraints. Indeed, we require a lightweight, single-channel, single-epoch model. Most models have more than 1M parameters \cite{phan2022sleeptransformer}; even the smallest model by Eldele \textit{et al.} has above 500k parameters. Furthermore, none have been optimized to run on custom hardware. Thus, there is a need to develop a novel
     lightweight transformer.
 
-    % Lit review: AI accelerator ASIC
+% Lit review: AI accelerator ASIC
     \section{Literature review: AI accelerator hardware}
-    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Phasellus vitae odio eget neque lacinia posuere. Donec et massa ut turpis interdum lobortis. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Fusce eu aliquet quam, et sodales est. Duis vel elit nec odio ultricies ultrices. Nulla facilisi. Nullam eu ex eu odio volutpat efficitur.
+    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Phasellus vitae odio eget neque lacinia posuere. Donec et massa ut turpis interdum lobortis. Vestibulum ante ipsum primis
+    in faucibus orci luctus et ultrices posuere cubilia Curae; Fusce eu aliquet quam, et sodales est. Duis vel elit nec odio ultricies ultrices. Nulla facilisi. Nullam eu ex eu odio volutpat efficitur.
 
-    % Detailed design constraints and direction
+% Detailed design constraints and direction
     \section{Detailed design constraints and direction}
     Table \ref{tab:design_goals} indicates precise design goals and their justification, which helps guide design decision and development effort. For example, to reach the target model size, time will be spent evaluating
     the impact of hyperparameters to find the combination that gives the lowest size while meeting the desired accuracy. Furthermore, quantization and pruning will be explored to reduce model size. For the AI accelerator, 
@@ -97,8 +98,8 @@
 
     \begin{table}[ht]
         \centering
-        \renewcommand{\arraystretch}{1.5} % Increase the vertical spacing
-        \setlength{\arrayrulewidth}{1.5pt} % Increase the thickness of vertical lines
+        \renewcommand{\arraystretch}{1.2} % Vertical spacing
+        \setlength{\arrayrulewidth}{1.5pt} % Thickness of vertical lines
         \caption{Design goals for AI model and ASIC accelerator}
         \resizebox{\textwidth}{!}{
             \begin{tabular}{@{} *7l @{}} 
@@ -116,6 +117,57 @@
         }
         \label{tab:design_goals}
     \end{table}
+
+    \section{Progress to date}
+
+% Progress: Transformer model and edge TPU
+    \subsection{Transformer model and edge TPU}
+    Since August 2023, I have completed Andrew Ng's Machine Learning Specialization course to build enough knowledge to tackle the transformer model. The model is based on a vision transformer \cite{dosovitskiy2010image}, which accepts a 
+    30s epoch and return the most likely sleep stage. The architecture is shown in Figure \ref{fig:vit}.
+    Furthermore, I wrote feature-rich scripts to extract and preprocess PSG data, designed a complete vision transformer model with the required interface to run hyperparameter search and k-fold validation on the Compute Canada clusters. The model I developed contains only 63k parameters (pre-pruning),
+    which can be quantized to 16-bit integers with a slight gain of accuracy. The accuracy on a 31-fold validation set is XYZ \%. To help determine design priorities for the accelerator, the training script also exports the
+    total number of different type of operations, as presented in Table \ref{tab:num_ops}.
+
+    In addition, I have ported to model to run on the Coral Edge TPU using TensorFlow Lite. This provided us with reference latency and power figures to size what I consider to be the most promising
+    commercial alternative to a custom ASIC. This knowledge can be useful should we wish to develop a functional proof-of-concept prototype. In regular frequency mode (200MHz), the average inference time on the Edge TPU is 0.754ms. I have also researched initial ways the Edge TPU can be used with a 
+    microcontroller, which will be needed should we wish to make a prototype in the future.
+
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.5\textwidth]{assets/vit.jpg}
+        \caption{High-level vision transformer architecture for in-situ sleep staging}
+        \label{fig:vit}
+    \end{figure}
+
+    \begin{table}[ht]
+        \centering
+        \renewcommand{\arraystretch}{1.2} % Vertical spacing
+        \setlength{\arrayrulewidth}{1.5pt} % Thickness of vertical lines
+        \caption{Count of different types of operations in the transformer model}
+        \begin{tabular}{@{} *7l @{}} 
+            \toprule
+            Operation            & Total count & Percent of total &&&  \\\midrule
+            Addition             & 8581394     & 82.4\%   \\
+            Index increment*     & 1812531     & N/A      \\
+            Multiplication       & 1780528     & 17.1\%   \\
+            Division             & 34112       & 0.33\%   \\
+            Activation (SWISH)** & 12064       & 0.12\%   \\
+            Substraction         & 9920        & 0.095\%  \\
+            Exponent             & 496         & 0.0048\% \\
+            Square root          & 322         & 0.0031\% \\
+            \hline
+        \end{tabular}
+        \begin{minipage}{\textwidth}
+            \footnotesize
+            \textsuperscript{*} Increments are excluded from total as they can be executed in parallel of any other element-wise operation.
+
+            \textsuperscript{**} The count of elementary operations for activation depends on the approximation used in hardware.
+        \end{minipage}
+        \label{tab:num_ops}
+    \end{table}
+
+% Progress: ASIC accelerator
+    \subsection{ASIC accelerator}
 
     % Bibliography
     \newpage
