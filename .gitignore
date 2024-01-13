@@ -26,6 +26,8 @@ latex/proposal/proposal.fls
 latex/proposal/proposal.log
 latex/proposal/proposal.run.xml
 latex/proposal/proposal.synctex.gz
+latex/proposal/Thesis_Proposal_2023-24.pdf
+latex/proposal/Thesis_Proposal_Rubric.pdf
 
 # Interim report
 latex/interim_report/interim_report.aux
@@ -41,6 +43,8 @@ latex/interim_report/interim_report.fdb_latexmk
 latex/interim_report/interim_report.run.xml
 latex/interim_report/interim_report.synctex.gz
 latex/interim_report/interim_report.toc
+latex/interim_report/Thesis_Interim_Report_2023-24.pdf
+latex/interim_report/Thesis_Interim_Report_Rubric.pdf
 
 ### Tensorflow
 python_prototype/*.out
