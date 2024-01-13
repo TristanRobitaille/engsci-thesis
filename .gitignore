@@ -65,3 +65,6 @@ asic/tutorial/tutorial.mpf
 asic/tutorial/vsim.wlf
 asic/tutorial/work/*
 asic/tutorial/TSMC65_Digital_Flow/*
+
+### Documentation
+doc/CMC_VLSI_User_Manual_2023.pdf
