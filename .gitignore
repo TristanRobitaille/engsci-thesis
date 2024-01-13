@@ -53,9 +53,15 @@ python_prototype/error_logs/*
 python_prototype/*.zip
 python_prototype/slurm_jobs/logs/*
 
-### HDL
-hdl/__pycache__/*
-hdl/sim_build/*
-hdl/dump.vcd
-hdl/results.xml
-hdl/top
+### ASIC
+asic/__pycache__/*
+asic/sim_build/*
+asic/dump.vcd
+asic/results.xml
+asic/top
+asic/tutorial/post_synthesis_sim.mpf
+asic/tutorial/tutorial.cr.mti
+asic/tutorial/tutorial.mpf
+asic/tutorial/vsim.wlf
+asic/tutorial/work/*
+asic/tutorial/TSMC65_Digital_Flow/*
