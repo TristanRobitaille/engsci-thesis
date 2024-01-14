@@ -40,7 +40,7 @@ Notes for writing interim report, due January 19, 2024.
     - < 30s inference time
 - Explain rationale for design decisions
     - Low power -> Switch less charge
-    - Low area -> Maximize area 
+    - Low area -> Maximize area
 
 ## Literature review II: Transformer ASIC accelerator (2 pages)
 - CiM
