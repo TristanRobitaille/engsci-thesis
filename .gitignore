@@ -55,7 +55,7 @@ python_prototype/SS3_EDF_*
 python_prototype/__pycache__/*
 python_prototype/error_logs/*
 python_prototype/*.zip
-python_prototype/slurm_jobs/logs/*
+python_prototype/slurm_jobs/logs
 
 ### ASIC
 asic/__pycache__/*

@@ -15,6 +15,7 @@ import utilities
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
+import tensorflow_addons as tfa
 import plotly.graph_objects as go
 
 MAX_VOLTAGE = 2**16-1 # Maximum ADC code output
@@ -26,11 +27,14 @@ DATA_TYPE = tf.float32
 NUM_NIGHTS_VALIDATION = 2 # Number of nights used for validation
 RANDOM_SEED = 42
 NUM_WARMUP_STEPS = 4000
-VERBOSITY = 'QUIET' #'QUIET', 'NORMAL', 'DETAILED'
 RESAMPLE_TRAINING_DATASET = False
 SHUFFLE_TRAINING_CLIPS = True
-NUM_CLIPS_PER_FILE_EDGETPU = 500 # Only valid for 256Hz
-K_FOLD_OUTPUT_TO_FILE = False # If true, will write validation accuracy to a CSV for k-fold sweep validation
+NUM_CLIPS_PER_FILE_EDGETPU = 500 # 500 is only valid for 256Hz
+K_FOLD_OUTPUT_TO_FILE = True # If true, will write validation accuracy to a CSV for k-fold sweep validation
+K_FOLD_SETS_MANUAL_PRUNE = [4]
+
+AVAILABLE_OPTIMIZERS = ["Adam", "AdamW"]
+AVAILABLE_RESAMPLERS = ['RandomOverSampler', 'SMOTE', 'ADASYN', 'BorderlineSMOTE', 'SMOTENC', 'SMOTEN', 'KMeansSMOTE', 'SVMSMOTE', 'ClusterCentroids', 'RandomUnderSampler', 'TomekLinks', 'SMOTEENN', 'SMOTETomek'] # https://imbalanced-learn.org/stable/introduction.html
 
 train_signals_representative_dataset = None
 sleep_map = utilities.SleepStageMap()
@@ -174,7 +178,7 @@ def load_from_dataset(args):
     if max(val_nights) >= dataset_metadata["num_files_used"]:
         raise ValueError(f"One of more nights used for validation ({list(val_nights)}) exceeds number of files in dataset ({dataset_metadata['num_files_used']})!")
     if (CLIP_LENGTH_NUM_SAMPLES % args.patch_length != 0):
-        raise ValueError(f"Patch length (# of samples; {args.patch_length}) needs to be an integer divisor of clip length (# of samples; {CLIP_LENGTH_NUM_SAMPLES}s! Aborting.)")
+        raise ValueError(f"Patch length (# of samples; {int(args.patch_length)}) needs to be an integer divisor of clip length (# of samples; {CLIP_LENGTH_NUM_SAMPLES}s! Aborting.)")
 
     # Load dataset
     if "cedar.computecanada.ca" in socket.gethostname(): # Compute Canada (aka running on GPU needs Tensorflow 2.8.0) needs a Tensorflow downgrade (or gets a compilation error)
@@ -312,7 +316,7 @@ def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_
         log += f"Activation function of first dense layer in MLP layer and MLP head: {mlp_dense_activation}\n"
         log += f"Class training weights: {parser.class_weights}\n"
         log += f"Initial learning rate: {parser.learning_rate:.6f}\n"
-        log += f"Optimizer: {model.optimizer.name}"
+        log += f"Optimizer: {parser.optimizer}\n"
         log += f"Rescale layer enabled: {parser.enable_input_rescale}\n"
         log += f"Use classification token: {parser.use_class_embedding}\n"
         log += f"Positional embedding enabled: {parser.enable_positional_embedding}\n"
@@ -332,14 +336,11 @@ def parse_arguments():
     Parses command line arguments and return parser object
     """
 
-    # Resampling documentation: https://imbalanced-learn.org/stable/introduction.html
-    resampling_type_choices = ['RandomOverSampler', 'SMOTE', 'ADASYN', 'BorderlineSMOTE', 'SMOTENC', 'SMOTEN', 'KMeansSMOTE', 'SVMSMOTE', 'ClusterCentroids', 'RandomUnderSampler', 'TomekLinks', 'SMOTEENN', 'SMOTETomek']
-
     parser = utilities.ArgumentParserWithError(description='Transformer model Tensorflow prototype.')
     parser.add_argument('--num_clips', help='Number of clips to use for training + validation. Defaults to 3000.', default=3000, type=int)
     parser.add_argument('--input_dataset', help='Filepath of the dataset used for training and validation.', type=str)
     parser.add_argument('--input_channel', help='Name of the channel to use for training and validation.', type=str)
-    parser.add_argument('--patch_length', help='Patch length (in # of samples). Must be integer divisor of sampling_freq*clip_length_s. Defaults to 256.', default=256, type=float)
+    parser.add_argument('--patch_length', help='Patch length (in # of samples). Must be integer divisor of sampling_freq*clip_length_s. Defaults to 256.', default=256, type=int)
     parser.add_argument('--num_layers', help='Number of encoder layer. Defaults to 8.', default=8, type=int)
     parser.add_argument('--embedding_depth', help='Depth of the embedding layer. Defaults to 32.', default=32, type=int)
     parser.add_argument('--num_heads', help='Number of multi-attention heads. Defaults to 8.', default=8, type=int)
@@ -349,7 +350,7 @@ def parse_arguments():
     parser.add_argument('--batch_size', help='Batch size for training. Defaults to 8.', default=8, type=int)
     parser.add_argument('--learning_rate', help='Learning rate for training. Defaults to 1e-4.', default=1e-4, type=float)
     parser.add_argument('--class_weights', help='List of weights to apply in loss calculation.', nargs='+', default=[1, 1, 1, 1, 1, 1], type=float)
-    parser.add_argument('--dataset_resample_algo', help="Which dataset resampling algorithm to use. Currently using 'imblearn' package.", choices=resampling_type_choices, default='RandomUnderSampler', type=str)
+    parser.add_argument('--dataset_resample_algo', help="Which dataset resampling algorithm to use. Currently using 'imblearn' package.", choices=AVAILABLE_RESAMPLERS, default='RandomUnderSampler', type=str)
     parser.add_argument('--enable_dataset_resample_replacement', help='Whether replacement is allowed when resampling dataset.', action='store_true')
     parser.add_argument('--training_set_target_count', help='Target number of clips per class in training set. Defaults to [3500, 5000, 4000, 4250, 3750].', nargs='+', default=[3500, 5000, 4000, 4250, 3750], type=int)
     parser.add_argument('--enable_input_rescale', help='Enables layer rescaling inputs between [0, 1] at input.', action='store_true')
@@ -367,6 +368,7 @@ def parse_arguments():
     parser.add_argument('--filter_self_reset_threshold', help="Number of samples for which the sleep stage prediction must be constant for the filter to self-reset. Set to -1 to disable. Default to -1.", default=-1, type=int)
     parser.add_argument('--note', help="Optional note to write info textfile. Defaults to None.", default="", type=str )
     parser.add_argument('--num_runs', help="Number of training runs to perform. Defaults to 1.", default=1, type=int)
+    parser.add_argument('--optimizer', help=f"Optimizer to use. May be one of {AVAILABLE_OPTIMIZERS}. Defaults to Adam.", choices=AVAILABLE_OPTIMIZERS, default="Adam", type=str)
 
     # Parse arguments
     try:
@@ -381,6 +383,11 @@ def parse_arguments():
     for arg in vars(args):
         print(f"{arg}: {getattr(args, arg)}")
 
+    # Prune bad set
+    if args.k_fold_val_set in K_FOLD_SETS_MANUAL_PRUNE: 
+        print(f"Receive k-fold set {args.k_fold_val_set}, which is in the pruned set ({K_FOLD_SETS_MANUAL_PRUNE}). Exiting.")
+        exit()
+
     return args
 
 def train_model(args, data:dict, mlp_dense_activation:str):
@@ -389,17 +396,25 @@ def train_model(args, data:dict, mlp_dense_activation:str):
     except Exception as e: utilities.log_error_and_exit(exception=e, manual_description=f"[{(time.time()-start_time):.2f}s] Failed to initialize model.")
 
     try:
-        model.compile(
-            loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False),
-            optimizer=tf.keras.optimizers.Adam(CustomSchedule(args.embedding_depth), beta_1=0.9, beta_2=0.98, epsilon=1e-9),
-            metrics=["accuracy"],
-        )
+        if args.optimizer == "Adam":
+            optimizer = tf.keras.optimizers.Adam(CustomSchedule(args.embedding_depth), beta_1=0.9, beta_2=0.98, epsilon=1e-9)
+
+        elif args.optimizer == "AdamW": # AdamW is used in 'MultiChannelSleepNet: A Transformer-Based Model for Automatic Sleep Stage Classification With PSG'
+            if "cedar.computecanada.ca" in socket.gethostname(): # Compute Canada (aka running on GPU needs Tensorflow 2.8.0) doesn't have AdamW in Keras
+                print("CAUTION: You are using the AdamW optimizer on Cedar (so with TensorFlow 2.8), which isn't working (accuracy stuck during training)")
+                optimizer = tfa.optimizers.AdamW(learning_rate=CustomSchedule(args.embedding_depth), weight_decay=0.004, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
+            else:
+                optimizer = tf.keras.optimizers.AdamW(learning_rate=CustomSchedule(args.embedding_depth), weight_decay=0.004, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
+
+        model.compile(loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False), optimizer=optimizer, metrics=["accuracy"])
+    
     except Exception as e: utilities.log_error_and_exit(exception=e, manual_description=f"[{(time.time()-start_time):.2f}s] Failed to compile model.")
 
     tensorboard_log_dir = "logs/fit/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=tensorboard_log_dir, histogram_freq=1)
 
     args.class_weights = {i: weight for i, weight in enumerate(args.class_weights)}
+
     try:
         fit_history = model.fit(x=data["signals_train"], y=data["sleep_stages_train"], validation_data=(data["signals_val"], data["sleep_stages_val"]),
                                 epochs=args.num_epochs, batch_size=args.batch_size, callbacks=[tensorboard_callback], class_weight=args.class_weights, verbose=2)
@@ -1005,7 +1020,7 @@ def main():
 
     # Write to k-fold validation file
     if K_FOLD_OUTPUT_TO_FILE:
-        export_summary(args.k_fold_val_results_fp+".txt", args, models["tf"], fit_history, acc, original_sleep_stage_cnt, sleep_stages_cnt_train, 
+        export_summary(args.k_fold_val_results_fp+".txt", args, all_models["tf"], fit_history, acc, original_sleep_stage_cnt, sleep_stages_cnt_train, 
                        sleep_stages_cnt_val, pred_cnt, mlp_dense_act, dataset_metadata, model_specific_only=True)
         export_k_fold_results(args, acc)
         print(f"[{(time.time()-start_time):.2f}s] Wrote to k-fold results file.")

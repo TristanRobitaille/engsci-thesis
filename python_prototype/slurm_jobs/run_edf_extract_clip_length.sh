@@ -18,6 +18,7 @@ python3 /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_proto
 --sleep_map_name=both_light_deep_combine \
 --enable_multiprocessing \
 --sampling_freq_hz=256 \
+--signal_processing_ops notch_60Hz 15b_offset 0_5Hz-32Hz_bandpass \
 --directory_psg=/home/tristanr/projects/def-xilinliu/data/SS3_EDF \
 --directory_labels=/home/tristanr/projects/def-xilinliu/data/SS3_EDF \
 --export_directory=/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/data

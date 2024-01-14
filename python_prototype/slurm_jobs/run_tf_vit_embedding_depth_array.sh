@@ -17,7 +17,7 @@ python3 /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_proto
 --batch_size=16 \
 --learning_rate=1e-3 \
 --patch_length=256 \
---num_epochs=100 \
+--num_epochs=125 \
 --input_channel='EEG Cz-LER' \
 --num_clips=115000 \
 --embedding_depth=$SLURM_ARRAY_TASK_ID \

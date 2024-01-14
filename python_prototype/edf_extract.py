@@ -438,12 +438,13 @@ def get_dir_size(path:str):
                 total += get_dir_size(entry.path)
     return total
 
-def save_metadata_json(ds_filepath:str, args, channels_to_read:list, stages_cnt:list, num_files_used:int):
+def save_metadata_json(ds_filepath:str, args, channels_to_read:list, fields:list, stages_cnt:list, num_files_used:int):
     """
     Make and save .json file containing metadata about the dataset.
     """
 
     json_metadata = {
+        "fields": fields,
         "single_channel": (len(channels_to_read) == 1),
         "historical_lookback_length": HISTORICAL_LOOKBACK_LENGTH,
         "num_stages": sleep_map.get_num_stages(),
@@ -515,7 +516,7 @@ def main():
 
         # Save metadata JSON
         stages_cnt = utilities.count_instances_per_class(output['sleep_stage'], sleep_map.get_num_stages()+1) # +1 is to account for unknown sleep stage
-        save_metadata_json(ds_filepath=ds_filepath, args=args, channels_to_read=channels_to_read, stages_cnt=stages_cnt, num_files_used=len(labels_file_list))
+        save_metadata_json(ds_filepath=ds_filepath, args=args, channels_to_read=channels_to_read, fields=list(output.keys()), stages_cnt=stages_cnt, num_files_used=len(labels_file_list))
 
         print(f"[{(time.time()-start_time):.2f}s] Dataset saved at: {ds_filepath}. It contains {output['sleep_stage'].shape[0]} clips.")
     else:
