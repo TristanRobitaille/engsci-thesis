@@ -3,6 +3,7 @@
 .vscode
 ~$weekly_progress.pptx
 logs/*
+WORK/*
 
 ### Latex
 # Thesis
@@ -63,12 +64,13 @@ asic/sim_build/*
 asic/dump.vcd
 asic/results.xml
 asic/top
-asic/tutorial/post_synthesis_sim.mpf
-asic/tutorial/tutorial.cr.mti
-asic/tutorial/tutorial.mpf
-asic/tutorial/vsim.wlf
-asic/tutorial/work/*
-asic/tutorial/TSMC65_Digital_Flow/*
+asic/tutorial/*
+asic/TSMC65_digital_flow/*
+asic/WORK/*
+asic/alib-52/*
+asic/reports/*
+asic/results/*
+asic/command.log
 
 ### Documentation
 doc/CMC_VLSI_User_Manual_2023.pdf
