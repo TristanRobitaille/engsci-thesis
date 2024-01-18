@@ -32,7 +32,7 @@ NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE = 5000 #Number of pseudo-random clips to 
 MAX_VOLTAGE = 2**15 - 1
 MIN_VOLTAGE = 0
 ONE_HOT_OUTPUT = False #If true, sleep stages are exported as their one-hot classes tensor, else they are reported as a scalar
-NUM_PROCESSES = 12
+NUM_PROCESSES = 6
 DATA_TYPE = tf.uint16
 AVAILABLE_SIGNAL_PROCESSING_OPS = ["15b_offset", "notch_60Hz", "0_3Hz-100Hz_bandpass", "0_5Hz-32Hz_bandpass"]
 

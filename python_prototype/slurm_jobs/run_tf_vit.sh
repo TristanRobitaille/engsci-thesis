@@ -2,7 +2,7 @@
 #SBATCH --gres=gpu:4        # request GPU "generic resource"
 #SBATCH --cpus-per-task=6   # maximum CPU cores per GPU request: 6 on Cedar, 16 on Graham.
 #SBATCH --mem=16000M        # memory per node
-#SBATCH --time=00-6:59      # time (DD-HH:MM)
+#SBATCH --time=00-10:59      # time (DD-HH:MM)
 #SBATCH --output=%N-%j.out  # %N for node name, %j for jobID
 #SBATCH --mail-user=tristan.robitaille@mail.utoronto.ca
 #SBATCH --mail-type=ALL
@@ -18,9 +18,9 @@ python3 /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_proto
 --patch_length=256 \
 --num_epochs=100 \
 --input_channel='EEG Cz-LER' \
---num_clips=115000 \
+--num_clips=150000 \
 --embedding_depth=64 \
---num_layers=2 \
+--num_layers=4 \
 --num_heads=8 \
 --mlp_dim=32 \
 --mlp_head_num_dense=1 \
@@ -41,6 +41,6 @@ python3 /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_proto
 --out_filter_type="pre_argmax" \
 --filter_self_reset_threshold=-1 \
 --k_fold_val_results_fp="/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/results/k_fold_val_results/val_1" \
---num_runs=6 \
+--num_runs=5 \
 --note="" \
 # --output_edgetpu_data \
