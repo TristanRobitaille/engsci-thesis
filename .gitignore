@@ -49,6 +49,7 @@ latex/interim_report/Thesis_Interim_Report_Rubric.pdf
 
 ### Tensorflow
 python_prototype/*.out
+python_prototype/core.*
 python_prototype/log*
 python_prototype/data*
 python_prototype/results/*

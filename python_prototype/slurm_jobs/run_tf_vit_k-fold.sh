@@ -20,14 +20,14 @@ python3 /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_proto
 --num_epochs=100 \
 --input_channel='EEG Cz-LER' \
 --num_clips=115000 \
---embedding_depth=64 \
---num_layers=$4 \
+--embedding_depth=$3 \
+--num_layers=$1 \
 --num_heads=8 \
---mlp_dim=32 \
+--mlp_dim=$4 \
 --mlp_head_num_dense=1 \
 --historical_lookback_DNN_depth=32 \
 --dropout_rate_percent=30 \
---class_weights 1 1 1 $3 1 \
+--class_weights 1 1 1 1 1 \
 --input_dataset="/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/data/SS3_EDF_Tensorized_both_light_deep_combine-stg_30-0s_256Hz_notch_60Hz_15b_offset_0_3Hz-100Hz_bandpass" \
 --dataset_resample_algo="ADASYN" \
 --training_set_target_count 4600 4600 4600 4600 4600 \
@@ -37,7 +37,7 @@ python3 /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_proto
 --enable_positional_embedding \
 --enable_input_rescale \
 --k_fold_val_set=$SLURM_ARRAY_TASK_ID \
---num_out_filter=$1 \
+--num_out_filter=3 \
 --out_filter_type="pre_argmax" \
 --filter_self_reset_threshold=-1 \
 --k_fold_val_results_fp="/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/results/k_fold_val_results/val_$2" \
