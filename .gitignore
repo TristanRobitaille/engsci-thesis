@@ -72,6 +72,7 @@ asic/alib-52/*
 asic/reports/*
 asic/results/*
 asic/command.log
+asic/prototype/proto
 
 ### Documentation
 doc/CMC_VLSI_User_Manual_2023.pdf

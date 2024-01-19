@@ -49,3 +49,4 @@ ASIC (run from /asic):
     -[Design Vision] Launch: source launch_dv.sh
     -[Design Vision] Check design (when DV already running): check_design
     -[Design Vision] Synthesis: uplevel #0 source /autofs/fs1.ece/fs1.eecg.xliugrp/robita46/engsci-thesis/asic/TSMC65_digital_flow/FEOL/rm_dc_scripts/dc.tcl
+    -[C prototype] Compile and run: g++ prototype/prototype.cpp -o prototype/proto -Wall && ./prototype/proto
