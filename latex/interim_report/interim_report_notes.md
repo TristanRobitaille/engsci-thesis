@@ -1,13 +1,3 @@
-<!-- TODO:
--Write intro (adapt proposal)
--Transformer lit review:
-    - Read:
-        - https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9417097
-        - https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0216456&type=printable
-        - https://arxiv.org/pdf/1703.04046.pdf
-        - https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=9697331&casa_token=EhmOAAufKOgAAAAA:fKIEfRmyrc9myCISgFQJrPVuBPoWg73FdSSSKYndDwJ46yCFYVoeH_8cgmbhbZ_c7eTGBIa-sA
--->
-
 # Thesis interim report notes
 Notes for writing interim report, due January 19, 2024.
 

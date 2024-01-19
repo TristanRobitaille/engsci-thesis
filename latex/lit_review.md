@@ -16,7 +16,7 @@
     - Used very aggressive sparsity of 90%
     - ~2x speedup over of using GPU
 
-###  FTRANS: Energy-Efficient Acceleration of Transformers using FPGA
+### FTRANS: Energy-Efficient Acceleration of Transformers using FPGA
 - **Main ideas**:
     - Enhanced Block Circular Matrix model compression: Reduce weight storage by representing weight matrices as a vector of small circulant matrices of dimensions b x b
         - Augment the work of Ding et al. by redefining the index vector, where each element circulant matrix is the average of all matrices over the row j (this is not precise, need to review)
@@ -34,7 +34,7 @@
     - Minimal loss in accuracy for BCM block sizes of 4 and 8 for shallower transformer, and loss in accuracy of 4.2% and 4.3% for deep transformer.
     - No accuracy loss when converting weights to 16b fixed-point from 32b floating point
 
-###  CirCNN: Accelerating and Compressing Deep Neural Networks Using Block-Circulant Weight Matrices
+### CirCNN: Accelerating and Compressing Deep Neural Networks Using Block-Circulant Weight Matrices
 - **Results**:
     - Matrix-vector multiplies can be done in O(blogb) instead of O(b^2)
     - Compared to NVIDIA Jetson TX1, 570x less energy. Compared to previous FPGA, 60-70x higher energy efficiency. Due to:
@@ -163,3 +163,19 @@
         - Data mismatch due to distributional shifts between datasets/cohorts
         - Heterogeneity: a challenge beyond data mismatch
         - Subjectivity in model building
+
+### A Survey on Convolutional Neural Network Accelerators: GPU, FPGA and ASIC
+- **Main ideas**
+    - Problems with platforms:
+        - CPU: Lacks parallelism and memory bandwitdh
+        - GPU: High cost, high energy consumption and limited memory (compared to CPU)
+        - FPGA: Inferior performance than ASIC
+        - ASIC: Low flexibility
+    - Highest energy consumption process of AI inference is memory transfer (refer to [6])
+    - "Dataflow" architecture: Modify traditional von Neumann architecture by removing instructions, and instead organizing different compute element to match a model's architecture (refer to [8])
+    - FPGA architectures are focussed on flexibility (i.e. able to support adjustable data type, pruned matrices, binary or ternary NNs)
+    - Roofline model ([10]): Idea that FLOPS/s limited by 1) data throughput or 2) OPs/s (based on computation per communication ratio) --> HW not fully utilized 
+        - To improve utilization, [10] developed loop-unrolling and loop-pipelining techniques.
+    - AI ASIC: 1st one in 2013 (DianNao) -> Could perform ~500G/s 16b fixed-point operations.
+        - 2 years later: ShiDianNao, which already increased performance and power by 1.87x and 60x, respectively
+        - TPU: Instead of HW custom-designed for a given model, basic TPUs are essentially a large MAC PE matrix and local storage. Very popular for servers.

@@ -51,7 +51,7 @@ def signals_processing(args, signals:List) -> List:
         b_notch, a_notch = signal.iirnotch(w0=notch_freq, Q=BW, fs=NOMINAL_FREQUENCY_HZ)
         signals = signal.lfilter(b_notch, a_notch, signals) # Note: Could use sosfiltfilt to avoid phase-shift, but the hardware filter will have a phase shift so lfilter is more realistic
 
-    # 0.1-100Hz bandpass (used in: https://arxiv.org/pdf/1703.04046.pdf)
+    # 0.3-100Hz bandpass (used in: https://arxiv.org/pdf/1703.04046.pdf)
     if "0_3Hz-100Hz_bandpass" in args.signal_processing_ops:
         half_order = 4 # Order is 2*N
         fc_lower = 0.3 # Hz
