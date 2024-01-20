@@ -1,3 +1,4 @@
+import csv
 import glob
 import socket
 import argparse
@@ -6,6 +7,7 @@ import datetime
 import numpy as np
 import glob as glob
 import tensorflow as tf
+from pyedflib import EdfReader
 import matplotlib.pyplot as plt
 
 """
@@ -332,8 +334,23 @@ def round_up_to_nearest_tenth(input) -> float:
     rounded_up_input = rounded_input if (rounded_input > input) else (rounded_input + 0.1) # Round up to nearest tenth
     return rounded_up_input
 
+def edf_to_csv(edf_fp:str, csv_filename:str, channel:str, clip_duration_num_samples:int):
+    signal_reader = EdfReader(edf_fp)
+    channels = list(signal_reader.getSignalLabels())
+    channel_number = channels.index(channel)
+    signal = signal_reader.readSignal(channel_number, digital=True)
+    for i in range(len(signal)):
+        signal[i] += 2**15 # Offset by 15b
+    csv_dictionary = {"EEG":signal[0:clip_duration_num_samples]}
+
+    with open(csv_filename, mode='w', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=csv_dictionary.keys())
+        writer.writeheader()
+        for val in csv_dictionary["EEG"]:
+            writer.writerow({"EEG":val})
+
 def main():
-    print("Nothing to do in utilities main.")
+    edf_to_csv(edf_fp="/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF/01-03-0062 PSG.edf", csv_filename="eeg_sample.csv", channel="EEG Cz-LER", clip_duration_num_samples=30*256)
 
 if __name__ == "__main__":
     main()
