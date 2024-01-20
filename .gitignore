@@ -72,7 +72,13 @@ asic/alib-52/*
 asic/reports/*
 asic/results/*
 asic/command.log
-asic/prototype/proto
+
+### ASIC functional simulation
+asic/func_sim/cmake_install.cmake
+asic/func_sim/CMakeCache.txt
+asic/func_sim/func_sim
+asic/func_sim/Makefile
+asic/func_sim/CMakeFiles
 
 ### Documentation
 doc/CMC_VLSI_User_Manual_2023.pdf

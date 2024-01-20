@@ -48,6 +48,18 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": []
+        },
+        {
+            "name": "C++ Functional Simulation",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/asic/func_sim/func_sim",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/asic/func_sim/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb"
         }
     ]
 }
