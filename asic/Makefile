@@ -4,12 +4,10 @@
 SIM ?= verilator
 TOPLEVEL_LANG ?= verilog
 
-VERILOG_SOURCES = top.v
-
-# use VHDL_SOURCES for VHDL files
+VERILOG_SOURCES = counter.v
 
 # TOPLEVEL is the name of the toplevel module in your Verilog or VHDL file
-TOPLEVEL = top
+TOPLEVEL = counter
 
 # MODULE is the basename of the Python test file
 MODULE = testbench

@@ -277,7 +277,7 @@ def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_
         log += f"Channel: {parser.input_channel}\n"
         if not model_specific_only:
             log += f"k-fold validation set: {parser.k_fold_val_set}\n"
-            for model_type, acc in acc.items(): log += f"Validation set accuracy ({model_type}): {acc}\n"
+            for model_type, acc in acc.items(): log += f"Validation set accuracy ({model_type}): {acc[-1]}\n" # Last items in acc is always accuracy for this run
             log += f"Training accuracy: {[round(accuracy, 4) for accuracy in fit_history.history['accuracy']]}\n"
             log += f"Validation accuracy (while training): {[round(accuracy, 4) for accuracy in fit_history.history['val_accuracy']]}\n"
             log += f"Training loss: {[round(loss, 4) for loss in fit_history.history['loss']]}\n"
@@ -299,7 +299,7 @@ def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_
         if not model_specific_only: log += f"Sleep stages count in training data ({num_clips_training}): {sleep_stages_count_training} ({[round(num / num_clips_training, 4) for num in sleep_stages_count_training]})\n"
         if not model_specific_only: log += f"Sleep stages count in validation set input ({num_clips_validation}): {sleep_stages_count_val} ({[round(num / num_clips_validation, 4) for num in sleep_stages_count_val]})\n"
         if not model_specific_only: 
-            for model_type, pred_cnt in pred_cnt.items(): log += f"Sleep stages count in validation set prediction ({num_clips_validation}, {model_type}): {pred_cnt} ({[round(num / num_clips_validation, 4) for num in pred_cnt]})\n"
+            for model_type, pred_cnt in pred_cnt.items(): log += f"Sleep stages count in validation set prediction ({num_clips_validation}, {model_type}): {pred_cnt} ({[round(num / num_clips_validation, 4) for num in pred_cnt[-1]]})\n"
 
         log += f"\nClip length (s): {dataset_metadata['clip_length_s']}\n"
         log += f"Patch length (# of samples): {parser.patch_length}\n"
@@ -504,13 +504,13 @@ def increment_ops(ops_dict:dict, in_shape, out_shape, layer_type:str, activation
     For MatrixMultiply, enter the leftmost matrix as input (i.e. in Y = AX, in_shape should come from A)
     """
 
-    x_in, y_in, z_in = in_shape
-    x_out, y_out, z_out = out_shape
+    y_in, x_in, z_in = in_shape
+    y_out, x_out, z_out = out_shape
 
     if layer_type == "Dense":
-        ops_dict["mults"] += x_in**2 * y_in
-        ops_dict["adds"] += x_in * y_in * (x_in-1) + x_out * y_in
-        ops_dict["incrs"] += x_in * y_in * (x_in-1) + x_out * y_in
+        ops_dict["mults"] += x_in * y_in * x_out
+        ops_dict["adds"] += x_in * y_in * (x_out-1) + x_out * y_in
+        ops_dict["incrs"] += x_in * y_in * (x_out-1) + x_out * y_in
         if activation: ops_dict["acts"] += x_out * y_in
 
     elif layer_type == "LayerNorm":
@@ -525,11 +525,11 @@ def increment_ops(ops_dict:dict, in_shape, out_shape, layer_type:str, activation
         if (z_in == 0): # 2D matrix
             ops_dict["mults"] += x_in * y_in * x_out
             ops_dict["adds"] += x_in * (y_in - 1) * y_out
-            ops_dict["incrs"] += x_in * y_out * y_in
+            ops_dict["incrs"] += x_in * y_in * x_out
         else: # 3D matrix
-            ops_dict["mults"] += x_in * y_in * y_out * z_out
-            ops_dict["adds"] += x_in * y_in * z_in * (y_out - 1) * z_out
-            ops_dict["incrs"] += x_in * y_in * z_out * y_out
+            ops_dict["mults"] += x_in * x_in * y_in * z_in
+            ops_dict["adds"] += x_in * x_in * y_in * (z_in - 1)
+            ops_dict["incrs"] += x_in * x_in * y_in * z_in
 
     elif layer_type == "nnSoftmax":
         ops_dict["divs"] += x_in * y_in
@@ -555,6 +555,7 @@ def export_k_fold_results(args, acc:dict):
     fp = args.k_fold_val_results_fp + ".csv"
     rows = []
     data_to_write = {'k-fold set':args.k_fold_val_set}
+    for model_type in acc.keys(): acc[model_type] = max(acc[model_type]) # Keep max. accuracy
     data_to_write.update(acc)
     blank_row = dict.fromkeys(data_to_write.keys())
 
@@ -712,21 +713,21 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
         """
         ops = {"adds":0, "subs":0, "mults":0, "divs":0, "acts":0, "incrs":0, "exps":0, "sqrts":0}
 
-        x_in, y_in = self.num_patches + self.use_class_embedding, self.embedding_depth
-        increment_ops(ops_dict=ops, in_shape=(x_in,y_in,0), out_shape=(x_in,y_in,0), layer_type="Dense", activation=False) # Query Dense
-        increment_ops(ops_dict=ops, in_shape=(x_in,y_in,0), out_shape=(x_in,y_in,0), layer_type="Dense", activation=False) # Key Dense
-        increment_ops(ops_dict=ops, in_shape=(x_in,y_in,0), out_shape=(x_in,y_in,0), layer_type="Dense", activation=False) # Value Dense
+        y_in, x_in = self.num_patches + self.use_class_embedding, self.embedding_depth
+        increment_ops(ops_dict=ops, in_shape=(y_in,x_in,0), out_shape=(y_in,x_in,0), layer_type="Dense", activation=False) # Query Dense
+        increment_ops(ops_dict=ops, in_shape=(y_in,x_in,0), out_shape=(y_in,x_in,0), layer_type="Dense", activation=False) # Key Dense
+        increment_ops(ops_dict=ops, in_shape=(y_in,x_in,0), out_shape=(y_in,x_in,0), layer_type="Dense", activation=False) # Value Dense
 
-        x_in, y_in, z_in = self.embedding_depth/self.num_heads, self.num_patches + self.use_class_embedding, self.num_heads
-        x_out, y_out, z_out = self.embedding_depth/self.num_heads, self.num_patches + self.use_class_embedding, self.num_patches + self.use_class_embedding
-        increment_ops(ops_dict=ops, in_shape=(x_in,y_in,z_in), out_shape=(x_out,y_out,z_out), layer_type="MatrixMultiply") # Matrix multiply between Query and Value
+        y_in, x_in, z_in = self.embedding_depth/self.num_heads, self.num_patches + self.use_class_embedding, self.num_heads
+        y_out, x_out, z_out = self.embedding_depth/self.num_heads, self.num_patches + self.use_class_embedding, self.num_patches + self.use_class_embedding
+        increment_ops(ops_dict=ops, in_shape=(y_in,x_in,z_in), out_shape=(y_out,x_out,z_out), layer_type="MatrixMultiply") # Matrix multiply between Query and Value
         # Divide by sqrt(# heads)
         ops["sqrts"] += 1
         ops["divs"] += x_out * y_out * z_out
         ops["incrs"] += (x_out - 1) * y_out * z_out
-        increment_ops(ops_dict=ops, in_shape=(x_out,y_out,z_out), out_shape=(x_out,y_out,z_out), layer_type="nnSoftmax") # Softmax
-        increment_ops(ops_dict=ops, in_shape=(x_out,y_out,z_out), out_shape=(x_in,y_in,self.num_heads), layer_type="MatrixMultiply") # Matrix multiply with values
-        increment_ops(ops_dict=ops, in_shape=(y_out,self.embedding_depth,0), out_shape=(y_out,self.embedding_depth,0), layer_type="Dense", activation=False) # Output Dense
+        increment_ops(ops_dict=ops, in_shape=(y_out,x_out,z_out), out_shape=(y_out,x_out,z_out), layer_type="nnSoftmax") # Softmax
+        increment_ops(ops_dict=ops, in_shape=(y_out,x_out,z_out), out_shape=(y_out,x_out,self.num_heads), layer_type="MatrixMultiply") # Matrix multiply with values
+        increment_ops(ops_dict=ops, in_shape=(x_in,self.embedding_depth,0), out_shape=(x_in,self.embedding_depth,0), layer_type="Dense", activation=False) # Output Dense
 
         return ops
 
@@ -781,15 +782,17 @@ class Encoder(tf.keras.layers.Layer):
         """
         ops = {"adds":0, "subs":0, "mults":0, "divs":0, "acts":0, "incrs":0, "exps":0, "sqrts":0}
 
-        x, y = self.num_patches + self.use_class_embedding, self.embedding_depth
+        y_in, x_in = self.num_patches + self.use_class_embedding, self.embedding_depth
 
-        increment_ops(ops_dict=ops, in_shape=(x,y,0), out_shape=(x,y,0), layer_type="LayerNorm") # LayerNorm
+        increment_ops(ops_dict=ops, in_shape=(y_in,x_in,0), out_shape=(y_in,x_in,0), layer_type="LayerNorm") # LayerNorm
         for op, num in self.mhsa.calculate_ops().items(): ops[op] += num # MHSA
-        ops["adds"] += x * y # Add inputs
-        increment_ops(ops_dict=ops, in_shape=(x,y,0), out_shape=(x,y,0), layer_type="LayerNorm") # LayerNorm
-        increment_ops(ops_dict=ops, in_shape=(x,y,0), out_shape=(x,y,0), layer_type="Dense", activation=True) # MLP Dense 1
-        increment_ops(ops_dict=ops, in_shape=(x,y,0), out_shape=(x,y,0), layer_type="Dense", activation=True) # MLP Dense 2
-        ops["adds"] += x * y # Add
+        ops["adds"] += y_in * x_in # Add inputs
+        increment_ops(ops_dict=ops, in_shape=(y_in,x_in,0), out_shape=(y_in,x_in,0), layer_type="LayerNorm") # LayerNorm
+
+        y_out, x_out = self.num_patches + self.use_class_embedding, self.mlp_dim
+        increment_ops(ops_dict=ops, in_shape=(y_in,x_in,0), out_shape=(y_out,x_out,0), layer_type="Dense", activation=True) # MLP Dense 1
+        increment_ops(ops_dict=ops, in_shape=(y_out,x_out,0), out_shape=(y_in,x_in,0), layer_type="Dense", activation=True) # MLP Dense 2
+        ops["adds"] += y_in * x_in # Add
 
         return ops
 
@@ -922,9 +925,9 @@ class VisionTransformer(tf.keras.Model):
             ops["incrs"] += self.clip_length_num_samples
 
         # Patch embeddings
-        x_in, y_in = self.num_patches, self.patch_length
-        x_out, y_out = self.num_patches, self.embedding_depth
-        increment_ops(ops_dict=ops, in_shape=(x_in,y_in,0), out_shape=(x_out,y_out,0), layer_type="Dense", activation=False)
+        y_in, x_in = self.num_patches, self.patch_length
+        y_out, x_out = self.num_patches, self.embedding_depth
+        increment_ops(ops_dict=ops, in_shape=(y_in,x_in,0), out_shape=(y_out,x_out,0), layer_type="Dense", activation=False)
 
         # Positional embedding
         if self.enable_positional_embedding:
@@ -935,10 +938,10 @@ class VisionTransformer(tf.keras.Model):
             ops[op] += self.num_encoder_layers * num
 
         # MLP head
-        x_in, y_in = self.num_patches+self.use_class_embedding, y_out
-        increment_ops(ops_dict=ops, in_shape=(x_in,y_in,0), out_shape=(x_in,y_in,0), layer_type="LayerNorm")
+        y_in, x_in = self.num_patches+self.use_class_embedding, self.embedding_depth
+        increment_ops(ops_dict=ops, in_shape=(y_in,x_in,0), out_shape=(y_in,x_in,0), layer_type="LayerNorm")
         for _ in range(self.mlp_head_num_dense):
-            increment_ops(ops_dict=ops, in_shape=(x_in,y_in,0), out_shape=(y_in,self.mlp_dim,0), layer_type="Dense", activation=True)
+            increment_ops(ops_dict=ops, in_shape=(y_in,x_in,0), out_shape=(y_in,self.mlp_dim,0), layer_type="Dense", activation=True)
         increment_ops(ops_dict=ops, in_shape=(y_in,self.mlp_dim,0), out_shape=(1, sleep_map.get_num_stages()+1,0), layer_type="Dense", activation=True)
 
         for op in ops.keys(): ops[op] = int(ops[op])
@@ -984,6 +987,9 @@ def main():
     base_out_fp = utilities.find_folder_path(utilities.folder_base_path()+f"results/{time_of_export}_vision", utilities.folder_base_path()+"results")
     os.makedirs(base_out_fp, exist_ok=True)
 
+    acc = {"tf":[], "tflite":[], "tflite (quant)":[], "tflite (full quant)":[], "tflite (16bx8b full quant)":[]}
+    pred_cnt = {"tf":[], "tflite":[], "tflite (quant)":[], "tflite (full quant)":[], "tflite (16bx8b full quant)":[]}
+
     for run_num in range(args.num_runs):
         print(f"[{(time.time()-start_time):.2f}s] Starting training with {int(data['signals_train'].shape[0])} clips for run {run_num+1}.")
         run_out_fp = base_out_fp+f"/run_{run_num+1}"
@@ -1002,10 +1008,10 @@ def main():
         if args.save_model: save_models(model=model, all_models=all_models, out_fp=run_out_fp)
 
         # Manual validation
-        acc = {"tf":5, "tflite":5, "tflite (quant)":5, "tflite (full quant)":5, "tflite (16bx8b full quant)":5}
-        pred_cnt = {"tf":[], "tflite":[], "tflite (quant)":[], "tflite (full quant)":[], "tflite (16bx8b full quant)":[]}
         for model_type, model in all_models.items():
-            acc[model_type], pred_cnt[model_type] = manual_val(model, args=args, type=model_type, data=data, whole_night_indices=start_of_val_night_indices, out_fp=run_out_fp, ds_metadata=dataset_metadata)
+            current_acc, current_pred_cnt = manual_val(model, args=args, type=model_type, data=data, whole_night_indices=start_of_val_night_indices, out_fp=run_out_fp, ds_metadata=dataset_metadata)
+            acc[model_type].append(current_acc)
+            pred_cnt[model_type].append(current_pred_cnt)
 
         # Count sleep stages in training and validation datasets
         sleep_stages_cnt_train = utilities.count_instances_per_class(data['sleep_stages_train'], sleep_map.get_num_stages()+1)

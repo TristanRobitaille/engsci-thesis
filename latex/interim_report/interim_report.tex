@@ -1,10 +1,12 @@
-\documentclass[12pt]{article}
+\documentclass[12pt, hidelinks]{article}
+\usepackage[a4paper, margin=1in]{geometry} % Set 1-inch border
 \usepackage{setspace} % Line spacing
 \usepackage{fancyhdr} % Headers and footers
 \usepackage{lipsum} % Dummy text
 \usepackage{hyperref} % Links in the document
 \usepackage{graphicx}
 \usepackage{booktabs}
+\usepackage{float}
 \usepackage{siunitx}
 \usepackage{multirow} % Table
 \usepackage{pgfgantt} % Gantt chart
@@ -25,7 +27,7 @@
     \begin{titlepage}
         \centering
         {\LARGE\bfseries ESC499 Thesis Interim Report\par}
-        {\Large Automatic sleep staging transformer model and hardware accelerator\par}
+        {\Large Automatic sleep staging transformer model and ASIC accelerator\par}
         \vspace*{\fill}
         \vspace{1cm}
         {\Large Tristan Robitaille (1006343397)\par}
@@ -33,13 +35,17 @@
         \vspace{1cm}
         {\large Supervisor: Professor Xilin Liu\par}
         \vfill
+        \begin{figure}[b]
+            \centering
+            \includegraphics[width=0.75\textwidth]{assets/UofT_logo.png}
+        \end{figure}
         {\large \today\par}
         \thispagestyle{empty}
     \end{titlepage}
 
     \newpage
     \pagenumbering{roman}
-    \doublespacing % 1.5 line spacing
+    \onehalfspacing % 1.5 line spacing
 
     % Page style
     \pagestyle{fancy}
@@ -63,84 +69,160 @@
 
 % Introduction
     \section[Introduction]{Introduction\footnote{Adapted from the \textit{Thesis Proposal}, submitted in October 2023.}}
-    As reported by Chaput \textit{et al.} \cite{insomnia_prevalence}, insomnia impacts around 24\% of Canadians adults. Detection and classification of sleep stages, known as \textit{sleep staging}, followed by neuromodulation has been recently found by Yoon \cite{yoon2021neuromodulation} to be a promising
-    treatment against insomnia. The current stage-of-the-art for sleep staging involves the use of polysomnography to measure biosignals (at least 19 sensors are required, as explained by Levin and Chauvel \cite{RUNDO2019381}) and manual annotation by a sleep expert, which requires, on average, 2 hours of work \cite{phan2022automatic}.
-    This technique also does not provide neuromodulation. Thus, there is a need to develop an in-ear device performing electroencaphalogram (EEG) sensing, sleep staging and neuromodulation. To maximize treatment potential, the device should be as small and portable as possible such that it can be used at home.
+    As reported by Chaput \textit{et al.} \cite{insomnia_prevalence}, insomnia impacts around 24\% of Canadians adults. Detection and classification of sleep stages, known as \textit{sleep staging}, followed by neuromodulation has been recently found by Yoon
+    \cite{yoon2021neuromodulation} to be a promising treatment against insomnia. The current stage-of-the-art for sleep staging involves the use of polysomnography to measure biosignals (at least 19 sensors are required, as explained by Levin and Chauvel \cite{RUNDO2019381})
+    and manual annotation by a sleep expert, which requires, on average, 2 hours of work \cite{phan2022automatic}. This technique also does not provide neuromodulation. To address these downsides while effectively treating insomnia, we propose an in-ear device performing
+    electroencaphalogram (EEG) sensing, sleep staging and neuromodulation. To maximize treatment potential, the device should be as small and portable as possible such that it can be used at home.
 
-    This thesis focuses on the development of a deep learning model to perform sleep staging and on the design of an accelerator ASIC module to perform in-situ inference of said model. In the end, we aim to prove, by simulations, the merit of such an accelerator in order to potentially integrate it in the in-ear device.
-    Multiple authors \cite{dutt2023sleepxai, fu2021deep, eldele2021attention} have published high-accuracy results using a deep learning approach to sleep staging, and have done so with significantly fewer sensors than polysomnography. However, these AI models run on standard computers as software frameworks and are
-    thus unsuitable for a lightweight integrated solution. Google sells small custom AI-accelerators (such as the Coral Edge TPU) that could run these AI models, but they still consume too much power (2W, \cite{coral_datasheet}) and do not readily integrate with custom neuromodulation hardware.
+    This thesis focuses on the development of a deep learning model to perform sleep staging and on the design of an accelerator ASIC module to perform in-situ inference with said model. In the end, we aim to prove, by simulations, the merit of such an accelerator in order to
+    potentially integrate it in the in-ear device. Multiple authors \cite{dutt2023sleepxai, fu2021deep, eldele2021attention} have published high-accuracy results using a deep learning approach to sleep staging, and have done so with significantly fewer sensors than polysomnography.
+    However, these AI models run on standard computers as software frameworks and are thus unsuitable for a lightweight integrated solution. Google sells small custom AI-accelerators (such as the Coral Edge TPU) that could run these AI models, but they still consume too much
+    power (1W, \cite{coral_datasheet}) and do not readily integrate with custom neuromodulation hardware.
 
-    The proposed solution should match or exceed the accuracy of traditional polysomnography and published models in the literature with a power consumption low enough that the whole system can be powered for at least a full-night on a battery that fits in-ear.
+    The proposed solution should match the accuracy of traditional polysomnography and published models in the literature with a power consumption low enough that the whole system can be powered for at least a full-night on a battery that fits in-ear.
 
-    This document serves to report the current state of literature in both sleep staging using deep learning and AI accelerator hardware in order to define a gap that is filled by this project. It also discusses the progress made to date and the work that is left.
+    This document describes the high-level technical direction of the project, serves to report the current state of literature in both sleep staging using deep learning and AI accelerator hardware in order to define a gap that is filled by this project.
+    It also discusses the progress made to date and the work that is left to complete.
+
+% Detailed design constraints and direction
+    \subsection{Detailed design constraints and direction}
+    Table \ref{tab:design_goals} indicates precise design goals and their justification, which helps guide design decision and development effort. For example, to reach the target model size, time will be spent evaluating the impact of hyperparameters to find the combination
+    that gives the lowest size while meeting the desired accuracy. Furthermore, quantization and pruning will be explored to reduce model size. For the AI accelerator, since inference power and clock frequency are inversely proportional, we must focus on reducing energy per inference.
+    From first principles, this implies reducing the amount of charge that is displaced within the chip. Since the physical properties are locked for the target 65nm node, we focus on reducing the number of operations, simplifying operations, limiting data movement and reducing
+    control logic.
+    
+    To determine the average power consumption constraint, the battery capacity of the Airpods Pro, which is 49.7mAh, can be considered as a reference \cite*{Airpods3C}. Assuming a supply voltage of 1V and 10h of battery life, the overall power consumption must stay below 5mW,
+    on average. The speaker coil driving circuitry will consume most of the power and, leaving enough power budget for the analog front-end and overhead in the system, in addition to a safety factor, 1mW seems like a reasonable target for the accelerator. Regarding the target
+    area and model size, a reasonable chip package for this application is a 4mm x 4mm Chip-Scale Package (CSP). According to IPC standard J-STD-012, a CSP overall area is no more than 120\% of the die, which leaves us with 13$mm^2$ of die area \cite*{J_STD_012}.
+    Again, a significant portion will be consumed by the coil driver, RISC-V processor and memory. Therefore, a maximum area of 10\%, or 1.5$mm^2$, for the accelerator seems to be a safe option. According to Liu and Kursun, the area of a standard 6T SRAM cell is 0.75$\mu m^2$
+    \cite*{liu2008characterization}. To leave enough area for the compute elements, controllers and routing, reserving 50\% of the accelerator area to weights is reasonable. Thus, with 0.75$mm^2$ that can be allocated to weights, the total model size can be 1Mb, or 125kB. Finally,
+    as mentioned above the accuracy should be close to published literature in this field to provide effective treatment. Current PSG divides the night in 30s ``sleep epochs''. To limit too much of an offset between the end of a 30s epoch and its predicted sleep stage (essentially
+    a phase offset), which would add inaccuracy to the overall system and potentially reduce its effectiveness, a maximum phase offset of 10\% (3s) is appropriate.
+
+    \begin{table}
+        \centering
+        \renewcommand{\arraystretch}{1.2} % Vertical spacing
+        \setlength{\arrayrulewidth}{1.5pt} % Thickness of vertical lines
+        \caption{Design goals for AI model and ASIC accelerator}
+        \begin{tabular}{@{} *7l @{}}
+            \toprule
+            Type        & Goals                                     & Justification &&&  \\\midrule
+            \multirow{2}{*}{Model}
+                        & Size $<$ 125\,kB                          & Help reach ASIC area/power goals \\
+                        & Accuracy $>$ 80\%                         & Competitive with state-of-the-art \\ \bottomrule
+            %%%%%%%%%%%%%%%%%%%%%%%%
+            \multirow{3}{*}{ASIC}
+                        & $P_{\mathrm{avg}} < 1\,\mathrm{mW}$       & System to function for whole night \\
+                        & $T_{\mathrm{inference}} < 3\,\mathrm{s}$  & Maximum phase offset of 10\% \\
+                        & $A_{\mathrm{total}} < 1.5\,\mathrm{mm}^2$ & Fit in ear (65nm node) \\
+            \hline
+        \end{tabular}
+        \label{tab:design_goals}
+    \end{table}
 
 % Lit review: Deep learning for sleep staging
     \section{Literature review}
     \subsection{ML for sleep staging}
     Deep learning for sleep staging has been studied since around 2017. Broadly speaking, basic deep neural networks (DNN) cames first, followed by convolutional neural networks (CNN) and recurrent neural-networks (RNN) \cite{phan2022sleeptransformer}.
-    The transformer is a relatively new type of neural network based around the concept of "attention" and particularly suited for sequence inputs \cite{han2022survey}. Since its introduction in 2017 \cite{vaswani2017attention}, the transformer has been used for sleep staging tasks. Indeed, Dai \textit{et al.} developed a transformer-like
-    model without decoders which used three input EEG channels and achieved an impressive 87.2\% accuracy on the popular SleepEDF-20 dataset \cite{dai2023multichannelsleepnet}. Similarly, Phan \textit{et al.} developed a model with a focus on outputting easily-interpretable confidence metrics for clinicians. Their model ingests multiple
-    sleep "epochs" (small segments of EEG signals, typically 30s in length) for each inference, which allowed the team to achieve 84.9\% accuracy on the SleepEDF-78 dataset. Eldele \textit{et al.} managed an accuracy of 85.6\% on SleepEDF-78 using a single-channel, single-epoch attention-based model \cite{eldele2021attention}.
+    The transformer is a relatively new type of neural network based around the concept of ``attention'' and particularly suited for sequence inputs since it can process the input in parallel \cite{han2022survey}. Since its introduction in 2017 \cite{vaswani2017attention}, 
+    the transformer has been used for sleep staging tasks. Indeed, Dai \textit{et al.} developed a transformer-like model without decoders which used three input EEG channels and achieved an impressive 87.2\% accuracy on the popular SleepEDF-20 dataset
+    \cite{dai2023multichannelsleepnet}. Similarly, Phan \textit{et al.} developed a model with a focus on outputting easily-interpretable confidence metrics for clinicians. They found that a significant impediment to the adoptation of automatic sleep staging in clinics
+    is lack of trust from clinicians as they perceive the system to be a ``black box''. Their model ingests multiple sleep epochs for each inference, which allowed the team to achieve 84.9\% accuracy on the SleepEDF-78 dataset. Eldele \textit{et al.} managed an
+    accuracy of 85.6\% on SleepEDF-78 using a single-channel, single-epoch attention-based model \cite{eldele2021attention}.
 
-    In recent years, the accuracy of sleep staging by ML models has plateaued. In fact, Phan \textit{et al.} claim that AI-based sleep-staging in heathly patients has been solved fully as the accuracy has reached the 'almost perfect' level of Cohen's kappa \cite{phan2022automatic}. However, none of the models presented above meet
-    our constraints. Indeed, we require a lightweight, single-channel, single-epoch model. Most models have more than 1M parameters \cite{phan2022sleeptransformer}; even the smallest model by Eldele \textit{et al.} has above 500k parameters. Furthermore, none have been optimized to run on custom hardware. Thus, there is a need to develop a novel
-    lightweight transformer.
+    In recent years, the accuracy of sleep staging by ML models has plateaued. In fact, Phan \textit{et al.} claim that AI-based sleep-staging in heathly patients has been solved fully as the accuracy has reached the ``almost perfect'' level of Cohen's kappa
+    \cite{phan2022automatic}. However, none of the models presented above meet our constraints. Indeed, we require a lightweight, single-channel, single-epoch model. Most models have more than 1M parameters \cite{phan2022sleeptransformer}; even the smallest
+    model by Eldele \textit{et al.} has above 500k 32-bit float weights, which far exceeds the 125kB constraint. Furthermore, none have been optimized to run on custom hardware. Thus, there is a need to develop a novel lightweight transformer.
 
 % Lit review: AI accelerator ASIC
     \subsection{AI accelerator hardware}
-    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Phasellus vitae odio eget neque lacinia posuere. Donec et massa ut turpis interdum lobortis. Vestibulum ante ipsum primis
-    in faucibus orci luctus et ultrices posuere cubilia Curae; Fusce eu aliquet quam, et sodales est. Duis vel elit nec odio ultricies ultrices. Nulla facilisi. Nullam eu ex eu odio volutpat efficitur.
+    AI accelerators are a very active area of research at the moment. Significant gains in latency and power are possible by designing hardware optimized for machine learning. Indeed, CPUs lack in memory bandwidth and parallelism and have significant control overhead
+    as required to process any arbitrary program. GPUs have high cost and high power consumption and typically have less available memory than a CPU. Hardware (FPGA and ASICs), on the other hand, can be fast and energy efficient but suffer from limited flexibility \cite{hu2022survey}.
+    The first AI accelerator ASIC, publised in 2014 by Chen \textit{et al.} and named \textit{DianNao}, could perform 452G 16b fixed-point computations per second \cite{chen2014diannao}. It was quickly surpassed by \textit{ShiDianNao}, which was 1.87x faster and used 60x less
+    energy \cite{du2015shidiannao}.
 
-% Detailed design constraints and direction
-    \section{Detailed design constraints and direction}
-    Table \ref{tab:design_goals} indicates precise design goals and their justification, which helps guide design decision and development effort. For example, to reach the target model size, time will be spent evaluating
-    the impact of hyperparameters to find the combination that gives the lowest size while meeting the desired accuracy. Furthermore, quantization and pruning will be explored to reduce model size. For the AI accelerator,
-    since inference power and frequency are inversely proportional, we must focus on reducing energy per inference. From first principles, this implies reducing the amount of charge that is displaced within the chip. Since
-    the physical properties are locked for the target 65nm node, we focus on reducing the number of operations, simplifying operations, limiting data movement and reducing control logic.
+    Modern models are massive and suffer from memory access penalties. Thus, the most optimized architectures limit data movement as much as possible by placing the compute elements directly \textit{in memory}, meaning that less charge is switched per operation
+    (DRAM access requires 200x more energy than on-chip memory \cite*{ding2017circnn}) and the overhead and bottleneck effect of the data bus is drastically reduced. For example, Arora \textit{et al.} describe ``CoMeFa'', a compute-in-memory (CiM) module
+    for FPGA BRAM which managed to reduce energy comsumption by 55\%. They placed up to 160 single-bit processing element per BRAM (20kbit) and perform operations in a bit-serial manner instead of the traditional bit-parallel \cite*{arora2022comefa}. Similarly, 
+    Wang and colleagues present a similar BRAM CiM module which speeds up compute by up to 2.3x at the cost of 1.8\% increase in area \cite*{wang2021compute}. A high-level architecture that often uses a number of CiM is known as ``dataflow''. Unlike the traditional
+    von Neumann architecture, it does not rely on instructions and banks of memory cells to perform the necessary computation, but instead organizes different compute elements sequentially and in parallel to match a model's architecture. For instance, Farabet 
+    \textit{et al.} present a runtime-reconfigurable dataflow architecture based on 9 pipelined ``processing tiles'' that can be reconfigured in $\sim$$10^4$-$10^5$ permutations \cite{farabetlargescale}.
+    
+    Another area of research is concerned with the software-hardware co-design opportunities afforded by tight integration between the model and the hardware running its inference. Ding and team describe an impressive design where both the training backpropagation
+    and inference hardware are modified. By ensuring that weight matrices consist of an array of circulant matrices, the team is able to reduce time-complexity of vector-matrix mutliply from $\mathcal{O}(n^2)$ to $\mathcal{O}(n\log{}n)$. This technique reduced
+    storage needs by 400x-4000x, enabling the model to be stored in on-chip memory and reducing energy consumption by 60x-70x compared to naïve FPGA implementation \cite*{ding2017circnn}. Taking a different route, by developing a so-called ``Block-Balanced Pruning'' 
+    technique to pack a pruned weight matrix and its index information in an FPGA BRAM, Qi \textit{et al.} managed to double inference speed compared to a GPU \cite*{qi2021accommodating}. Another example of software-hardware co-design is the work by Zhi \textit{et al.}
+    who developed a ``Clipped staircase ReLU'' activation function optimized for their custom CiM processing element and use of quantized weights. Their work consumed 5x less energy and 100x-1000x fewer memory accesses \cite*{zhi2021opportunities}.
+
+    \subsection{Lessons from the literature}
+    The literature reviews presented above offer promising design directions to help reach the design goals. Firstly, a small model is critically missing from the literature since even the smallest model is 16x too large for our project. Secondly, CiM and dataflow architectures
+    are proven techniques to decrease power consumption and offer promising inspiration for the design of the ASIC. Finally, good software-hardware co-design should not be overlooked as it can offer significant gains.
+
+    \section{Progress to date}
+% Progress: Transformer model and edge TPU
+    \subsection{Transformer model and edge TPU}
+    Since August 2023, I have completed Andrew Ng's Machine Learning Specialization course to build enough knowledge to tackle the transformer model. The model is based on a vision transformer \cite{dosovitskiy2010image}, which accepts a 30s epoch and return the most probable
+    sleep stage. The architecture is shown in Figure \ref{fig:vit}. Since sleep staging as presented here is a ``sequence-to-one'' problem, feedback is not applicable and thus the decoder stack present in a more traditional transformer is not needed. The model is written in
+    Python with TensorFlow due to its straightforward conversion to TensorFlow Lite, which is compatible with the Coral Edge TPU. As can be seen in Figure \ref{fig:vit}, the model has an simple averaging layer downstream of the softmax layer. This provides more stable results
+    as they tend to oscillate between light and deep sleep stages. This feature boosted accuracy by ~3\%. Table \ref*{tab:model_param} indicates the main hyperparameters of the model and its training. These parameters have been found through hyperparameter search on the Compute
+    Canada cluster, where lowest total model weight and reasonable accuracy are prioritized. It should be noted that these are subject to change as the search is not so far complete. The model developed contains only 63k parameters (pre-pruning), which can be quantized to 
+    16-bit integers with a slight gain of accuracy. The accuracy on a 31-fold validation set is 80.2 \%. To help determine design priorities for the accelerator, the training script also exports the total number of different type of operations, as presented in Table \ref{tab:num_ops}.
+    Clearly, the vast majority of operations are Multiplies and Additions (either as part of MACs or individually, such as in LayerNorm layers), so most time should be spent on optimizing these operations over others. Diverging from \cite{dosovitskiy2010image}, the activation
+    function chosen for the Dense layers is SWISH (instead of GeLU), as described by \cite*{ramachandran2017searching}. SWISH helps resolve the vanishing gradient problem in backpropagation, leading to a higher accuracy for a given number of training epochs. In this project, an
+    accuracy increase of roughly 0.25\% was observed when using SWISH over GeLU.
+
+    Furthermore, a script was needed to extract and preprocess raw EDF data. The script parses raw EDF files, applies signal processing, prunes unknown sleep stages and concatenates all nights into one Tensor which is saved to disk. The Tensor format is useful as it permits
+    the use of all of TensorFlow's methods such as auto-caching, paired shuffling, etc., without having to convert at every training session. The signal processing consists of a 60Hz notch filter (to remove any coupling with AC mains), a 0.3Hz-100Hz bandpass (as recommended
+    in \cite{supratak2017deepsleepnet}) and adjustable quantization (currently to 16-bit integer instead of the default 32-bit float in order to decrease disk usage and speed up saving/loading without accuracy loss). The script can also up- or downsample the signal to evaluate the
+    impact of sampling frequency on accuracy. The MASS dataset signals are sampled at 256Hz, but the sampling frequency can be reduced to 64Hz without loss of accuracy. This can lower the power draw of the ASIC's analog front-end and decrease storage requirements by 4\%-9\%
+    depending on the final model size. In addition, the clip length can be specified, again in an effort to observe whether storage can be saved or accuracy can be increased. 30s has been found as a good medium between providing enough data to accurately perform sleep staging and
+    a short enough update period. The script also exports a ``pseudo-random'' EEG signal (whose samples follow $\mathcal{N}(\mu=2^{16}*stage/{(\# stages+1)},\,\sigma=2000)$). This proved useful when debugging the model initially, as any functional model should have an accuracy of
+    100\% on this Gaussian distribution centred around the sleep stage number. Finally, the data processing script is multithreaded, which cuts down processing time by 12x on the Compute Canada server (maximum of 6 processors per job, each with 2 threads).
 
     \begin{table}[ht]
         \centering
         \renewcommand{\arraystretch}{1.2} % Vertical spacing
         \setlength{\arrayrulewidth}{1.5pt} % Thickness of vertical lines
-        \caption{Design goals for AI model and ASIC accelerator}
-        \resizebox{\textwidth}{!}{
-            \begin{tabular}{@{} *7l @{}}
-                \toprule
-                Type        & Goals                                     & Justification &&&  \\\midrule
-                \multirow{2}{*}{Model}
-                            & Size $<$ 200\,kB                          & Help reach ASIC area/power goals \\
-                            & Accuracy $>$ 80\%                         & Competitive with state-of-the-art \\ \bottomrule
-                \multirow{3}{*}{ASIC}
-                            & $P_{\mathrm{avg}} < 1\,\mathrm{mW}$       & System to function for whole night \\
-                            & $T_{\mathrm{inference}} < 30\,\mathrm{s}$ & Sleep epochs are 30s \\
-                            & $A_{\mathrm{total}} < 1\,\mathrm{mm}^2$   & Minimize cost (65nm node) \\
-                \hline
-            \end{tabular}
-        }
-        \label{tab:design_goals}
+        \caption{Hyperparameters for vision transformer model}
+        \begin{tabular}{@{} *6l @{}}
+            \toprule
+            Hyperparameter                  & Value &&&     \\\midrule
+            Input channel                   & Cz-LER        \\
+            Embedding depth ($d_{model}$)   & 64            \\
+            \# of attention heads           & 8             \\
+            \# of encoder layers            & 2             \\
+            MLP depth                       & 32            \\
+            Patch length                    & 256 samples   \\
+            Clip length                     & 30s           \\
+            Sampling frequency              & 256 Hz        \\
+            Output averaging depth          & 3 samples     \\ \bottomrule 
+            %%%%%%%%%%%%%%%%%%%%%%%%
+            Learning rate schedule          & $\sqrt{d_{model}}*min(\sqrt{step}, step/4000^{1.5})$ \\
+            Batch size                      & 16            \\
+            \# of epochs                    & 100           \\
+            Dropout rate                    & 30\%          \\
+            Class weights                   & 1.0 $\forall$ \{Wake, REM, N1, N2, N3/N4\} \\
+            Optimizer                       & Adam          \\
+            Activation function             & SWISH         \\
+            Data processing                 & 60Hz notch → 0.3-100Hz bandpass → 16b quantization \\            
+            \hline
+        \end{tabular}
+        \label{tab:model_param}
     \end{table}
-
-%Progess
-    \section{Progress to date}
-% Progress: Transformer model and edge TPU
-    \subsection{Transformer model and edge TPU}
-    Since August 2023, I have completed Andrew Ng's Machine Learning Specialization course to build enough knowledge to tackle the transformer model. The model is based on a vision transformer \cite{dosovitskiy2010image}, which accepts a
-    30s epoch and return the most likely sleep stage. The architecture is shown in Figure \ref{fig:vit}.
-    Furthermore, I wrote feature-rich scripts to extract and preprocess PSG data, designed a complete vision transformer model with the required interface to run hyperparameter search and k-fold validation on the Compute Canada clusters. The model I developed contains only 63k parameters (pre-pruning),
-    which can be quantized to 16-bit integers with a slight gain of accuracy. The accuracy on a 31-fold validation set is XYZ \%. To help determine design priorities for the accelerator, the training script also exports the
-    total number of different type of operations, as presented in Table \ref{tab:num_ops}.
-
-    In addition, I have ported to model to run on the Coral Edge TPU using TensorFlow Lite. This provided us with reference latency and power figures to size what I consider to be the most promising
-    commercial alternative to a custom ASIC. This knowledge can be useful should we wish to develop a functional proof-of-concept prototype. In regular frequency mode (200MHz), the average inference time on the Edge TPU is 0.754ms. I have also researched initial ways the Edge TPU can be used with a
-    microcontroller, which will be needed should we wish to make a prototype in the future.
 
     \begin{figure}
         \centering
-        \includegraphics[width=0.5\textwidth]{assets/vit.jpg}
+        \includegraphics[width=0.6\textwidth]{assets/vit.png}
         \caption{High-level transformer architecture for in-situ sleep staging}
         \label{fig:vit}
     \end{figure}
+    
+    Both the TensorFlow model training program and the data extraction script are fully parametrizable via bash files and take advantage of the SLURM scheduler features on the Compute Canada server, notably the array input argument jobs (automatically spawn a number of job while
+    varying a single input argument), which is useful for hyperparameter search.
+
+    In addition, the model was ported to TensorFlow Lite to run on the Coral Edge TPU. This provided a reference latency and power figures to size what is considered to be the most promising commercial alternative to a custom ASIC given this application. This knowledge can be
+    useful should for a functional proof-of-concept prototype. In regular frequency mode (200MHz), the average inference time on the Edge TPU is 0.754ms. Finally, I have researched and documented initial ways the Edge TPU can be used with a microcontroller, which will be needed
+    should we wish to develop a prototype in the future.
 
     \begin{table}[ht]
         \centering
@@ -149,15 +231,15 @@
         \caption{Count of different types of operations in the transformer model}
         \begin{tabular}{@{} *7l @{}}
             \toprule
-            Operation            & Total count & Percent of total &&&  \\\midrule
-            Addition             & 8581394     & 82.4\%   \\
-            Index increment*     & 1812531     & N/A      \\
-            Multiplication       & 1780528     & 17.1\%   \\
-            Division             & 34112       & 0.33\%   \\
-            Activation (SWISH)** & 12064       & 0.12\%   \\
-            Substraction         & 9920        & 0.095\%  \\
-            Exponent             & 496         & 0.0048\% \\
-            Square root          & 322         & 0.0031\% \\
+            Operation            & Total count & Percent of total &&& \\\midrule
+            Index increment*     & 2475068     & N/A     \\
+            Multiplication       & 2449232     & 49.7\%  \\
+            Addition             & 2431056     & 49.3\%  \\
+            Division             & 33782       & 0.68\%  \\
+            Substraction         & 9920        & 0.20\%  \\
+            Activation (SWISH)** & 7099        & 0.14\%  \\
+            Exponent             & 496         & 0.01\%  \\
+            Square root          & 157         & 0.003\% \\
             \hline
         \end{tabular}
         \begin{minipage}{\textwidth}
@@ -171,37 +253,61 @@
 
 % Progress: ASIC accelerator
     \subsection{ASIC accelerator}
+    I have so far been granted access to the Synopsys Design Vision (DV), ModelSim and TSMC 65nm design kit on the EECG machines, and was able to simulate and synthesize a simple design by following the ECE1388 user manual in addition to becoming familiar
+    with Synopsys's DesignWare IP library. Since Synopsys DV and ModelSim are fairly slow and overkill for modules that do not require IP, I have researched and gained familiarity with lighter weight open-source tools for Verilog logic simulation and
+    testbenching, such as Verilator and CocoTB, which is a Python module for hardware simulations that has been rapidly gaining in popularity recently.
+    
+    Finally, the architecture of the accelerator, which is shown in Figure \ref*{fig:accel_arch}, was designed. It contains 64 Compute-in-Memory modules to parallelize computations and minimize expensive memory accesses. Most of the matrices in the model have
+    been designed to have at least one dimension equal to 64, or a multiple of 64. This maximizes utilization of the area, ultimately leading to lower area needs. Centre to each CiM is the ``SuperMAC'' which, in tandem with the local controller, can perform
+    LayerNorm, Softmax and SWISH activation approximated computations in addition to Multiply-and-Accumulate. To minimize power consumption, most computations can be done fully internally, and done so without constant relying on the external controller or
+    instructions. The weights SRAM is packed with the correct vectors/sub-matrices to proceed with computations with inter-CiM data transfer when needed. The only transfer needed occurs when a reshape and transpose is inevitable, such as within the Multi-Head
+    Self-Attention (MHSA) layer. For this, a remote SRAM bank is used. Each CiM also contains an additional SRAM cell for temporary results storage (i.e. for residual connections or multi-stage computations such as LayerNorm). Finally, provisions are made to
+    load weights from off-chip non-volatile storage, and from the chip's analog front-end.
+
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.8\textwidth]{assets/ASIC_arch.png}
+        \caption{High-level architecture of the ASIC accelerator}
+        \label{fig:accel_arch}
+    \end{figure}
 
 % Future work: Transformer model
     \section{Future work}
     \subsection{Transformer model}
-    The future work needed for the model is minor. There are three improvements I would like to try to further increase accuracy or reduce model size. Firstly, I will try the AdamW optimizer, which adds a weight decay component to the Adam optimizer. It has been used with superior results
-    in \cite*{dai2023multichannelsleepnet}. Furthermore, I have been  granted access to the Stanford Technology Analytics and Genomics in Sleep (STAGES \cite*{zhang2018national}) dataset, which contains PSG recordings from 1500 patients, significantly more than the 62 nights available in
-    the dataset (MASS SS3 \cite*{SP3/9MYUCS_2022}) I am currently using. Although MASS is widely used for model benchmarking, it is worthwhile to try pre-training the model on STAGES and perform transfer learning and k-fold validation on the MASS dataset. In addition, I plan on training
-    and validating on the Expanded Sleep-EDF dataset, which appears to be the most widely used dataset in the literature \cite*{physiobank2000physionet}. Finally, I will try pruning weights to further reduce the size of the model.
+    The future work needed for the model is minor. There are three improvements that could further increase accuracy or reduce model size. Firstly, the model could be pre-trained on the Stanford Technology Analytics and Genomics in Sleep (STAGES \cite*{zhang2018national})
+    dataset, which contains PSG recordings from 1500 patients, significantly more than the 62 nights available in the dataset (MASS SS3 \cite*{SP3/9MYUCS_2022}) currently used. Although MASS is widely used for model benchmarking, it is worthwhile to try pre-training
+    the model on STAGES and perform transfer learning and k-fold validation on the MASS dataset. In addition, the model should be trained and validated on the Expanded Sleep-EDF dataset, which is the most widely used dataset in the literature \cite*{physiobank2000physionet}.
+    Finally, weight pruning could further reduce the size of the model. Pruning consists of eliminating a subset of weights to reduce model size and compute with minimal loss of accuracy at the cost of more complicated control logic. In some cases, pruning may also
+    increase accuracy. Indeed, Chen \textit{et al.} applied 50\% pruning on DeiT-Small, a vision transformer model, and observed a 0.28\% accuracy boost.
 
 % Future work: ASIC accelerator
     \subsection{ASIC accelerator}
-
+    In order to obtain representative power, area and latency figures, the design will be synthesized using the same tools (Synopsys Design Vision) and process node as the target for the full ASIC (TSMC 65nm). Firstly, a C model will be developed to fully exercise
+    the control logic, weight/data movement and compute approximation as those are anticipated to be the hardest part of the design and a software proof-of-concept will prove very handy in writing the RTL. Following that, the SRAM cells will be synthesized as it is expected
+    that this synthesis will require to most research so more time rather than less should be allocated to it. The master control FSM and inter-CiM communication fabric will then be designed along with their testbench. Then, the ``SuperMAC'' will be developed 
+    in two phases; the basic Multiply-and-Accumulate functionality followed by the control logic to repurpose it to perform LayerNorm, Softmax and SWISH. Because AI is probabilistic in nature, there is room for area/power/latency improvements by relaxing the exactness
+    requirement for these operations and proceeding with approximations. For instance, Schraudolph proposes an algoritm to approximate the exponential function (used in the Softmax layer) with only one multiplication, two additions and bit manipulations \cite*{schraudolph1999fast}.
+    Finally, the weight packing architecture and process will be developed. Once all functional simulations pass and sleep staging inference equals results from the TensorFlow model, the design will be fully synthesized to provide the final power, area and latency figures. 
+    
 % Gantt chart
-    Figure \ref{fig:gantt} plans the future work for this thesis. It is fairly detailed to provide as much guidance as possible.
+    Figure \ref{fig:gantt} plans the future work for this thesis on a week-by-week basis (starting on the first week of the year). In addition to the points discussed above, the last two thesis deliverables, namely visuals submission and final thesis report, as included.
     \begin{sidewaysfigure}
         \centering
         \begin{ganttchart}[hgrid, vgrid, bar label node/.append style={align=right}]{1}{28}
             \gantttitle{2024}{28} \\
             \gantttitle{Week}{28} \\
             \gantttitlelist{1,...,14}{2} \\
-            \ganttbar{SRAM: Synthesize cell,\\load/read data}{5}{6} \ganttnewline
-            \ganttlinkedbar{Multiply and Accumulate\\compute}{7}{8} \ganttnewline
-            \ganttlinkedbar{Softmax, LayerNorm\\compute}{9}{10} \ganttnewline
-            \ganttlinkedbar{Data packing}{11}{12} \ganttnewline
-            \ganttlinkedbar{Control}{13}{14} \ganttnewline
-            \ganttlinkedbar{Final simulation}{15}{16} \ganttnewline[thick, black]
+            \ganttbar{C model}{5}{6} \ganttnewline
+            \ganttlinkedbar{SRAM: Synthesize cell, load/read data}{7}{8} \ganttnewline
+            \ganttlinkedbar{Control and inter-CiM fabric}{9}{10} \ganttnewline
+            \ganttlinkedbar{SuperMAC: Multiply-and-Accumulate}{11}{12} \ganttnewline
+            \ganttlinkedbar{SuperMCA: Softmax, LayerNorm, SWISH}{13}{14} \ganttnewline
+            \ganttlinkedbar{Data packing}{15}{16} \ganttnewline
+            \ganttlinkedbar{Final simulation}{17}{17} \ganttnewline[thick, black]
 
             \ganttbar{Pruning}{5}{6} \ganttnewline
-            \ganttlinkedbar{AdamW}{7}{8} \ganttnewline
-            \ganttlinkedbar{Expanded Sleep-EDF}{9}{10} \ganttnewline
-            \ganttlinkedbar{STAGES}{11}{12} \ganttnewline[thick, black]
+            \ganttlinkedbar{Expanded Sleep-EDF}{7}{8} \ganttnewline
+            \ganttlinkedbar{STAGES}{9}{10} \ganttnewline[thick, black]
 
             \ganttmilestone{Presentation visuals}{18} \ganttnewline
             \ganttmilestone{Presentation}{20}
@@ -212,6 +318,6 @@
 
 % Bibliography
     \newpage
-    \printbibliography
+    \printbibliography[heading=bibintoc]
 
 \end{document}

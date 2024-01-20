@@ -3,6 +3,7 @@
 .vscode
 ~$weekly_progress.pptx
 logs/*
+WORK/*
 
 ### Latex
 # Thesis
@@ -48,6 +49,7 @@ latex/interim_report/Thesis_Interim_Report_Rubric.pdf
 
 ### Tensorflow
 python_prototype/*.out
+python_prototype/core.*
 python_prototype/log*
 python_prototype/data*
 python_prototype/results/*
@@ -63,12 +65,20 @@ asic/sim_build/*
 asic/dump.vcd
 asic/results.xml
 asic/top
-asic/tutorial/post_synthesis_sim.mpf
-asic/tutorial/tutorial.cr.mti
-asic/tutorial/tutorial.mpf
-asic/tutorial/vsim.wlf
-asic/tutorial/work/*
-asic/tutorial/TSMC65_Digital_Flow/*
+asic/tutorial/*
+asic/TSMC65_digital_flow/*
+asic/WORK/*
+asic/alib-52/*
+asic/reports/*
+asic/results/*
+asic/command.log
+
+### ASIC functional simulation
+asic/func_sim/cmake_install.cmake
+asic/func_sim/CMakeCache.txt
+asic/func_sim/func_sim
+asic/func_sim/Makefile
+asic/func_sim/CMakeFiles
 
 ### Documentation
 doc/CMC_VLSI_User_Manual_2023.pdf
