@@ -1,22 +1,20 @@
+#ifndef FUNC_SIM_H
+#define FUNC_SIM_H
+
 #include <iostream>
+#include <cmath>
+#include <map>
+
 #include "CiM.hpp"
 #include "Master_Ctrl.hpp"
+#include "Misc.hpp"
 
-/*----- NAMESPACE -----*/
-using namespace std;
+typedef void (*FcnPtr)(struct ext_signals*);
 
-/*----- DEFINES -----*/
-#define CENTRALIZED_STORAGE_WEIGHTS_KB 2048
-#define PATCH_LENGTH_NUM_SAMPLES 256
+/*----- FUNCTION -----*/
+void master_nrst(struct ext_signals* ext_sig) { ext_sig->master_nrst = false; }
+void master_nrst_reset(struct ext_signals* ext_sig) { ext_sig->master_nrst = true; }
+void epoch_start(struct ext_signals* ext_sig){ ext_sig->new_sleep_epoch = true; }
+void epoch_start_reset(struct ext_signals* ext_sig){ ext_sig->new_sleep_epoch = false; }
 
-/*----- STRUCT -----*/
-struct instruction {
-    int op;
-    int data;
-};
-
-/*----- ENUM -----*/
-enum ops {};
-
-/*----- GLOBALS -----*/
-float centralized_storage[CENTRALIZED_STORAGE_WEIGHTS_KB];
+#endif //FUNC_SIM_H

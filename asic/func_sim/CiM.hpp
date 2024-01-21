@@ -1,9 +1,10 @@
+#ifndef CIM_H
+#define CIM_H
+
 #include <iostream>
+#include "Misc.hpp"
 
-/*----- NAMESPACE -----*/
-using namespace std;
-
-/*----- DEFINES -----*/
+/*----- DEFINE -----*/
 #define NUM_CIM 64
 #define CIM_WEIGHTS_STORAGE_SIZE_KB 2048
 #define CIM_TEMP_STORAGE_SIZE_KB 512
@@ -11,11 +12,24 @@ using namespace std;
 /*----- CLASS -----*/
 class CiM {
     private:
-        uint16_t weights[CIM_WEIGHTS_STORAGE_SIZE_KB];
-        float temp_storage[CIM_TEMP_STORAGE_SIZE_KB];
+        enum state {
+            IDLE,
+            RESET,
+            INVALID = -1
+        };
+
+        int16_t id;
+        uint16_t data_and_weights[CIM_WEIGHTS_STORAGE_SIZE_KB];
+        float storage[CIM_TEMP_STORAGE_SIZE_KB];
+        state state;
+        op prev_bus_op;
+        Counter gen_cnt_10b;
 
     public:
-        CiM();
+        CiM() : id(-1), gen_cnt_10b(10) {}
+        CiM(const int16_t cim_id);
         int reset();
-        int update();
+        int run(struct ext_signals* ext_sigs, Bus* bus);
 };
+
+#endif //CIM_H
