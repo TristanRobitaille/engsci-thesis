@@ -79,6 +79,7 @@ asic/func_sim/CMakeCache.txt
 asic/func_sim/func_sim
 asic/func_sim/Makefile
 asic/func_sim/CMakeFiles
+asic/func_sim/sample_eeg.csv
 
 ### Documentation
 doc/CMC_VLSI_User_Manual_2023.pdf
