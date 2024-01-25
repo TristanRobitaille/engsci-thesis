@@ -2,8 +2,9 @@
 #define MASTER_CTRL_H
 
 #include <iostream>
-#include "csv-parser/single_include/csv.hpp"
-#include "Misc.hpp"
+#include <../include/highfive/H5File.hpp>
+
+#include <Misc.hpp>
 
 /*----- DEFINE -----*/
 #define CENTRALIZED_STORAGE_WEIGHTS_KB 2048
@@ -21,16 +22,24 @@ class Master_ctrl {
             INVALID = -1
         };
 
-        float storage[CENTRALIZED_STORAGE_WEIGHTS_KB];
+        float storage[CENTRALIZED_STORAGE_WEIGHTS_KB / sizeof(float)];
         Counter gen_cnt_8b;
         Counter gen_cnt_10b;
-        csv::CSVReader eeg;
+
+        std::vector<uint16_t> eeg_ds;
+        std::vector<uint16_t>::iterator eeg; 
+        std::string eeg_fp;
+        
+        std::vector<float> params_ds;
+        std::vector<float>::iterator params; 
+        std::string params_fp;
+
         state state;
 
         int broadcast_inst(struct instruction);
 
     public:
-        Master_ctrl(const std::string eeg_fp);
+        Master_ctrl(const std::string eeg_filepath, const std::string params_filepath);
         int reset();
         system_state run(struct ext_signals* ext_sigs, Bus* bus);
         int start_signal_load();

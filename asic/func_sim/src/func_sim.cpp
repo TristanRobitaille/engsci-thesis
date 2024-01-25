@@ -1,4 +1,4 @@
-#include "func_sim.hpp"
+#include <func_sim.hpp>
 
 /*----- NAMESPACE -----*/
 using namespace std;
@@ -10,7 +10,7 @@ struct ext_signals ext_sigs;
 
 Bus bus;
 CiM cims[NUM_CIM];
-Master_ctrl ctrl("sample_eeg.csv");
+Master_ctrl ctrl("data/eeg.h5", "data/params.h5");
 
 int init(){
     ext_sigs.master_nrst = false;

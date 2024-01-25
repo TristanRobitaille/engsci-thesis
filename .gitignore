@@ -4,6 +4,7 @@
 ~$weekly_progress.pptx
 logs/*
 WORK/*
+build/*
 
 ### Latex
 # Thesis
@@ -74,12 +75,16 @@ asic/results/*
 asic/command.log
 
 ### ASIC functional simulation
-asic/func_sim/cmake_install.cmake
+asic/func_sim/*.cmake
+asic/func_sim/*/*.cmake
+asic/func_sim/*/Makefile
 asic/func_sim/CMakeCache.txt
 asic/func_sim/func_sim
+asic/func_sim/CMakeFiles/*
+asic/func_sim/include/CMakeFiles/
+asic/func_sim/include/doc/
+asic/func_sim/include/src/
 asic/func_sim/Makefile
-asic/func_sim/CMakeFiles
-asic/func_sim/sample_eeg.csv
 
 ### Documentation
 doc/CMC_VLSI_User_Manual_2023.pdf

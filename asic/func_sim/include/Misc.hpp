@@ -4,8 +4,8 @@
 #define MISC_H
 
 /*----- DEFINE -----*/
-#define PATCH_LENGTH_NUM_SAMPLES 256
-#define NUM_PATCHES 30
+#define PATCH_LENGTH_NUM_SAMPLES 64
+#define NUM_PATCHES 60
 
 /*----- ENUM -----*/
 enum bus_direction {
@@ -14,8 +14,8 @@ enum bus_direction {
 };
 
 enum op {
-    PATCH_LOAD,
-    INVALID
+    PATCH_LOAD_BROADCAST_OP,
+    INVALID_OP
 };
 
 enum system_state {
@@ -76,7 +76,7 @@ class Bus {
             while (q.size() > 0) { q.pop(); }
             inst = {
                 /* direction */  MASTER_TO_CIM,
-                /* op */         INVALID,
+                /* op */         INVALID_OP,
                 /* target_cim */ 0,
                 /* data */       0};
             return 0;

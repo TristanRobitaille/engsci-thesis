@@ -2,7 +2,8 @@
 #define CIM_H
 
 #include <iostream>
-#include "Misc.hpp"
+
+#include <Misc.hpp>
 
 /*----- DEFINE -----*/
 #define NUM_CIM 64
@@ -19,8 +20,8 @@ class CiM {
         };
 
         int16_t id;
-        uint16_t data_and_weights[CIM_WEIGHTS_STORAGE_SIZE_KB];
-        float storage[CIM_TEMP_STORAGE_SIZE_KB];
+        uint16_t data_and_param[CIM_WEIGHTS_STORAGE_SIZE_KB / sizeof(uint16_t)];
+        float storage[CIM_TEMP_STORAGE_SIZE_KB / sizeof(float)];
         state state;
         op prev_bus_op;
         Counter gen_cnt_10b;

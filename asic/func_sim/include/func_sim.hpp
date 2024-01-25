@@ -5,9 +5,9 @@
 #include <cmath>
 #include <map>
 
-#include "CiM.hpp"
-#include "Master_Ctrl.hpp"
-#include "Misc.hpp"
+#include <CiM.hpp>
+#include <Master_Ctrl.hpp>
+#include <Misc.hpp>
 
 typedef void (*FcnPtr)(struct ext_signals*);
 
