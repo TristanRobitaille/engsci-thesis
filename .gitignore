@@ -85,6 +85,7 @@ asic/func_sim/include/CMakeFiles/
 asic/func_sim/include/doc/
 asic/func_sim/include/src/
 asic/func_sim/Makefile
+asic/~$*
 
 ### Documentation
 doc/CMC_VLSI_User_Manual_2023.pdf

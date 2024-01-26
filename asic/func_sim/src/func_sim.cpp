@@ -19,8 +19,10 @@ int init(){
     // Define schedule for external events
     event_schedule[0] = master_nrst;
     event_schedule[2] = master_nrst_reset;
-    event_schedule[4] = epoch_start;
-    event_schedule[5] = epoch_start_reset;
+    event_schedule[4] = master_param_load;
+    event_schedule[6] = master_param_load_reset;
+    event_schedule[1000000] = epoch_start;
+    event_schedule[1000002] = epoch_start_reset;
 
     // Construct CiMs
     for (int16_t i = 0; i < NUM_CIM; ++i) { cims[i] = CiM(i); }
@@ -36,11 +38,11 @@ int main(){
     while (1) {
         if (event_schedule.count(epoch_cnt) > 0) { event_schedule[epoch_cnt](&ext_sigs); } // Update external signals if needed
         for (auto& cim: cims) { cim.run(&ext_sigs, &bus); } // Run CiMs
-        if (ctrl.run(&ext_sigs, &bus) == DONE) { break; }; // Run Master Controller
+        if (ctrl.run(&ext_sigs, &bus) == INFERENCE_FINISHED) { break; }; // Run Master Controller
         bus.run(); // Run bus
         epoch_cnt++;
     }
 
-    cout << ">----- SIMULATION DONE -----<" << endl;
+    cout << ">----- SIMULATION FINISHED -----<" << endl;
     return 0;
 }

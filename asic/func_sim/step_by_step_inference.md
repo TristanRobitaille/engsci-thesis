@@ -10,7 +10,7 @@
 
 ### Step 1: Patch projection
     - Each patch is broadcast to all CiM sequentially as it is sampled.
-    - Each CiM has patch_projection_dense.kernel[:][id] and patch_projection_dense.bias[id] in local memory
+    - Each CiM has patch_projection_dense.kernel[:][id] (one column) and patch_projection_dense.bias[id] in local memory
     - (MAC operation + 1 addition) must be shorter than sampling period to avoid having to buffer and save on temporary storage
     - Once full clip is sampled, each CiM is left with a (NUM_PATCHES, 1) vector in temporary memory
 
@@ -45,3 +45,6 @@
 
 ### Step 10: [Encoder][MHSA] Multiply with Dense linear
     - Need reshape broadcast and multiply with Dense linear    
+
+### Step 11: [Encoder] Sum with encoder input
+    - Internal step

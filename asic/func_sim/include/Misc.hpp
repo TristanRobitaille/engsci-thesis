@@ -4,38 +4,42 @@
 #define MISC_H
 
 /*----- DEFINE -----*/
+#define NUM_CIM 64
 #define PATCH_LENGTH_NUM_SAMPLES 64
 #define NUM_PATCHES 60
+#define EMBEDDING_DEPTH 64
+
+/*----- MACROS -----*/
+#define UPPER_8b_OF_16b(x) ((x) >> 8)
+#define LOWER_8b_OF_16b(x) ((x) & 0x00FF)
 
 /*----- ENUM -----*/
-enum bus_direction {
-    MASTER_TO_CIM,
-    CIM_TO_MASTER
-};
-
 enum op {
-    PATCH_LOAD_BROADCAST_OP,
-    INVALID_OP
+    PATCH_LOAD_BROADCAST_OP, // Broadcast current patch to all CiM, which perform vector-matrix multiplication after each patch
+    DATA_STREAM_START_OP, // Indicates that the next x data transmission will contain only parameters data (except op field, so 3B)
+    DATA_STREAM, // This instruction contains three bytes of data, and follow DATA_STREAM_START_OP
+    NOP // Represents the no tranmission
 };
 
 enum system_state {
     RUNNING,
-    DONE
+    INFERENCE_FINISHED
 };
 
 /*----- STRUCT -----*/
 struct instruction {
     /* Instructions between master controller and CiM */
-    bus_direction direction;
     op op;
-    uint16_t target_cim;
-    uint16_t data;
+    int target_cim; // Should be 6 bits
+    std::array<float, 2> data; // 2 bytes in ASIC
+    float extra_fields; // Opcode-dependent data arrangement
 };
 
 struct ext_signals {
     /* Signals external to the master controller and CiM, coming from peripherals or the RISC-V processor */
     bool master_nrst;
     bool new_sleep_epoch;
+    bool start_param_load;
 };
 
 /*----- CLASS -----*/
@@ -46,10 +50,12 @@ class Counter {
         uint64_t val;
     public:
         Counter(int width) : width(width), val(0) {}
-        int inc() {
-            val++;
-            if (val == std::pow(2, width)){ val = 0; } // Overflow
-            return 0;
+        int inc(uint increment=1) {
+            val = val + increment;
+            if (val >= (1 << width)) { 
+                val &= (1 << width) - 1;  // Wrap within width using bitwise AND
+            }
+            return val;
         }
         int reset() {
             val = 0;
@@ -61,32 +67,29 @@ class Counter {
 /* Bus */
 class Bus {
     private:
-        bool new_trans;
         struct instruction inst;
         std::queue<struct instruction> q;
 
     public:
-        bool is_trans_new() { return new_trans; };
         struct instruction get_inst() { return inst; };
         int push_inst(struct instruction inst) {
             q.push(inst);
             return 0;
         };
-        int reset(){
+        struct instruction reset(){
             while (q.size() > 0) { q.pop(); }
             inst = {
-                /* direction */  MASTER_TO_CIM,
-                /* op */         INVALID_OP,
-                /* target_cim */ 0,
-                /* data */       0};
-            return 0;
+                /* op */            NOP,
+                /* target_cim */    0,
+                /* data */          {0,0},
+                /* extra_fields */  0};
+            return inst;
         };
         int run() {
-            if (q.size() == 0) { new_trans = false; }
+            if (q.size() == 0) { inst = reset(); } // Send NOP on bus
             else {
                 inst = q.front();
                 q.pop();
-                new_trans = true;
             }
             return 0;
         };
