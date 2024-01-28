@@ -3,7 +3,9 @@
 
 #include <iostream>
 #include <../include/highfive/H5File.hpp>
+#include <fmt/core.h>
 
+#include <CiM.hpp>
 #include <Misc.hpp>
 #include <Param_Layer_Mapping.hpp>
 
@@ -25,8 +27,16 @@ class Master_ctrl {
         };
 
         struct parameters {
-            std::vector<float> class_emb[64];
-            std::vector<std::vector<float>> pos_emb[64][61];
+            // Patch projection Dense
+            std::array<std::array<float, EMBEDDING_DEPTH>, PATCH_LENGTH_NUM_SAMPLES> patch_proj_kernel;
+            std::array<float, EMBEDDING_DEPTH> patch_proj_bias;
+
+            std::array<float, EMBEDDING_DEPTH> class_emb; // Classification token embedding
+            std::array<std::array<float, EMBEDDING_DEPTH>, NUM_PATCHES+1> pos_emb; // Positional embeddding
+
+            // Encoders
+            std::array<std::array<std::array<float, EMBEDDING_DEPTH>, 2>, NUM_ENCODERS> enc_layer_norm_gamma;
+            std::array<std::array<std::array<float, EMBEDDING_DEPTH>, 2>, NUM_ENCODERS> enc_layer_norm_beta;
         };
 
         float storage[CENTRALIZED_STORAGE_WEIGHTS_KB / sizeof(float)];
@@ -36,21 +46,20 @@ class Master_ctrl {
 
         // EEG file
         std::vector<float> eeg_ds;
-        std::vector<float>::iterator eeg; 
-        
+        std::vector<float>::iterator eeg;
+
         // Parameters
-        int params_curr_layer = PATCH_PROJ_DENSE_KERNEL; // Keeps track of which layer of parameters we are sending
+        PARAM_NAMES params_curr_layer = PATCH_PROJ_KERNEL_PARAMS; // Keeps track of which layer of parameters we are sending
         int params_cim_cnt = -1; // Keeps track of current CiM to which we send parameters
-        int params_data_cnt = 0; // Keeps track of data element we've sent to current CiM
-        HighFive::File params_file;
+        int params_data_cnt = -1; // Keeps track of data element we've sent to current CiM
         struct parameters params;
 
-        int broadcast_inst(struct instruction);
+        int load_params_from_h5(const std::string params_filepath);
 
     public:
         Master_ctrl(const std::string eeg_filepath, const std::string params_filepath);
         int reset();
-        system_state run(struct ext_signals* ext_sigs, Bus* bus);
+        SYSTEM_STATE run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]);
         int start_signal_load();
         struct instruction param_to_send();
 };

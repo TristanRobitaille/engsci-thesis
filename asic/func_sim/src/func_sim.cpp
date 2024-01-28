@@ -38,7 +38,7 @@ int main(){
     while (1) {
         if (event_schedule.count(epoch_cnt) > 0) { event_schedule[epoch_cnt](&ext_sigs); } // Update external signals if needed
         for (auto& cim: cims) { cim.run(&ext_sigs, &bus); } // Run CiMs
-        if (ctrl.run(&ext_sigs, &bus) == INFERENCE_FINISHED) { break; }; // Run Master Controller
+        if (ctrl.run(&ext_sigs, &bus, cims) == INFERENCE_FINISHED) { break; }; // Run Master Controller
         bus.run(); // Run bus
         epoch_cnt++;
     }

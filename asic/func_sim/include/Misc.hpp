@@ -8,20 +8,21 @@
 #define PATCH_LENGTH_NUM_SAMPLES 64
 #define NUM_PATCHES 60
 #define EMBEDDING_DEPTH 64
+#define NUM_ENCODERS 2
 
 /*----- MACROS -----*/
 #define UPPER_8b_OF_16b(x) ((x) >> 8)
 #define LOWER_8b_OF_16b(x) ((x) & 0x00FF)
 
 /*----- ENUM -----*/
-enum op {
+enum OP {
     PATCH_LOAD_BROADCAST_OP, // Broadcast current patch to all CiM, which perform vector-matrix multiplication after each patch
     DATA_STREAM_START_OP, // Indicates that the next x data transmission will contain only parameters data (except op field, so 3B)
     DATA_STREAM, // This instruction contains three bytes of data, and follow DATA_STREAM_START_OP
     NOP // Represents the no tranmission
 };
 
-enum system_state {
+enum SYSTEM_STATE {
     RUNNING,
     INFERENCE_FINISHED
 };
@@ -29,7 +30,7 @@ enum system_state {
 /*----- STRUCT -----*/
 struct instruction {
     /* Instructions between master controller and CiM */
-    op op;
+    OP op;
     int target_cim; // Should be 6 bits
     std::array<float, 2> data; // 2 bytes in ASIC
     float extra_fields; // Opcode-dependent data arrangement
@@ -50,9 +51,9 @@ class Counter {
         uint64_t val;
     public:
         Counter(int width) : width(width), val(0) {}
-        int inc(uint increment=1) {
+        int inc(uint64_t increment=1) {
             val = val + increment;
-            if (val >= (1 << width)) { 
+            if (val >= (1 << width)) {
                 val &= (1 << width) - 1;  // Wrap within width using bitwise AND
             }
             return val;
