@@ -24,12 +24,15 @@ class CiM {
             CLASS_TOKEN_CONCAT,
             POS_EMB,
             ENC_LAYERNORM,
+            ENC_MHSA_DENSE,
             INVALID_INF_STEP = -1
         };
 
         bool is_idle = true; // Used by Ctrl to know whether CiMs have completed a given inference step. To avoid routing NUM_CIM bits to ctrl, these signals will be daisy-chained ANDed from one CiM to the next... or could just always use CiM #63 as a proxy for all CiM...TBD
+        bool compute_in_progress = false; // Used by compute element to notify CiM controller when is in progress
         int16_t id; // ID of the CiM
         int16_t gen_reg_16b; // General-purpose register
+        int16_t gen_reg_16b_2; // General-purpose register
         float params[CIM_PARAMS_STORAGE_SIZE_KB / sizeof(float)];
         float intermediate_res[CIM_INT_RES_SIZE_KB / sizeof(float)];
 
@@ -47,6 +50,7 @@ class CiM {
         int run(struct ext_signals* ext_sigs, Bus* bus);
         float MAC(uint16_t input_start_addr, uint16_t params_start_addr, uint16_t len);
         float ADD(uint16_t input_addr, uint16_t params_addr);
+        void LAYERNORM(uint16_t input_addr, float gamma, float beta);
 };
 
 #endif //CIM_H

@@ -17,13 +17,18 @@ class Counter;
 
 class Master_ctrl {
     private:
-        enum state {
+        enum STATE {
             IDLE,
             PARAM_LOAD,
             SIGNAL_LOAD,
             INFERENCE_RUNNING,
+            BROADCAST_MANAGEMENT,
             RESET,
             INVALID = -1
+        };
+
+        enum HIGH_LEVEL_INFERENCE_STEP {
+            PRE_LAYERNORM_TRANSPOSE_STEP,
         };
 
         struct parameters {
@@ -35,14 +40,22 @@ class Master_ctrl {
             std::array<std::array<float, EMBEDDING_DEPTH>, NUM_PATCHES+1> pos_emb; // Positional embeddding
 
             // Encoders
-            std::array<std::array<std::array<float, EMBEDDING_DEPTH>, 2>, NUM_ENCODERS> enc_layer_norm_gamma;
-            std::array<std::array<std::array<float, EMBEDDING_DEPTH>, 2>, NUM_ENCODERS> enc_layer_norm_beta;
+            std::array<std::array<std::array<float, EMBEDDING_DEPTH>, 2>, NUM_ENCODERS> enc_layernorm_gamma;
+            std::array<std::array<std::array<float, EMBEDDING_DEPTH>, 2>, NUM_ENCODERS> enc_layernorm_beta;
+            std::array<std::array<std::array<float, EMBEDDING_DEPTH>, EMBEDDING_DEPTH>, NUM_ENCODERS> enc_mhsa_Q_kernel;
+            std::array<std::array<std::array<float, EMBEDDING_DEPTH>, EMBEDDING_DEPTH>, NUM_ENCODERS> enc_mhsa_K_kernel;
+            std::array<std::array<std::array<float, EMBEDDING_DEPTH>, EMBEDDING_DEPTH>, NUM_ENCODERS> enc_mhsa_V_kernel;
+            std::array<std::array<float, EMBEDDING_DEPTH>, NUM_ENCODERS> enc_mhsa_Q_bias;
+            std::array<std::array<float, EMBEDDING_DEPTH>, NUM_ENCODERS> enc_mhsa_K_bias;
+            std::array<std::array<float, EMBEDDING_DEPTH>, NUM_ENCODERS> enc_mhsa_V_bias;
         };
 
         float storage[CENTRALIZED_STORAGE_WEIGHTS_KB / sizeof(float)];
         Counter gen_cnt_8b;
         Counter gen_cnt_10b;
-        state state;
+        uint16_t gen_reg_16b;
+        STATE state;
+        HIGH_LEVEL_INFERENCE_STEP high_level_inf_step = PRE_LAYERNORM_TRANSPOSE_STEP;
 
         // EEG file
         std::vector<float> eeg_ds;

@@ -12,7 +12,9 @@ enum PARAM_NAMES { // Master goes through these layers sequentially, loading wei
 
 enum SINGLE_PARAM_OFFSET {
     PATCH_PROJ_BIAS_OFF,
-    CLASS_EMB_OFF
+    CLASS_EMB_OFF,
+    ENC1_LAYERNORM1_GAMMA,
+    ENC1_LAYERNORM1_BETA,
 };
 
 enum FIELD_NAME {

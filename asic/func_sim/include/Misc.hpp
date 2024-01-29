@@ -9,6 +9,7 @@
 #define NUM_PATCHES 60
 #define EMBEDDING_DEPTH 64
 #define NUM_ENCODERS 2
+#define LAYERNORM_EPSILON 0.000001f // 1e-6
 
 /*----- MACROS -----*/
 #define UPPER_8b_OF_16b(x) ((x) >> 8)
@@ -18,7 +19,10 @@
 enum OP {
     PATCH_LOAD_BROADCAST_OP, // Broadcast current patch to all CiM, which perform vector-matrix multiplication after each patch
     DATA_STREAM_START_OP, // Indicates that the next x data transmission will contain only parameters data (except op field, so 3B)
-    DATA_STREAM, // This instruction contains three bytes of data, and follow DATA_STREAM_START_OP
+    DATA_STREAM_OP, // This instruction contains three bytes of data, and follow DATA_STREAM_START_OP
+    TRANSPOSE_BROADCAST_START_OP, // This instruction tells the target CiM that it needs to broadcast its data starting at a given addr and length. Non-target CiM will then listen to the broadcast and grab the data they need.
+    TRANSPOSE_BROADCAST_DATA_OP, // Sent from a CiM. Contains 3 bytes of data
+    PISTOL_START_OP, // Used to instruct CiMs to move to their next step in the inference pipeline
     NOP // Represents the no tranmission
 };
 
@@ -31,7 +35,7 @@ enum SYSTEM_STATE {
 struct instruction {
     /* Instructions between master controller and CiM */
     OP op;
-    int target_cim; // Should be 6 bits
+    int target_or_sender; // Should be 6 bits (represents target CiM for all ops except TRANSPOSE_BROADCAST_DATA_OP)
     std::array<float, 2> data; // 2 bytes in ASIC
     float extra_fields; // Opcode-dependent data arrangement
 };
@@ -48,21 +52,36 @@ struct ext_signals {
 class Counter {
     private:
         uint8_t width;
-        uint64_t val;
+        int val;
     public:
         Counter(int width) : width(width), val(0) {}
-        int inc(uint64_t increment=1) {
+        int inc(int increment=1) {
             val = val + increment;
             if (val >= (1 << width)) {
-                val &= (1 << width) - 1;  // Wrap within width using bitwise AND
+                val &= (1 << width) - 1; // Wrap within width using bitwise AND
             }
             return val;
         }
+        
+        int dec(int decrement=1) {
+            val = val - decrement;
+            if (val < 0) {
+                val = (1 << width) + val; // Wrap around
+            }
+            return val;
+        }
+
+        int set_val(int new_val) {
+            val = new_val;
+            return val;
+        }
+
         int reset() {
             val = 0;
             return 0;
         }
-        uint64_t get_cnt() { return val; }
+
+        int get_cnt() { return val;}
 };
 
 /* Bus */
@@ -80,10 +99,10 @@ class Bus {
         struct instruction reset(){
             while (q.size() > 0) { q.pop(); }
             inst = {
-                /* op */            NOP,
-                /* target_cim */    0,
-                /* data */          {0,0},
-                /* extra_fields */  0};
+                /* op */                NOP,
+                /* target_or_sender */  0,
+                /* data */              {0,0},
+                /* extra_fields */      0};
             return inst;
         };
         int run() {
