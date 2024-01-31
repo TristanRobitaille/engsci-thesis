@@ -29,6 +29,7 @@ class Master_ctrl {
 
         enum HIGH_LEVEL_INFERENCE_STEP {
             PRE_LAYERNORM_TRANSPOSE_STEP,
+            POST_LAYERNORM_TRANSPOSE_STEP,
         };
 
         struct parameters {
@@ -57,7 +58,8 @@ class Master_ctrl {
         float storage[CENTRALIZED_STORAGE_WEIGHTS_KB / sizeof(float)];
         Counter gen_cnt_8b;
         Counter gen_cnt_10b;
-        uint16_t gen_reg_16b;
+        uint16_t gen_reg_16b = 0;
+        uint16_t gen_reg_16b_2 = 0;
         STATE state;
         HIGH_LEVEL_INFERENCE_STEP high_level_inf_step = PRE_LAYERNORM_TRANSPOSE_STEP;
 

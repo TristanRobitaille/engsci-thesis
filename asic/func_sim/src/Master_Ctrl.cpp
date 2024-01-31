@@ -20,6 +20,8 @@ int Master_ctrl::reset(){
     fill(begin(storage), end(storage), 0); // Reset remote storage
     gen_cnt_8b.reset();
     gen_cnt_10b.reset();
+    gen_reg_16b = 0;
+    gen_reg_16b_2 = 0;
     return 0;
 }
 
@@ -73,7 +75,20 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
                 state = BROADCAST_MANAGEMENT;
                 bus->push_inst(inst);
                 gen_reg_16b = ceil((NUM_PATCHES+1)/3.0f); // Holds the number of transactions each CiM will send (3 elements per transaction)
+                gen_reg_16b_2 = NUM_CIM; // Number of CiMs that will need to send data
                 gen_cnt_8b.reset(); // Count CiMs
+                gen_cnt_10b.set_val(gen_reg_16b); // Count transactions
+            }
+            break;
+
+        case POST_LAYERNORM_TRANSPOSE_STEP:
+            if (all_cims_idle == true) {
+                struct instruction inst = {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*target_or_sender*/ 0, /*{addr data to send, length}*/ {NUM_PATCHES+1, EMBEDDING_DEPTH}, /*addr where to store*/ NUM_PATCHES+1+EMBEDDING_DEPTH}; // Tell CiM to start broadcasting int_res[61] for EMBEDDING_DEPTH elements
+                state = BROADCAST_MANAGEMENT;
+                bus->push_inst(inst);
+                gen_reg_16b = ceil(EMBEDDING_DEPTH/3.0f); // Holds the number of transactions each CiM will send (3 elements per transaction)
+                gen_reg_16b_2 = NUM_PATCHES+1; // Number of CiMs that will need to send data
+                gen_cnt_8b.reset(); // Count CiMs. TODO: Could set_val and decrement instead in order to save a reg but logic would become slightly less intuitive
                 gen_cnt_10b.set_val(gen_reg_16b); // Count transactions
             }
             break;
@@ -90,13 +105,18 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
             if (gen_cnt_10b.get_cnt() == 0) { // All transactions sent, start a new CiM
                 gen_cnt_8b.inc(); // CiM counter
 
-                if (gen_cnt_8b.get_cnt() == NUM_CIM) { // All CiMs sent all data, can go back to running inference
+                if (gen_cnt_8b.get_cnt() == gen_reg_16b_2) { // All CiMs sent all data, can go back to running inference
                     state = INFERENCE_RUNNING;
                     high_level_inf_step = static_cast<HIGH_LEVEL_INFERENCE_STEP> (high_level_inf_step+1);
                     struct instruction inst = {/*op*/ PISTOL_START_OP, /*target_or_sender*/ 0, /*data*/ {0,0}, /*extra_fields*/ 0}; // Tell CiMs that they can go to the next step
                     bus->push_inst(inst);
                 } else {
-                    struct instruction inst = {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*target_or_sender*/ gen_cnt_8b.get_cnt(), /*{addr data to send, length}*/ {0, NUM_PATCHES+1}, /*addr where to store*/ NUM_PATCHES+1}; // Tell CiM to start broadcasting int_res[0] for NUM_PATCHES+1 elements, and to store at int_res[NUM_PATCHES+1]
+                    struct instruction inst;
+                    if (high_level_inf_step == PRE_LAYERNORM_TRANSPOSE_STEP) { // TODO: Consider saving the parameters in these instructions in registers when entering the step instead of hardcoding them here
+                        inst = {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*target_or_sender*/ gen_cnt_8b.get_cnt(), /*{addr data to send, length}*/ {0, NUM_PATCHES+1}, /*addr where to store*/ NUM_PATCHES+1}; // Tell CiM to start broadcasting int_res[0] for NUM_PATCHES+1 elements, and to store at int_res[NUM_PATCHES+1]
+                    } else if (high_level_inf_step == POST_LAYERNORM_TRANSPOSE_STEP) {
+                        inst = {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*target_or_sender*/ gen_cnt_8b.get_cnt(), /*{addr data to send, length}*/ {NUM_PATCHES+1, EMBEDDING_DEPTH}, /*addr where to store*/ NUM_PATCHES+1+EMBEDDING_DEPTH}; // Tell CiM to start broadcasting int_res[61] for EMBEDDING_DEPTH elements
+                    }
                     bus->push_inst(inst);
                     gen_cnt_10b.set_val(gen_reg_16b); // Transaction counter
                 }

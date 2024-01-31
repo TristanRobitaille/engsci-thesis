@@ -8,7 +8,7 @@
 
 /*----- DEFINE -----*/
 #define CIM_PARAMS_STORAGE_SIZE_KB 3072
-#define CIM_INT_RES_SIZE_KB 512
+#define CIM_INT_RES_SIZE_KB 1024
 
 /*----- CLASS -----*/
 class CiM {

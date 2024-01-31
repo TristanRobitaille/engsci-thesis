@@ -137,9 +137,12 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
                     is_idle = false;
                     LAYERNORM(0, gamma, beta);
-                } else if (compute_in_progress == false && gen_reg_16b == 1) { // Done with LayerNorm
-                    current_inf_step = ENC_MHSA_DENSE;
                 }
+            } else if (compute_in_progress == false && gen_reg_16b == 1) { // Done with LayerNorm
+                current_inf_step = ENC_MHSA_DENSE;
+                is_idle = true;
+            } else if (id >= (NUM_PATCHES+1)){ // CiM # >= NUM_PATCHES+1 don't have a row to LayerNorm, so they are idle
+                is_idle = true;
             }
             break;
 
