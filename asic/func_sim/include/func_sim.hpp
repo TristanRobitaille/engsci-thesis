@@ -4,6 +4,7 @@
 #include <iostream>
 #include <cmath>
 #include <map>
+#include <variant>
 
 #include <CiM.hpp>
 #include <Master_Ctrl.hpp>

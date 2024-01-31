@@ -27,7 +27,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             gen_cnt_10b.inc();
             if (gen_cnt_10b.get_cnt() == PATCH_LENGTH_NUM_SAMPLES) { // Received a complete patch, perform part of Dense layer
                 float result = MAC(0 /* patch starting address */, 0 /* weight starting address */, PATCH_LENGTH_NUM_SAMPLES);
-                intermediate_res[gen_cnt_10b_2.get_cnt() + PATCH_LENGTH_NUM_SAMPLES] = result + intermediate_res[param_addr_map[SINGLE_PARAMS][ADDR]+PATCH_PROJ_BIAS_OFF];
+                intermediate_res[gen_cnt_10b_2.get_cnt() + PATCH_LENGTH_NUM_SAMPLES] = result + intermediate_res[param_addr_map[SINGLE_PARAMS].addr+PATCH_PROJ_BIAS_OFF];
                 gen_cnt_10b_2.inc(); // Increment number of patches received
                 gen_cnt_10b.reset();
                 if (gen_cnt_10b_2.get_cnt() == NUM_PATCHES) { state = INFERENCE_RUNNING_CIM; } // Received all patches, automatically start inference
@@ -113,14 +113,14 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
         switch (current_inf_step) {
         case CLASS_TOKEN_CONCAT:
-            intermediate_res[PATCH_LENGTH_NUM_SAMPLES+NUM_PATCHES] = params[param_addr_map[SINGLE_PARAMS][ADDR]+CLASS_EMB_OFF]; // Move classification token from parameters memory to intermediate storage
+            intermediate_res[PATCH_LENGTH_NUM_SAMPLES+NUM_PATCHES] = params[param_addr_map[SINGLE_PARAMS].addr+CLASS_EMB_OFF]; // Move classification token from parameters memory to intermediate storage
             current_inf_step = POS_EMB;
             gen_cnt_10b.reset();
             break;
 
         case POS_EMB:
             if (gen_cnt_10b.get_cnt() < NUM_PATCHES+1) {
-                intermediate_res[gen_cnt_10b.get_cnt()] = ADD(PATCH_LENGTH_NUM_SAMPLES+gen_cnt_10b.get_cnt(), param_addr_map[POS_EMB_PARAMS][ADDR]+gen_cnt_10b.get_cnt());
+                intermediate_res[gen_cnt_10b.get_cnt()] = ADD(PATCH_LENGTH_NUM_SAMPLES+gen_cnt_10b.get_cnt(), param_addr_map[POS_EMB_PARAMS].addr+gen_cnt_10b.get_cnt());
                 gen_cnt_10b.inc();
             } else {
                 gen_cnt_10b.reset();
@@ -132,8 +132,8 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case ENC_LAYERNORM:
             if ((inst.op == PISTOL_START_OP) && (id < (NUM_PATCHES+1))) { // Wait for master's start signal to perform LayerNorm (only CiM # < NUM_PATCHES+1 have a row to LayerNorm)
                 if (compute_in_progress == false) {
-                    float gamma = params[param_addr_map[SINGLE_PARAMS][0]+ENC1_LAYERNORM1_GAMMA];
-                    float beta = params[param_addr_map[SINGLE_PARAMS][0]+ENC1_LAYERNORM1_BETA];
+                    float gamma = params[param_addr_map[SINGLE_PARAMS].addr+ENC1_LAYERNORM1_GAMMA_OFF];
+                    float beta = params[param_addr_map[SINGLE_PARAMS].addr+ENC1_LAYERNORM1_BETA_OFF];
                     gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
                     is_idle = false;
                     LAYERNORM(0, gamma, beta);
@@ -144,6 +144,8 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             break;
 
         case ENC_MHSA_DENSE:
+            break;
+            
         case INVALID_INF_STEP:
         default:
             break;
