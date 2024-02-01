@@ -23,7 +23,8 @@ class CiM {
         enum INFERENCE_STEP {
             CLASS_TOKEN_CONCAT,
             POS_EMB,
-            ENC_LAYERNORM,
+            ENC_LAYERNORM_1ST_HALF,
+            ENC_LAYERNORM_2ND_HALF,
             ENC_MHSA_DENSE,
             INVALID_INF_STEP = -1
         };
@@ -50,7 +51,8 @@ class CiM {
         int run(struct ext_signals* ext_sigs, Bus* bus);
         float MAC(uint16_t input_start_addr, uint16_t params_start_addr, uint16_t len);
         float ADD(uint16_t input_addr, uint16_t params_addr);
-        void LAYERNORM(uint16_t input_addr, float gamma, float beta);
+        void LAYERNORM_1ST_HALF(uint16_t input_addr);
+        void LAYERNORM_2ND_HALF(uint16_t input_addr, float gamma, float beta);
 };
 
 #endif //CIM_H

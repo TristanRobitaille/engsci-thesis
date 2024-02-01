@@ -81,7 +81,7 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
             }
             break;
 
-        case POST_LAYERNORM_TRANSPOSE_STEP:
+        case INTRA_LAYERNORM_TRANSPOSE_STEP:
             if (all_cims_idle == true) {
                 struct instruction inst = {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*target_or_sender*/ 0, /*{addr data to send, length}*/ {NUM_PATCHES+1, EMBEDDING_DEPTH}, /*addr where to store*/ NUM_PATCHES+1+EMBEDDING_DEPTH}; // Tell CiM to start broadcasting int_res[61] for EMBEDDING_DEPTH elements
                 state = BROADCAST_MANAGEMENT;
@@ -93,6 +93,10 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
             }
             break;
 
+        case POST_LAYERNORM_TRANSPOSE_STEP:
+            if (all_cims_idle == true) { sys_state = INFERENCE_FINISHED; } // TODO: For now
+            break;
+            
         default:
             sys_state = INFERENCE_FINISHED; // TODO: For now
             break;
@@ -114,7 +118,7 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
                     struct instruction inst;
                     if (high_level_inf_step == PRE_LAYERNORM_TRANSPOSE_STEP) { // TODO: Consider saving the parameters in these instructions in registers when entering the step instead of hardcoding them here
                         inst = {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*target_or_sender*/ gen_cnt_8b.get_cnt(), /*{addr data to send, length}*/ {0, NUM_PATCHES+1}, /*addr where to store*/ NUM_PATCHES+1}; // Tell CiM to start broadcasting int_res[0] for NUM_PATCHES+1 elements, and to store at int_res[NUM_PATCHES+1]
-                    } else if (high_level_inf_step == POST_LAYERNORM_TRANSPOSE_STEP) {
+                    } else if (high_level_inf_step == INTRA_LAYERNORM_TRANSPOSE_STEP) {
                         inst = {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*target_or_sender*/ gen_cnt_8b.get_cnt(), /*{addr data to send, length}*/ {NUM_PATCHES+1, EMBEDDING_DEPTH}, /*addr where to store*/ NUM_PATCHES+1+EMBEDDING_DEPTH}; // Tell CiM to start broadcasting int_res[61] for EMBEDDING_DEPTH elements
                     }
                     bus->push_inst(inst);

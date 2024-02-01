@@ -124,31 +124,42 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 gen_cnt_10b.inc();
             } else {
                 gen_cnt_10b.reset();
-                current_inf_step = ENC_LAYERNORM;
+                current_inf_step = ENC_LAYERNORM_1ST_HALF;
                 is_idle = true; // Indicate to master controller that positional embedding computation is done
             }
             break;
 
-        case ENC_LAYERNORM:
+        case ENC_LAYERNORM_1ST_HALF:
             if ((inst.op == PISTOL_START_OP) && (id < (NUM_PATCHES+1))) { // Wait for master's start signal to perform LayerNorm (only CiM # < NUM_PATCHES+1 have a row to LayerNorm)
                 if (compute_in_progress == false) {
-                    float gamma = params[param_addr_map[SINGLE_PARAMS].addr+ENC1_LAYERNORM1_GAMMA_OFF];
-                    float beta = params[param_addr_map[SINGLE_PARAMS].addr+ENC1_LAYERNORM1_BETA_OFF];
                     gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
                     is_idle = false;
-                    LAYERNORM(0, gamma, beta);
+                    LAYERNORM_1ST_HALF(0);
                 }
             } else if (compute_in_progress == false && gen_reg_16b == 1) { // Done with LayerNorm
-                current_inf_step = ENC_MHSA_DENSE;
+                current_inf_step = ENC_LAYERNORM_2ND_HALF;
                 is_idle = true;
             } else if (id >= (NUM_PATCHES+1)){ // CiM # >= NUM_PATCHES+1 don't have a row to LayerNorm, so they are idle
                 is_idle = true;
             }
             break;
 
-        case ENC_MHSA_DENSE:
+        case ENC_LAYERNORM_2ND_HALF:
+            if (inst.op == PISTOL_START_OP) { // Wait for master's start signal to perform LayerNorm
+                if (compute_in_progress == false) {
+                    float gamma = params[param_addr_map[SINGLE_PARAMS].addr+ENC1_LAYERNORM1_GAMMA_OFF];
+                    float beta = params[param_addr_map[SINGLE_PARAMS].addr+ENC1_LAYERNORM1_BETA_OFF];
+                    gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
+                    is_idle = false;
+                    LAYERNORM_2ND_HALF(0, gamma, beta);
+                }
+            } else if (compute_in_progress == false && gen_reg_16b == 1) { // Done with LayerNorm
+                current_inf_step = ENC_MHSA_DENSE;
+                is_idle = true;
+            }
             break;
-            
+
+        case ENC_MHSA_DENSE:           
         case INVALID_INF_STEP:
         default:
             break;
@@ -178,8 +189,8 @@ float CiM::ADD(uint16_t input_addr, uint16_t params_addr) {
     return intermediate_res[input_addr] + params[params_addr];
 }
 
-void CiM::LAYERNORM(uint16_t input_addr, float gamma, float beta) {
-    /* Layer normalization of input. Input is in intermediate storage location. Note: All LayerNorms are done over a row of EMBEDDING_DEPTH length*/
+void CiM::LAYERNORM_1ST_HALF(uint16_t input_addr) {
+    /* 1st half of Layer normalization of input. Input is in intermediate storage location. Note: All LayerNorms are done over a row of EMBEDDING_DEPTH length. */
     compute_in_progress = true; // Using this compute_in_progress signal as it will be used in the CiM (in ASIC, this compute is multi-cycle, so leaving this here for visibility)
 
     float result = 0.0f;
@@ -203,9 +214,22 @@ void CiM::LAYERNORM(uint16_t input_addr, float gamma, float beta) {
     result2 += LAYERNORM_EPSILON; // Add epsilon
     result2 = sqrt(result2); // <-- Standard deviation
 
+    // Partial normalization (excludes gamma and beta, which are applied in LAYERNORM_FINAL_NORM() since they need to be applied column-wise)
+    for (uint16_t i = 0; i < EMBEDDING_DEPTH; ++i) {
+        intermediate_res[input_addr+i] = intermediate_res[input_addr+i] / result2;
+    }
+
+    compute_in_progress = false;
+}
+
+void CiM::LAYERNORM_2ND_HALF(uint16_t input_addr, float gamma, float beta) {
+    /* 2nd half of Layer normalization of input. This applies gamma and beta on each column. */
+    
+    compute_in_progress = true;
+
     // Normalize
     for (uint16_t i = 0; i < EMBEDDING_DEPTH; ++i) {
-        intermediate_res[input_addr+i] = gamma * (intermediate_res[input_addr+i] / result2) + beta;
+        intermediate_res[input_addr+i] = gamma * intermediate_res[input_addr+i] + beta;
     }
 
     compute_in_progress = false;

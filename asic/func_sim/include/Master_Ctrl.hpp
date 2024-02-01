@@ -29,7 +29,8 @@ class Master_ctrl {
 
         enum HIGH_LEVEL_INFERENCE_STEP {
             PRE_LAYERNORM_TRANSPOSE_STEP,
-            POST_LAYERNORM_TRANSPOSE_STEP,
+            INTRA_LAYERNORM_TRANSPOSE_STEP, // After the first transpose (row to column) for LayerNorm 
+            POST_LAYERNORM_TRANSPOSE_STEP, // After the second transpose (column to row) for LayerNorm and final normalization with gamma/beta
         };
 
         struct parameters {
