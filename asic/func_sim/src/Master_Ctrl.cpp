@@ -74,10 +74,11 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
                 struct instruction inst = {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*target_or_sender*/ 0, /*{addr data to send, length}*/ {0, NUM_PATCHES+1}, /*addr where to store*/ NUM_PATCHES+1};
                 state = BROADCAST_MANAGEMENT;
                 bus->push_inst(inst);
-                gen_reg_16b = ceil((NUM_PATCHES+1)/3.0f); // Holds the number of transactions each CiM will send (3 elements per transaction)
+                gen_reg_16b = NUM_TRANS(NUM_PATCHES+1); // Holds the number of transactions each CiM will send (3 elements per transaction)
                 gen_reg_16b_2 = NUM_CIM; // Number of CiMs that will need to send data
                 gen_cnt_8b.reset(); // Count CiMs
                 gen_cnt_10b.set_val(gen_reg_16b); // Count transactions
+                cout << "Starting PRE_LAYERNORM_TRANSPOSE_STEP" << endl;
             }
             break;
 
@@ -86,24 +87,38 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
                 struct instruction inst = {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*target_or_sender*/ 0, /*{addr data to send, length}*/ {NUM_PATCHES+1, EMBEDDING_DEPTH}, /*addr where to store*/ NUM_PATCHES+1+EMBEDDING_DEPTH};
                 state = BROADCAST_MANAGEMENT;
                 bus->push_inst(inst);
-                gen_reg_16b = ceil(EMBEDDING_DEPTH/3.0f); // Holds the number of transactions each CiM will send (3 elements per transaction)
+                gen_reg_16b = NUM_TRANS(EMBEDDING_DEPTH+1); // Holds the number of transactions each CiM will send (3 elements per transaction)
                 gen_reg_16b_2 = NUM_PATCHES+1; // Number of CiMs that will need to send data
                 gen_cnt_8b.reset(); // Count CiMs. TODO: Could set_val and decrement instead in order to save a reg but logic would become slightly less intuitive
                 gen_cnt_10b.set_val(gen_reg_16b); // Count transactions
+                cout << "Starting INTRA_LAYERNORM_TRANSPOSE_STEP" << endl;
             }
             break;
 
         case POST_LAYERNORM_TRANSPOSE_STEP:
-            if (all_cims_idle == true) { 
-                struct instruction inst = {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*target_or_sender*/ 0, /*{addr data to send, length}*/ {0, NUM_PATCHES+1+EMBEDDING_DEPTH}, /*addr where to store*/ NUM_PATCHES+1};
+            if (all_cims_idle == true) {
+                struct instruction inst = {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*target_or_sender*/ 0, /*{addr data to send, length}*/ {NUM_PATCHES+1+EMBEDDING_DEPTH, NUM_PATCHES+1}, /*addr where to store*/ NUM_PATCHES+1};
                 state = BROADCAST_MANAGEMENT;
                 bus->push_inst(inst);
-                gen_reg_16b = ceil((NUM_PATCHES+1)/3.0f); // Holds the number of transactions each CiM will send (3 elements per transaction)
+                gen_reg_16b = NUM_TRANS(NUM_PATCHES+1); // Holds the number of transactions each CiM will send (3 elements per transaction)
                 gen_reg_16b_2 = NUM_CIM; // Number of CiMs that will need to send data
                 gen_cnt_8b.reset(); // Count CiMs
                 gen_cnt_10b.set_val(gen_reg_16b); // Count transactions
+                cout << "Starting POST_LAYERNORM_TRANSPOSE_STEP" << endl;
             }
             break;
+
+        case ENC_MHSA_DENSE_STEP: {
+            struct instruction inst = {/*op*/ DENSE_BROADCAST_START_OP, /*target_or_sender*/ 0, /*{addr data to send, length}*/ {NUM_PATCHES+1, EMBEDDING_DEPTH}, /*addr where to store*/ NUM_PATCHES+1+EMBEDDING_DEPTH};
+            state = BROADCAST_MANAGEMENT;
+            bus->push_inst(inst);
+            gen_reg_16b = NUM_TRANS(EMBEDDING_DEPTH); // Holds the number of transactions each CiM will send (3 elements per transaction)
+            gen_reg_16b_2 = NUM_PATCHES+1; // Number of CiMs that will need to send data
+            gen_cnt_8b.reset(); // Count CiMs
+            gen_cnt_10b.set_val(gen_reg_16b); // Count transactions
+            cout << "Starting ENC_MHSA_DENSE_STEP" << endl;
+            break;
+        }
 
         default:
             sys_state = INFERENCE_FINISHED; // TODO: For now
@@ -112,28 +127,30 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
         break;
 
     case BROADCAST_MANAGEMENT:
-        if (bus->get_inst().op == TRANSPOSE_BROADCAST_DATA_OP) {
+        if (bus->get_inst().op == TRANSPOSE_BROADCAST_DATA_OP || bus->get_inst().op == DENSE_BROADCAST_DATA_OP){
             gen_cnt_10b.dec();
-            if (gen_cnt_10b.get_cnt() == 0) { // All transactions sent, start a new CiM
-                gen_cnt_8b.inc(); // CiM counter
+        }
+        if (gen_cnt_10b.get_cnt() == 0) { // All transactions sent, start a new CiM
+            gen_cnt_8b.inc(); // CiM counter
 
-                if (gen_cnt_8b.get_cnt() == gen_reg_16b_2) { // All CiMs sent all data, can go back to running inference
-                    state = INFERENCE_RUNNING;
-                    high_level_inf_step = static_cast<HIGH_LEVEL_INFERENCE_STEP> (high_level_inf_step+1);
-                    struct instruction inst = {/*op*/ PISTOL_START_OP, /*target_or_sender*/ 0, /*data*/ {0,0}, /*extra_fields*/ 0}; // Tell CiMs that they can go to the next step
-                    bus->push_inst(inst);
-                } else {
-                    struct instruction inst;
-                    if (high_level_inf_step == PRE_LAYERNORM_TRANSPOSE_STEP) { // TODO: Consider saving the parameters in these instructions in registers when entering the step instead of hardcoding them here
-                        inst = {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*target_or_sender*/ gen_cnt_8b.get_cnt(), /*{addr data to send, length}*/ {0, NUM_PATCHES+1}, /*addr where to store*/ NUM_PATCHES+1};
-                    } else if (high_level_inf_step == INTRA_LAYERNORM_TRANSPOSE_STEP) {
-                        inst = {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*target_or_sender*/ gen_cnt_8b.get_cnt(), /*{addr data to send, length}*/ {NUM_PATCHES+1, EMBEDDING_DEPTH}, /*addr where to store*/ NUM_PATCHES+1+EMBEDDING_DEPTH};
-                    } else if (high_level_inf_step == POST_LAYERNORM_TRANSPOSE_STEP) {
-                        inst = {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*target_or_sender*/ gen_cnt_8b.get_cnt(), /*{addr data to send, length}*/ {0, NUM_PATCHES+1+EMBEDDING_DEPTH}, /*addr where to store*/ NUM_PATCHES+1};
-                    }    
-                    bus->push_inst(inst);
-                    gen_cnt_10b.set_val(gen_reg_16b); // Transaction counter
+            if (gen_cnt_8b.get_cnt() == gen_reg_16b_2) { // All CiMs sent all data and finished using it, can go back to running inference
+                state = INFERENCE_RUNNING;
+                high_level_inf_step = static_cast<HIGH_LEVEL_INFERENCE_STEP> (high_level_inf_step+1);
+                struct instruction inst = {/*op*/ PISTOL_START_OP, /*target_or_sender*/ 0, /*data*/ {0,0}, /*extra_fields*/ 0}; // Tell CiMs that they can go to the next step
+                bus->push_inst(inst);
+            } else if (all_cims_idle == true) {
+                struct instruction inst;
+                if (high_level_inf_step == PRE_LAYERNORM_TRANSPOSE_STEP) { // TODO: Consider saving the parameters in these instructions in registers when entering the step instead of hardcoding them here
+                    inst = {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*target_or_sender*/ gen_cnt_8b.get_cnt(), /*{addr data to send, length}*/ {0, NUM_PATCHES+1}, /*addr where to store*/ NUM_PATCHES+1};
+                } else if (high_level_inf_step == INTRA_LAYERNORM_TRANSPOSE_STEP) {
+                    inst = {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*target_or_sender*/ gen_cnt_8b.get_cnt(), /*{addr data to send, length}*/ {NUM_PATCHES+1, EMBEDDING_DEPTH}, /*addr where to store*/ NUM_PATCHES+1+EMBEDDING_DEPTH};
+                } else if (high_level_inf_step == POST_LAYERNORM_TRANSPOSE_STEP) {
+                    inst = {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*target_or_sender*/ gen_cnt_8b.get_cnt(), /*{addr data to send, length}*/ {NUM_PATCHES+1+EMBEDDING_DEPTH, NUM_PATCHES+1}, /*addr where to store*/ NUM_PATCHES+1};
+                } else if (high_level_inf_step == ENC_MHSA_DENSE_STEP) {
+                    inst = {/*op*/ DENSE_BROADCAST_START_OP, /*target_or_sender*/ gen_cnt_8b.get_cnt(), /*{addr data to send, length}*/ {NUM_PATCHES+1, EMBEDDING_DEPTH}, /*addr where to store*/ NUM_PATCHES+1+EMBEDDING_DEPTH};
                 }
+                bus->push_inst(inst);
+                gen_cnt_10b.set_val(gen_reg_16b); // Transaction counter
             }
         }
         break;

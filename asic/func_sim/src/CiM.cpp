@@ -50,10 +50,18 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             }
             break;
 
+        case DENSE_BROADCAST_START_OP:
         case TRANSPOSE_BROADCAST_START_OP:
             if (inst.target_or_sender == id) { // Master controller tells me to start broadcasting some data
                 int start_addr = static_cast<int> (inst.data[0]);
-                struct instruction new_inst = {/*op*/ TRANSPOSE_BROADCAST_DATA_OP, /*target_or_sender*/id, /*data*/{intermediate_res[start_addr], intermediate_res[start_addr+1]}, /*extra_fields*/intermediate_res[start_addr+2]};
+                struct instruction new_inst;
+
+                if (inst.op == DENSE_BROADCAST_START_OP) {
+                    new_inst = {/*op*/ DENSE_BROADCAST_DATA_OP, /*target_or_sender*/id, /*data*/{intermediate_res[start_addr], intermediate_res[start_addr+1]}, /*extra_fields*/intermediate_res[start_addr+2]};
+                } else if (inst.op == TRANSPOSE_BROADCAST_START_OP) {
+                    new_inst = {/*op*/ TRANSPOSE_BROADCAST_DATA_OP, /*target_or_sender*/id, /*data*/{intermediate_res[start_addr], intermediate_res[start_addr+1]}, /*extra_fields*/intermediate_res[start_addr+2]};
+                }
+
                 gen_reg_16b = start_addr; // Save address of data to send
                 gen_reg_16b_2 = inst.data[1]; // Save length of data to send
                 bus->push_inst(new_inst);
@@ -63,10 +71,11 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             gen_cnt_10b.set_val(3); // 3 elements already sent
             break;
 
+        case DENSE_BROADCAST_DATA_OP:
         case TRANSPOSE_BROADCAST_DATA_OP:
             if (gen_cnt_10b.get_cnt() < gen_reg_16b_2) { // If still more data to send/receive
                 if (inst.target_or_sender == id) { // If last time was me and I still have data to send, continue sending data
-                    struct instruction new_inst = {/*op*/ TRANSPOSE_BROADCAST_DATA_OP, /*target_or_sender*/id, /*data*/{0, 0}, /*extra_fields*/0};
+                    struct instruction new_inst = {/*op*/ inst.op, /*target_or_sender*/id, /*data*/{0, 0}, /*extra_fields*/0};
                     if ((gen_reg_16b_2 - gen_cnt_10b.get_cnt() == 2)) { // Only two bytes left
                         new_inst.data = {intermediate_res[gen_reg_16b+gen_cnt_10b.get_cnt()], intermediate_res[gen_reg_16b+gen_cnt_10b.get_cnt()+1]};
                     } else if ((gen_reg_16b_2 - gen_cnt_10b.get_cnt() == 1)) { // Only one byte left
@@ -77,15 +86,17 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     }
 
                     bus->push_inst(new_inst);
-
-                } else { // I'm not broadcasting, but listening
-                    if ((gen_cnt_10b.get_cnt() - id) == 1) {
-                        intermediate_res[gen_reg_16b+inst.target_or_sender] = inst.extra_fields;
-                    } else if ((gen_cnt_10b.get_cnt() - id) == 2) {
-                        intermediate_res[gen_reg_16b+inst.target_or_sender] = inst.data[1];
-                    } else if ((gen_cnt_10b.get_cnt() - id) == 3) {
-                        intermediate_res[gen_reg_16b+inst.target_or_sender] = inst.data[0];
-                    }
+                } else if (inst.op == TRANSPOSE_BROADCAST_DATA_OP) { // Not broadcasting and, for a transpose, grab only some data
+                    intermediate_res[gen_reg_16b+inst.target_or_sender] = ((gen_cnt_10b.get_cnt() - id) == 1) ? (inst.extra_fields) : (intermediate_res[gen_reg_16b+inst.target_or_sender]);
+                    intermediate_res[gen_reg_16b+inst.target_or_sender] = ((gen_cnt_10b.get_cnt() - id) == 2) ? (inst.data[1]) : (intermediate_res[gen_reg_16b+inst.target_or_sender]);
+                    intermediate_res[gen_reg_16b+inst.target_or_sender] = ((gen_cnt_10b.get_cnt() - id) == 3) ? (inst.data[0]) : (intermediate_res[gen_reg_16b+inst.target_or_sender]);
+                }
+                
+                // Always move data (even my own) to the correct location to perform MACs later
+                if (inst.op == DENSE_BROADCAST_DATA_OP) {
+                    intermediate_res[gen_reg_16b+gen_cnt_10b.get_cnt()-3] = inst.data[0];
+                    intermediate_res[gen_reg_16b+gen_cnt_10b.get_cnt()-2] = inst.data[1];
+                    intermediate_res[gen_reg_16b+gen_cnt_10b.get_cnt()-1] = inst.extra_fields;
                 }
                 gen_cnt_10b.inc(3); // Increment data sent
             }
@@ -130,7 +141,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             break;
 
         case ENC_LAYERNORM_1ST_HALF:
-            if ((inst.op == PISTOL_START_OP) && (id < (NUM_PATCHES+1))) { // Wait for master's start signal to perform LayerNorm (only CiM # < NUM_PATCHES+1 have a row to LayerNorm)
+            if (inst.op == PISTOL_START_OP){// Wait for master's start signal to perform LayerNorm. Note: Only CiM # < NUM_PATCHES+1 have a row to LayerNorm, so the others will just compute garbage
                 if (compute_in_progress == false) {
                     gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
                     is_idle = false;
@@ -138,8 +149,6 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 }
             } else if (compute_in_progress == false && gen_reg_16b == 1) { // Done with LayerNorm
                 current_inf_step = ENC_LAYERNORM_2ND_HALF;
-                is_idle = true;
-            } else if (id >= (NUM_PATCHES+1)){ // CiM # >= NUM_PATCHES+1 don't have a row to LayerNorm, so they are idle
                 is_idle = true;
             }
             break;
@@ -159,7 +168,28 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             }
             break;
 
-        case ENC_MHSA_DENSE:           
+        case ENC_MHSA_DENSE:
+            if (inst.op == DENSE_BROADCAST_DATA_OP) {
+                if (compute_in_progress == false && gen_reg_16b == 3 && inst.target_or_sender == 60) { // Done with all input rows of QKV Dense
+                    current_inf_step = ENC_MHSA_QK_T;
+                    is_idle = true;
+                } else if (gen_cnt_10b.get_cnt() >= gen_reg_16b_2) { // No more data to receive, start MACs
+                    is_idle = false;
+                    if (compute_in_progress == false){
+                        // Note: In ASIC, these would be sequential MACs, but here we are doing them in parallel
+                        float result = MAC(NUM_PATCHES+1+EMBEDDING_DEPTH, 128, EMBEDDING_DEPTH);
+                        intermediate_res[189+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC1_Q_DENSE_BIAS_0FF];
+                        result = MAC(NUM_PATCHES+1+EMBEDDING_DEPTH, 192, EMBEDDING_DEPTH);
+                        intermediate_res[250+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC1_K_DENSE_BIAS_0FF];
+                        result = MAC(NUM_PATCHES+1+EMBEDDING_DEPTH, 256, EMBEDDING_DEPTH);
+                        intermediate_res[311+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC1_V_DENSE_BIAS_0FF];
+                        is_idle = true;
+                    }
+                }
+            }
+            break;
+        
+        case ENC_MHSA_QK_T:        
         case INVALID_INF_STEP:
         default:
             break;
@@ -178,9 +208,11 @@ float CiM::MAC(uint16_t input_start_addr, uint16_t params_start_addr, uint16_t l
     /* Dot-product between two vectors. The first vector is in the intermediate storage location, and the second is in params storage. */
 
     float result = 0.0f;
+    compute_in_progress = true;
     for (uint16_t i = 0; i < len; ++i) {
         result += intermediate_res[input_start_addr+i] * params[params_start_addr+i];
     }
+    compute_in_progress = false;
     return result;
 }
 
@@ -195,7 +227,7 @@ void CiM::LAYERNORM_1ST_HALF(uint16_t input_addr) {
 
     float result = 0.0f;
     float result2 = 0.0f;
-    
+
     // Summation along feature axis
     for (uint16_t i = 0; i < EMBEDDING_DEPTH; ++i) {
         result += intermediate_res[input_addr+i];
@@ -224,7 +256,7 @@ void CiM::LAYERNORM_1ST_HALF(uint16_t input_addr) {
 
 void CiM::LAYERNORM_2ND_HALF(uint16_t input_addr, float gamma, float beta) {
     /* 2nd half of Layer normalization of input. This applies gamma and beta on each column. */
-    
+
     compute_in_progress = true;
 
     // Normalize

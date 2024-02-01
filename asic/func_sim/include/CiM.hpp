@@ -8,7 +8,7 @@
 
 /*----- DEFINE -----*/
 #define CIM_PARAMS_STORAGE_SIZE_KB 3072
-#define CIM_INT_RES_SIZE_KB 1024
+#define CIM_INT_RES_SIZE_KB 1536
 
 /*----- CLASS -----*/
 class CiM {
@@ -26,6 +26,7 @@ class CiM {
             ENC_LAYERNORM_1ST_HALF,
             ENC_LAYERNORM_2ND_HALF,
             ENC_MHSA_DENSE,
+            ENC_MHSA_QK_T,
             INVALID_INF_STEP = -1
         };
 

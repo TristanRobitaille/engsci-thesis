@@ -14,13 +14,16 @@
 /*----- MACROS -----*/
 #define UPPER_8b_OF_16b(x) ((x) >> 8)
 #define LOWER_8b_OF_16b(x) ((x) & 0x00FF)
+#define NUM_TRANS(x) ceil((x)/3.0f) // Returns the number of transactions each CiM will send (3 elements per transaction)
 
 /*----- ENUM -----*/
 enum OP {
     PATCH_LOAD_BROADCAST_OP, // Broadcast current patch to all CiM, which perform vector-matrix multiplication after each patch
+    DENSE_BROADCAST_START_OP, // Tell the target CiM that it needs to broadcast its data starting at a given addr and length. Non-target CiM will then listen to the broadcast and perform MAC once the full vector is received.
+    DENSE_BROADCAST_DATA_OP, // Sent from a CiM. Contains 3 bytes of data
     DATA_STREAM_START_OP, // Indicates that the next x data transmission will contain only parameters data (except op field, so 3B)
     DATA_STREAM_OP, // This instruction contains three bytes of data, and follow DATA_STREAM_START_OP
-    TRANSPOSE_BROADCAST_START_OP, // This instruction tells the target CiM that it needs to broadcast its data starting at a given addr and length. Non-target CiM will then listen to the broadcast and grab the data they need.
+    TRANSPOSE_BROADCAST_START_OP, // Tell the target CiM that it needs to broadcast its data starting at a given addr and length. Non-target CiM will then listen to the broadcast and grab the data they need.
     TRANSPOSE_BROADCAST_DATA_OP, // Sent from a CiM. Contains 3 bytes of data
     PISTOL_START_OP, // Used to instruct CiMs to move to their next step in the inference pipeline
     NOP // Represents the no tranmission
@@ -62,7 +65,7 @@ class Counter {
             }
             return val;
         }
-        
+
         int dec(int decrement=1) {
             val = val - decrement;
             if (val < 0) {
@@ -106,6 +109,7 @@ class Bus {
             return inst;
         };
         int run() {
+            if (q.size() > 1) throw std::runtime_error("Bus queue overflow (more than 1 instruction, which would be a short in ASIC)");
             if (q.size() == 0) { inst = reset(); } // Send NOP on bus
             else {
                 inst = q.front();
