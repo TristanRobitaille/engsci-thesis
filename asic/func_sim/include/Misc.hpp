@@ -8,7 +8,6 @@
 #define PATCH_LENGTH_NUM_SAMPLES 64
 #define NUM_PATCHES 60
 #define EMBEDDING_DEPTH 64
-#define NUM_ENCODERS 2
 #define LAYERNORM_EPSILON 0.000001f // 1e-6
 
 /*----- MACROS -----*/

@@ -156,8 +156,8 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case ENC_LAYERNORM_2ND_HALF:
             if (inst.op == PISTOL_START_OP) { // Wait for master's start signal to perform LayerNorm
                 if (compute_in_progress == false) {
-                    float gamma = params[param_addr_map[SINGLE_PARAMS].addr+ENC1_LAYERNORM1_GAMMA_OFF];
-                    float beta = params[param_addr_map[SINGLE_PARAMS].addr+ENC1_LAYERNORM1_BETA_OFF];
+                    float gamma = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM1_GAMMA_OFF];
+                    float beta = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM1_BETA_OFF];
                     gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
                     is_idle = false;
                     LAYERNORM_2ND_HALF(0, gamma, beta);
@@ -178,11 +178,11 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     if (compute_in_progress == false){
                         // Note: In ASIC, these would be sequential MACs, but here we are doing them in parallel
                         float result = MAC(NUM_PATCHES+1+EMBEDDING_DEPTH, 128, EMBEDDING_DEPTH);
-                        intermediate_res[189+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC1_Q_DENSE_BIAS_0FF];
+                        intermediate_res[189+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_Q_DENSE_BIAS_0FF];
                         result = MAC(NUM_PATCHES+1+EMBEDDING_DEPTH, 192, EMBEDDING_DEPTH);
-                        intermediate_res[250+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC1_K_DENSE_BIAS_0FF];
+                        intermediate_res[250+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_K_DENSE_BIAS_0FF];
                         result = MAC(NUM_PATCHES+1+EMBEDDING_DEPTH, 256, EMBEDDING_DEPTH);
-                        intermediate_res[311+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC1_V_DENSE_BIAS_0FF];
+                        intermediate_res[311+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_V_DENSE_BIAS_0FF];
                         is_idle = true;
                     }
                 }

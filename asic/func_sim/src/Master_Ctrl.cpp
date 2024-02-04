@@ -184,9 +184,9 @@ struct instruction Master_ctrl::param_to_send(){
     switch (params_curr_layer) {
     case PATCH_PROJ_KERNEL_PARAMS:
     case POS_EMB_PARAMS:
-    case ENC1_Q_DENSE_PARAMS:
-    case ENC1_K_DENSE_PARAMS:
-    case ENC1_V_DENSE_PARAMS:
+    case ENC_Q_DENSE_PARAMS:
+    case ENC_K_DENSE_PARAMS:
+    case ENC_V_DENSE_PARAMS:
         if ((params_cim_cnt == NUM_CIM-1) && (params_data_cnt >= param_addr_map[params_curr_layer].len)) { // Start new layer
             params_cim_cnt = -1;
             params_data_cnt = -1;
@@ -221,13 +221,13 @@ struct instruction Master_ctrl::param_to_send(){
         } else if (params_cim_cnt < NUM_CIM){
             // TODO: Incomplete
             if (gen_cnt_8b.get_cnt() == 1) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ params_cim_cnt, /*data*/ {params.patch_proj_bias[params_cim_cnt], params.class_emb[params_cim_cnt]}, /*extra_fields*/ params.enc_layernorm_gamma[0][0][params_cim_cnt]};
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ params_cim_cnt, /*data*/ {params.patch_proj_bias[params_cim_cnt], params.class_emb[params_cim_cnt]}, /*extra_fields*/ params.enc_layernorm_gamma[0][params_cim_cnt]};
                 gen_cnt_8b.inc();
             } else if (gen_cnt_8b.get_cnt() == 2) { // TODO: Incomplete
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ params_cim_cnt, /*data*/ {params.enc_layernorm_beta[0][0][params_cim_cnt], params.enc_mhsa_Q_bias[0][params_cim_cnt]}, /*extra_fields*/ params.enc_mhsa_K_bias[0][params_cim_cnt]};
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ params_cim_cnt, /*data*/ {params.enc_layernorm_beta[0][params_cim_cnt], params.enc_mhsa_Q_bias[params_cim_cnt]}, /*extra_fields*/ params.enc_mhsa_K_bias[params_cim_cnt]};
                 gen_cnt_8b.inc();
             } else if (gen_cnt_8b.get_cnt() == 3) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ params_cim_cnt, /*data*/ {params.enc_mhsa_V_bias[0][params_cim_cnt], 0}, /*extra_fields*/ 0};
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ params_cim_cnt, /*data*/ {params.enc_mhsa_V_bias[params_cim_cnt], 0}, /*extra_fields*/ 0};
                 gen_cnt_8b.reset();
                 params_cim_cnt++;
             }
@@ -254,37 +254,35 @@ int Master_ctrl::load_params_from_h5(const std::string params_filepath) {
     HighFive::File file(params_filepath, HighFive::File::ReadOnly);
 
     // Patch projection
-    params.patch_proj_kernel = file.getGroup("patch_projection_dense").getGroup("vision_transformer_1").getGroup("patch_projection_dense").getDataSet("kernel:0").read<array<array<float, EMBEDDING_DEPTH>, PATCH_LENGTH_NUM_SAMPLES>>();
-    params.patch_proj_bias = file.getGroup("patch_projection_dense").getGroup("vision_transformer_1").getGroup("patch_projection_dense").getDataSet("bias:0").read<array<float, EMBEDDING_DEPTH>>();
+    params.patch_proj_kernel = file.getGroup("patch_projection_dense").getGroup("vision_transformer").getGroup("patch_projection_dense").getDataSet("kernel:0").read<PatchProjKernel_t>();
+    params.patch_proj_bias = file.getGroup("patch_projection_dense").getGroup("vision_transformer").getGroup("patch_projection_dense").getDataSet("bias:0").read<EmbDepthVect_t>();
 
-    params.class_emb = file.getGroup("top_level_model_weights").getDataSet("class_emb:0").read<array<float, EMBEDDING_DEPTH>>();
+    params.class_emb = file.getGroup("top_level_model_weights").getDataSet("class_emb:0").read<EmbDepthVect_t>();
     params.pos_emb = file.getGroup("top_level_model_weights").getDataSet("pos_emb:0").read<array<array<array<float, EMBEDDING_DEPTH>, NUM_PATCHES+1>, 1>>()[0];
 
     // Encoders
-    for (int i=0; i<NUM_ENCODERS; i++) {
-        HighFive::Group enc = file.getGroup(fmt::format("encoder_{}", 2+i));
-        // LayerNorm
-        params.enc_layernorm_beta[i][0] = enc.getGroup("vision_transformer_1").getGroup(fmt::format("encoder_{}", 2+i)).getGroup("layerNorm1_encoder").getDataSet("beta:0").read<array<float, EMBEDDING_DEPTH>>();
-        params.enc_layernorm_gamma[i][0] = enc.getGroup("vision_transformer_1").getGroup(fmt::format("encoder_{}", 2+i)).getGroup("layerNorm1_encoder").getDataSet("gamma:0").read<array<float, EMBEDDING_DEPTH>>();
-        params.enc_layernorm_beta[i][1] = enc.getGroup("vision_transformer_1").getGroup(fmt::format("encoder_{}", 2+i)).getGroup("layerNorm2_encoder").getDataSet("beta:0").read<array<float, EMBEDDING_DEPTH>>();
-        params.enc_layernorm_gamma[i][1] = enc.getGroup("vision_transformer_1").getGroup(fmt::format("encoder_{}", 2+i)).getGroup("layerNorm2_encoder").getDataSet("gamma:0").read<array<float, EMBEDDING_DEPTH>>();
+    HighFive::Group enc = file.getGroup("encoder");
+    // LayerNorm
+    params.enc_layernorm_beta[0] = enc.getGroup("vision_transformer").getGroup("encoder").getGroup("layerNorm1_encoder").getDataSet("beta:0").read<EmbDepthVect_t>();
+    params.enc_layernorm_gamma[0] = enc.getGroup("vision_transformer").getGroup("encoder").getGroup("layerNorm1_encoder").getDataSet("gamma:0").read<EmbDepthVect_t>();
+    params.enc_layernorm_beta[1] = enc.getGroup("vision_transformer").getGroup("encoder").getGroup("layerNorm2_encoder").getDataSet("beta:0").read<EmbDepthVect_t>();
+    params.enc_layernorm_gamma[1] = enc.getGroup("vision_transformer").getGroup("encoder").getGroup("layerNorm2_encoder").getDataSet("gamma:0").read<EmbDepthVect_t>();
 
-        // MHSA
-        params.enc_mhsa_Q_kernel[i] = enc.getGroup("mhsa_query_dense").getDataSet("kernel:0").read<array<array<float, EMBEDDING_DEPTH>, EMBEDDING_DEPTH>>();
-        params.enc_mhsa_K_kernel[i] = enc.getGroup("mhsa_key_dense").getDataSet("kernel:0").read<array<array<float, EMBEDDING_DEPTH>, EMBEDDING_DEPTH>>();
-        params.enc_mhsa_V_kernel[i] = enc.getGroup("mhsa_value_dense").getDataSet("kernel:0").read<array<array<float, EMBEDDING_DEPTH>, EMBEDDING_DEPTH>>();
-        params.enc_mhsa_Q_bias[i] = enc.getGroup("mhsa_query_dense").getDataSet("bias:0").read<array<float, EMBEDDING_DEPTH>>();
-        params.enc_mhsa_K_bias[i] = enc.getGroup("mhsa_key_dense").getDataSet("bias:0").read<array<float, EMBEDDING_DEPTH>>();
-        params.enc_mhsa_V_bias[i] = enc.getGroup("mhsa_value_dense").getDataSet("bias:0").read<array<float, EMBEDDING_DEPTH>>();
-        params.enc_mhsa_combine_kernel[i] = enc.getGroup("mhsa_combine_head_dense").getDataSet("kernel:0").read<array<array<float, EMBEDDING_DEPTH>, EMBEDDING_DEPTH>>();
-        params.enc_mhsa_combine_bias[i] = enc.getGroup("mhsa_combine_head_dense").getDataSet("bias:0").read<array<float, EMBEDDING_DEPTH>>();
+    // MHSA
+    params.enc_mhsa_Q_kernel = enc.getGroup("mhsa_query_dense").getDataSet("kernel:0").read<EncEmbDepthMat_t>();
+    params.enc_mhsa_K_kernel = enc.getGroup("mhsa_key_dense").getDataSet("kernel:0").read<EncEmbDepthMat_t>();
+    params.enc_mhsa_V_kernel = enc.getGroup("mhsa_value_dense").getDataSet("kernel:0").read<EncEmbDepthMat_t>();
+    params.enc_mhsa_Q_bias = enc.getGroup("mhsa_query_dense").getDataSet("bias:0").read<EmbDepthVect_t>();
+    params.enc_mhsa_K_bias = enc.getGroup("mhsa_key_dense").getDataSet("bias:0").read<EmbDepthVect_t>();
+    params.enc_mhsa_V_bias = enc.getGroup("mhsa_value_dense").getDataSet("bias:0").read<EmbDepthVect_t>();
+    params.enc_mhsa_combine_kernel = enc.getGroup("mhsa_combine_head_dense").getDataSet("kernel:0").read<EncEmbDepthMat_t>();
+    params.enc_mhsa_combine_bias = enc.getGroup("mhsa_combine_head_dense").getDataSet("bias:0").read<EmbDepthVect_t>();
 
-        // MLP
-        params.enc_mlp_dense_kernel[i][0] = enc.getGroup("mlp_dense1_encoder").getDataSet("kernel:0").read<array<array<float, EMBEDDING_DEPTH>, EMBEDDING_DEPTH>>();
-        params.enc_mlp_dense_bias[i][0] = enc.getGroup("mlp_dense1_encoder").getDataSet("bias:0").read<array<float, EMBEDDING_DEPTH>>();
-        params.enc_mlp_dense_kernel[i][1] = enc.getGroup("mlp_dense2_encoder").getDataSet("kernel:0").read<array<array<float, EMBEDDING_DEPTH>, EMBEDDING_DEPTH>>();
-        params.enc_mlp_dense_bias[i][1] = enc.getGroup("mlp_dense2_encoder").getDataSet("bias:0").read<array<float, EMBEDDING_DEPTH>>();
-    }
+    // MLP
+    params.enc_mlp_dense_kernel[0] = enc.getGroup("mlp_dense1_encoder").getDataSet("kernel:0").read<EncEmbDepthMat_t>();
+    params.enc_mlp_dense_bias[0] = enc.getGroup("mlp_dense1_encoder").getDataSet("bias:0").read<EmbDepthVect_t>();
+    params.enc_mlp_dense_kernel[1] = enc.getGroup("mlp_dense2_encoder").getDataSet("kernel:0").read<EncEmbDepthMat_t>();
+    params.enc_mlp_dense_bias[1] = enc.getGroup("mlp_dense2_encoder").getDataSet("bias:0").read<EmbDepthVect_t>();
 
     return 0;
 }
@@ -303,17 +301,17 @@ void Master_ctrl::update_inst_with_params(PARAM_NAME param_name, struct instruct
         inst->data = {params.pos_emb[params_data_cnt][params_cim_cnt], (num_left <= 2) ? (0) : (params.pos_emb[params_data_cnt+1][params_cim_cnt])};
         inst->extra_fields = (num_left <= 1) ? (0) : params.pos_emb[params_data_cnt+2][params_cim_cnt];
         break;
-    case ENC1_Q_DENSE_PARAMS:
-        inst->data = {params.enc_mhsa_Q_kernel[0][params_data_cnt][params_cim_cnt], (num_left <= 2) ? (0) : (params.enc_mhsa_Q_kernel[0][params_data_cnt+1][params_cim_cnt])};
-        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_Q_kernel[0][params_data_cnt+2][params_cim_cnt];
+    case ENC_Q_DENSE_PARAMS:
+        inst->data = {params.enc_mhsa_Q_kernel[params_data_cnt][params_cim_cnt], (num_left <= 2) ? (0) : (params.enc_mhsa_Q_kernel[params_data_cnt+1][params_cim_cnt])};
+        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_Q_kernel[params_data_cnt+2][params_cim_cnt];
         break;
-    case ENC1_K_DENSE_PARAMS:
-        inst->data = {params.enc_mhsa_K_kernel[0][params_data_cnt][params_cim_cnt], (num_left <= 2) ? (0) : (params.enc_mhsa_K_kernel[0][params_data_cnt+1][params_cim_cnt])};
-        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_K_kernel[0][params_data_cnt+2][params_cim_cnt];
+    case ENC_K_DENSE_PARAMS:
+        inst->data = {params.enc_mhsa_K_kernel[params_data_cnt][params_cim_cnt], (num_left <= 2) ? (0) : (params.enc_mhsa_K_kernel[params_data_cnt+1][params_cim_cnt])};
+        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_K_kernel[params_data_cnt+2][params_cim_cnt];
         break;
-    case ENC1_V_DENSE_PARAMS:
-        inst->data = {params.enc_mhsa_V_kernel[0][params_data_cnt][params_cim_cnt], (num_left <= 2) ? (0) : (params.enc_mhsa_V_kernel[0][params_data_cnt+1][params_cim_cnt])};
-        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_V_kernel[0][params_data_cnt+2][params_cim_cnt];
+    case ENC_V_DENSE_PARAMS:
+        inst->data = {params.enc_mhsa_V_kernel[params_data_cnt][params_cim_cnt], (num_left <= 2) ? (0) : (params.enc_mhsa_V_kernel[params_data_cnt+1][params_cim_cnt])};
+        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_V_kernel[params_data_cnt+2][params_cim_cnt];
         break;
     default:
         throw invalid_argument("Invalid parameter name");
