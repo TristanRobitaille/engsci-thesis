@@ -31,8 +31,18 @@ class Master_ctrl {
             PRE_LAYERNORM_TRANSPOSE_STEP,
             INTRA_LAYERNORM_TRANSPOSE_STEP, // After the first transpose (row to column) for LayerNorm
             POST_LAYERNORM_TRANSPOSE_STEP, // After the second transpose (column to row) for LayerNorm and final normalization with gamma/beta
-            ENC_MHSA_DENSE_STEP // Perform all three dense operations for the Multi-Head Self-Attention
+            ENC_MHSA_DENSE_STEP, // Perform all three dense operations (Q, K, V) for the Multi-Head Self-Attention
+            ENC_MHSA_Q_TRANSPOSE_STEP, // First transpose (row to column) for Q
+            ENC_MHSA_K_TRANSPOSE_STEP // First transpose (row to column) for K
        };
+
+        struct broadcast_op_info {
+            OP op;
+            float tx_addr;
+            float len;
+            float rx_addr;
+            uint16_t num_cims;
+        };
 
         struct parameters {
             // Patch projection Dense
@@ -55,6 +65,15 @@ class Master_ctrl {
             EncEmbDepthMat_t enc_mhsa_combine_kernel;;
             EncEmbDepthMat2_t enc_mlp_dense_kernel;
             EncEmbDepthVect2_t enc_mlp_dense_bias;
+        };
+
+        const std::map<HIGH_LEVEL_INFERENCE_STEP, broadcast_op_info> broadcast_ops = {
+            {PRE_LAYERNORM_TRANSPOSE_STEP, {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*tx addr*/ 0, /*length*/ NUM_PATCHES+1, /*rx addr*/ NUM_PATCHES+1, /*num cims*/ NUM_CIM}},
+            {INTRA_LAYERNORM_TRANSPOSE_STEP, {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1, /*length*/ EMBEDDING_DEPTH, /*rx addr*/ NUM_PATCHES+1+EMBEDDING_DEPTH, /*num cims*/ NUM_PATCHES+1}},
+            {POST_LAYERNORM_TRANSPOSE_STEP, {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1+EMBEDDING_DEPTH, /*length*/ NUM_PATCHES+1, /*rx addr*/ NUM_PATCHES+1, /*num cims*/ NUM_CIM}},
+            {ENC_MHSA_DENSE_STEP, {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1, /*length*/ EMBEDDING_DEPTH, /*rx addr*/ NUM_PATCHES+1+EMBEDDING_DEPTH, /*num cims*/ NUM_PATCHES+1}},
+            {ENC_MHSA_Q_TRANSPOSE_STEP, {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*tx addr*/ 2*EMBEDDING_DEPTH+NUM_PATCHES+1, /*length*/ NUM_PATCHES+1, /*rx addr*/ NUM_PATCHES+1, /*num cims*/ NUM_CIM}},
+            {ENC_MHSA_K_TRANSPOSE_STEP, {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*tx addr*/ 2*(EMBEDDING_DEPTH+NUM_PATCHES+1), /*length*/ NUM_PATCHES+1, /*rx addr*/ NUM_PATCHES+1+EMBEDDING_DEPTH, /*num cims*/ NUM_CIM}},
         };
 
         float storage[CENTRALIZED_STORAGE_WEIGHTS_KB / sizeof(float)];
@@ -84,6 +103,7 @@ class Master_ctrl {
         SYSTEM_STATE run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]);
         int start_signal_load();
         struct instruction param_to_send();
+        int prepare_for_broadcast(broadcast_op_info op_info, Bus* bus);
 };
 
 #endif //MASTER_CTRL_H

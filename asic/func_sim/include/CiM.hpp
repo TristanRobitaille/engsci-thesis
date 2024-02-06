@@ -32,6 +32,7 @@ class CiM {
 
         bool is_idle = true; // Used by Ctrl to know whether CiMs have completed a given inference step. To avoid routing NUM_CIM bits to ctrl, these signals will be daisy-chained ANDed from one CiM to the next... or could just always use CiM #63 as a proxy for all CiM...TBD
         bool compute_in_progress = false; // Used by compute element to notify CiM controller when is in progress
+        bool compute_done = false; // Used by compute element to notify CiM controller when is done
         int16_t id; // ID of the CiM
         int16_t gen_reg_16b; // General-purpose register
         int16_t gen_reg_16b_2; // General-purpose register

@@ -30,7 +30,10 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 intermediate_res[gen_cnt_10b_2.get_cnt() + PATCH_LENGTH_NUM_SAMPLES] = result + intermediate_res[param_addr_map[SINGLE_PARAMS].addr+PATCH_PROJ_BIAS_OFF];
                 gen_cnt_10b_2.inc(); // Increment number of patches received
                 gen_cnt_10b.reset();
-                if (gen_cnt_10b_2.get_cnt() == NUM_PATCHES) { state = INFERENCE_RUNNING_CIM; } // Received all patches, automatically start inference
+                if (gen_cnt_10b_2.get_cnt() == NUM_PATCHES) { // Received all patches, automatically start inference
+                    state = INFERENCE_RUNNING_CIM;
+                    compute_done = false;
+                }
             }
             break;
 
@@ -65,6 +68,11 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 gen_reg_16b = start_addr; // Save address of data to send
                 gen_reg_16b_2 = inst.data[1]; // Save length of data to send
                 bus->push_inst(new_inst);
+
+                // Since I'm here, move my own data to the correct location in intermediate_res (do I need to do that in the previous op (QVK dense) as well?)
+                if (current_inf_step == ENC_MHSA_QK_T) {
+                    intermediate_res[static_cast<int>(inst.extra_fields)+id] = intermediate_res[gen_reg_16b+id];
+                }
             } else {
                 gen_reg_16b = static_cast<int> (inst.extra_fields); // Save address where to store data
             }
@@ -92,7 +100,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     intermediate_res[gen_reg_16b+inst.target_or_sender] = ((gen_cnt_10b.get_cnt() - id) == 3) ? (inst.data[0]) : (intermediate_res[gen_reg_16b+inst.target_or_sender]);
                 }
                 
-                // Always move data (even my own) to the correct location to perform MACs later
+                // Always move data (even my own) to the correct location to perform operations later (TODO: move up with other lines above?)
                 if (inst.op == DENSE_BROADCAST_DATA_OP) {
                     intermediate_res[gen_reg_16b+gen_cnt_10b.get_cnt()-3] = inst.data[0];
                     intermediate_res[gen_reg_16b+gen_cnt_10b.get_cnt()-2] = inst.data[1];
@@ -162,34 +170,37 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     is_idle = false;
                     LAYERNORM_2ND_HALF(0, gamma, beta);
                 }
-            } else if (compute_in_progress == false && gen_reg_16b == 1) { // Done with LayerNorm
+            } else if (compute_in_progress == false && gen_reg_16b == 1) { // Done with LayerNorm TODO: Use compute_done here to control?
                 current_inf_step = ENC_MHSA_DENSE;
                 is_idle = true;
             }
             break;
 
         case ENC_MHSA_DENSE:
-            if (inst.op == DENSE_BROADCAST_DATA_OP) {
-                if (compute_in_progress == false && gen_reg_16b == 3 && inst.target_or_sender == 60) { // Done with all input rows of QKV Dense
-                    current_inf_step = ENC_MHSA_QK_T;
-                    is_idle = true;
-                } else if (gen_cnt_10b.get_cnt() >= gen_reg_16b_2) { // No more data to receive, start MACs
-                    is_idle = false;
-                    if (compute_in_progress == false){
-                        // Note: In ASIC, these would be sequential MACs, but here we are doing them in parallel
-                        float result = MAC(NUM_PATCHES+1+EMBEDDING_DEPTH, 128, EMBEDDING_DEPTH);
-                        intermediate_res[189+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_Q_DENSE_BIAS_0FF];
-                        result = MAC(NUM_PATCHES+1+EMBEDDING_DEPTH, 192, EMBEDDING_DEPTH);
-                        intermediate_res[250+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_K_DENSE_BIAS_0FF];
-                        result = MAC(NUM_PATCHES+1+EMBEDDING_DEPTH, 256, EMBEDDING_DEPTH);
-                        intermediate_res[311+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_V_DENSE_BIAS_0FF];
-                        is_idle = true;
-                    }
+            if ((inst.op == DENSE_BROADCAST_DATA_OP) && (gen_cnt_10b.get_cnt() >= gen_reg_16b_2)) { // No more data to receive, start MACs
+                is_idle = false;
+                if (compute_in_progress == false){
+                    // Note: In ASIC, these would be sequential MACs, but here we are doing them in parallel
+                    float result = MAC(NUM_PATCHES+1+EMBEDDING_DEPTH, 128, EMBEDDING_DEPTH);
+                    intermediate_res[189+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_Q_DENSE_BIAS_0FF];
+                    result = MAC(NUM_PATCHES+1+EMBEDDING_DEPTH, 192, EMBEDDING_DEPTH);
+                    intermediate_res[250+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_K_DENSE_BIAS_0FF];
+                    result = MAC(NUM_PATCHES+1+EMBEDDING_DEPTH, 256, EMBEDDING_DEPTH);
+                    intermediate_res[311+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_V_DENSE_BIAS_0FF];
                 }
             }
+
+            if (compute_done) { // Done with all input rows of QKV Dense
+                is_idle = true;
+            }
+
+            if (compute_done && inst.op == PISTOL_START_OP) {
+                current_inf_step = ENC_MHSA_QK_T;
+                compute_done = false;
+            }
             break;
-        
-        case ENC_MHSA_QK_T:        
+
+        case ENC_MHSA_QK_T:
         case INVALID_INF_STEP:
         default:
             break;
@@ -213,6 +224,7 @@ float CiM::MAC(uint16_t input_start_addr, uint16_t params_start_addr, uint16_t l
         result += intermediate_res[input_start_addr+i] * params[params_start_addr+i];
     }
     compute_in_progress = false;
+    compute_done = true;
     return result;
 }
 
