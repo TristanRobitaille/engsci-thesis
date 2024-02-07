@@ -32,8 +32,9 @@ class Master_ctrl {
             INTRA_LAYERNORM_TRANSPOSE_STEP, // After the first transpose (row to column) for LayerNorm
             POST_LAYERNORM_TRANSPOSE_STEP, // After the second transpose (column to row) for LayerNorm and final normalization with gamma/beta
             ENC_MHSA_DENSE_STEP, // Perform all three dense operations (Q, K, V) for the Multi-Head Self-Attention
-            ENC_MHSA_Q_TRANSPOSE_STEP, // First transpose (row to column) for Q
-            ENC_MHSA_K_TRANSPOSE_STEP // First transpose (row to column) for K
+            ENC_MHSA_Q_TRANSPOSE_STEP, // Transpose (row to column) for encoder MHSA's Q
+            ENC_MHSA_K_TRANSPOSE_STEP, // Transpose (row to column) for encoder MHSA's K
+            ENC_MHSA_QK_T_STEP // QK_T multiplication for encoder MHSA
        };
 
         struct broadcast_op_info {
@@ -65,6 +66,7 @@ class Master_ctrl {
             EncEmbDepthMat_t enc_mhsa_combine_kernel;;
             EncEmbDepthMat2_t enc_mlp_dense_kernel;
             EncEmbDepthVect2_t enc_mlp_dense_bias;
+            float enc_mhsa_sqrt_num_heads;
         };
 
         const std::map<HIGH_LEVEL_INFERENCE_STEP, broadcast_op_info> broadcast_ops = {
@@ -72,8 +74,9 @@ class Master_ctrl {
             {INTRA_LAYERNORM_TRANSPOSE_STEP, {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1, /*length*/ EMBEDDING_DEPTH, /*rx addr*/ NUM_PATCHES+1+EMBEDDING_DEPTH, /*num cims*/ NUM_PATCHES+1}},
             {POST_LAYERNORM_TRANSPOSE_STEP, {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1+EMBEDDING_DEPTH, /*length*/ NUM_PATCHES+1, /*rx addr*/ NUM_PATCHES+1, /*num cims*/ NUM_CIM}},
             {ENC_MHSA_DENSE_STEP, {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1, /*length*/ EMBEDDING_DEPTH, /*rx addr*/ NUM_PATCHES+1+EMBEDDING_DEPTH, /*num cims*/ NUM_PATCHES+1}},
-            {ENC_MHSA_Q_TRANSPOSE_STEP, {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*tx addr*/ 2*EMBEDDING_DEPTH+NUM_PATCHES+1, /*length*/ NUM_PATCHES+1, /*rx addr*/ NUM_PATCHES+1, /*num cims*/ NUM_CIM}},
-            {ENC_MHSA_K_TRANSPOSE_STEP, {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*tx addr*/ 2*(EMBEDDING_DEPTH+NUM_PATCHES+1), /*length*/ NUM_PATCHES+1, /*rx addr*/ NUM_PATCHES+1+EMBEDDING_DEPTH, /*num cims*/ NUM_CIM}},
+            {ENC_MHSA_Q_TRANSPOSE_STEP, {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*tx addr*/ 2*EMBEDDING_DEPTH+NUM_PATCHES+1, /*length*/ NUM_PATCHES+1, /*rx addr*/ NUM_PATCHES+1+EMBEDDING_DEPTH, /*num cims*/ NUM_CIM}},
+            {ENC_MHSA_K_TRANSPOSE_STEP, {/*op*/ TRANSPOSE_BROADCAST_START_OP, /*tx addr*/ 2*(EMBEDDING_DEPTH+NUM_PATCHES+1), /*length*/ NUM_PATCHES+1, /*rx addr*/ 2*EMBEDDING_DEPTH+NUM_PATCHES+1, /*num cims*/ NUM_CIM}},
+            {ENC_MHSA_QK_T_STEP, {/*op*/ DENSE_BROADCAST_START_OP, /*base tx addr*/ NUM_PATCHES+1+EMBEDDING_DEPTH, /*length*/ NUM_HEADS, /*rx addr*/ 2*(EMBEDDING_DEPTH+NUM_PATCHES+1), /*num cims*/ NUM_PATCHES+1}} // Will need to call this multiple times to go through the Z-stack of the Q and K matrices
         };
 
         float storage[CENTRALIZED_STORAGE_WEIGHTS_KB / sizeof(float)];
@@ -81,6 +84,7 @@ class Master_ctrl {
         Counter gen_cnt_10b;
         uint16_t gen_reg_16b = 0;
         uint16_t gen_reg_16b_2 = 0;
+        uint16_t gen_reg_16b_3 = 0;
         STATE state;
         HIGH_LEVEL_INFERENCE_STEP high_level_inf_step = PRE_LAYERNORM_TRANSPOSE_STEP;
 

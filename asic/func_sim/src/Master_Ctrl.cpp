@@ -86,6 +86,12 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
             break;
         }
 
+        case ENC_MHSA_QK_T_STEP:
+            // TODO: Loop here or somewhere else for Z-stack of Q and K matrices
+            prepare_for_broadcast(broadcast_ops.at(high_level_inf_step), bus);
+            cout << "Performing encoder's MHSA QK_T. Starting matrix #" << gen_reg_16b_3 << " in the Z-stack (out of " << NUM_HEADS << ")" << endl;
+            break;
+
         default:
             sys_state = INFERENCE_FINISHED; // TODO: For now
             break;
@@ -101,7 +107,7 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
 
             if (gen_cnt_8b.get_cnt() == gen_reg_16b_2) { // All CiMs sent all data and finished using it, can go back to running inference
                 state = INFERENCE_RUNNING;
-                high_level_inf_step = static_cast<HIGH_LEVEL_INFERENCE_STEP> (high_level_inf_step+1);
+                if (!((high_level_inf_step == ENC_MHSA_QK_T_STEP) && (gen_reg_16b_3 < NUM_HEADS))) { high_level_inf_step = static_cast<HIGH_LEVEL_INFERENCE_STEP> (high_level_inf_step+1); } // Remain in the same step if we are in the Z-stack of the Q and K matrices, else go to the next step
                 struct instruction inst = {/*op*/ PISTOL_START_OP, /*target_or_sender*/ 0, /*data*/ {0,0}, /*extra_fields*/ 0}; // Tell CiMs that they can go to the next step
                 bus->push_inst(inst);
             } else if (all_cims_idle == true) { // Trigger new CiM to send data
@@ -181,11 +187,11 @@ struct instruction Master_ctrl::param_to_send(){
             if (gen_cnt_8b.get_cnt() == 1) {
                 inst = {DATA_STREAM_OP, /*target_or_sender*/ params_cim_cnt, /*data*/ {params.patch_proj_bias[params_cim_cnt], params.class_emb[params_cim_cnt]}, /*extra_fields*/ params.enc_layernorm_gamma[0][params_cim_cnt]};
                 gen_cnt_8b.inc();
-            } else if (gen_cnt_8b.get_cnt() == 2) { // TODO: Incomplete
+            } else if (gen_cnt_8b.get_cnt() == 2) {
                 inst = {DATA_STREAM_OP, /*target_or_sender*/ params_cim_cnt, /*data*/ {params.enc_layernorm_beta[0][params_cim_cnt], params.enc_mhsa_Q_bias[params_cim_cnt]}, /*extra_fields*/ params.enc_mhsa_K_bias[params_cim_cnt]};
                 gen_cnt_8b.inc();
             } else if (gen_cnt_8b.get_cnt() == 3) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ params_cim_cnt, /*data*/ {params.enc_mhsa_V_bias[params_cim_cnt], 0}, /*extra_fields*/ 0};
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ params_cim_cnt, /*data*/ {params.enc_mhsa_V_bias[params_cim_cnt], params.enc_mhsa_sqrt_num_heads}, /*extra_fields*/ 0};
                 gen_cnt_8b.reset();
                 params_cim_cnt++;
             }
@@ -235,6 +241,7 @@ int Master_ctrl::load_params_from_h5(const std::string params_filepath) {
     params.enc_mhsa_V_bias = enc.getGroup("mhsa_value_dense").getDataSet("bias:0").read<EmbDepthVect_t>();
     params.enc_mhsa_combine_kernel = enc.getGroup("mhsa_combine_head_dense").getDataSet("kernel:0").read<EncEmbDepthMat_t>();
     params.enc_mhsa_combine_bias = enc.getGroup("mhsa_combine_head_dense").getDataSet("bias:0").read<EmbDepthVect_t>();
+    params.enc_mhsa_sqrt_num_heads = static_cast<float>(sqrt(NUM_HEADS));
 
     // MLP
     params.enc_mlp_dense_kernel[0] = enc.getGroup("mlp_dense1_encoder").getDataSet("kernel:0").read<EncEmbDepthMat_t>();
@@ -285,5 +292,11 @@ int Master_ctrl::prepare_for_broadcast(broadcast_op_info op_info, Bus* bus) {
     gen_reg_16b_2 = op_info.num_cims; // Number of CiMs that will need to send data
     gen_cnt_8b.reset(); // Count CiMs
     gen_cnt_10b.set_val(gen_reg_16b); // Count transactions
+
+    if (high_level_inf_step == ENC_MHSA_QK_T_STEP) { // Need to modify instruction based on where we are in the Z-stack of the Q and K matrices
+        inst.data[0] = op_info.tx_addr + NUM_HEADS*gen_reg_16b_3; // tx addr
+        inst.extra_fields = op_info.rx_addr + NUM_HEADS*gen_reg_16b_3; // rx addr
+        gen_reg_16b_3++;
+    }
     return 0;
 }

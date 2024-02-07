@@ -8,7 +8,7 @@
 
 /*----- DEFINE -----*/
 #define CIM_PARAMS_STORAGE_SIZE_KB 3072
-#define CIM_INT_RES_SIZE_KB 1536
+#define CIM_INT_RES_SIZE_KB 3328
 
 /*----- CLASS -----*/
 class CiM {
@@ -51,10 +51,11 @@ class CiM {
         bool get_is_idle();
         int reset();
         int run(struct ext_signals* ext_sigs, Bus* bus);
-        float MAC(uint16_t input_start_addr, uint16_t params_start_addr, uint16_t len);
         float ADD(uint16_t input_addr, uint16_t params_addr);
+        float DIV(uint16_t num_addr, uint16_t den_addr);
         void LAYERNORM_1ST_HALF(uint16_t input_addr);
         void LAYERNORM_2ND_HALF(uint16_t input_addr, float gamma, float beta);
+        float MAC(uint16_t input_start_addr, uint16_t params_start_addr, uint16_t len, INPUT_TYPE param_type);
 };
 
 #endif //CIM_H
