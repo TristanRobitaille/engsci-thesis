@@ -72,12 +72,15 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
                 if ((inst.op == TRANSPOSE_BROADCAST_DATA_OP) && (current_inf_step == ENC_MHSA_QK_T)) { // Since I'm here, move my own data to the correct location in intermediate_res (do I need to do that in the previous op (QVK dense) as well?)
                     intermediate_res[static_cast<int>(inst.extra_fields)+id] = intermediate_res[gen_reg_16b+id];
-                } else if ((inst.op == DENSE_BROADCAST_START_OP) && (current_inf_step == ENC_MHSA_QK_T) && (inst.target_or_sender == 0)) { // Keep track of matrix in the Z-stack by incrementing upon receiving a DENSE_BROADCAST_START_OP for the first CiM
-                    gen_cnt_10b_2.inc();
                 }
             } else {
                 gen_reg_16b = static_cast<int> (inst.extra_fields); // Save address where to store data
             }
+
+            if ((inst.op == DENSE_BROADCAST_START_OP) && (current_inf_step == ENC_MHSA_QK_T) && (inst.target_or_sender == 0)) { // Keep track of matrix in the Z-stack by incrementing upon receiving a DENSE_BROADCAST_START_OP for the first CiM
+                gen_cnt_10b_2.inc();
+            }
+
             gen_cnt_10b.set_val(3); // 3 elements already sent
             break;
 
@@ -206,12 +209,35 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             if ((inst.op == DENSE_BROADCAST_DATA_OP) && (gen_cnt_10b.get_cnt() >= gen_reg_16b_2)) { // No more data to receive, start MACs
                 is_idle = false;
                 if (compute_in_progress == false){
-                    float result = MAC(NUM_PATCHES+1+EMBEDDING_DEPTH+(gen_cnt_10b_2.get_cnt()-1)*NUM_HEADS, 2*(EMBEDDING_DEPTH+NUM_PATCHES+1), NUM_HEADS, INTERMEDIATE_RES); // gen_reg_16b hold the matrix in the Z-stack
-                    intermediate_res[2*EMBEDDING_DEPTH+2*(NUM_PATCHES+1)] = result;
+                    uint16_t MAC_in1_addr = EMBEDDING_DEPTH + NUM_PATCHES + 1 + (gen_cnt_10b_2.get_cnt()-1)*NUM_HEADS;
+                    uint16_t MAC_in2_addr = 2*(EMBEDDING_DEPTH + NUM_PATCHES + 1); // Temp storage location of broadcast QK_T clip
+                    uint16_t MAC_storage_addr = 2*EMBEDDING_DEPTH + 3*(NUM_PATCHES + 1) + (gen_cnt_10b_2.get_cnt()-1)*(NUM_PATCHES+1); // Storage location of MAC result
 
-                    result = DIV(2*EMBEDDING_DEPTH+2*(NUM_PATCHES+1), param_addr_map[SINGLE_PARAMS].addr+ENC_SQRT_NUM_HEADS_OFF); // /sqrt(NUM_HEADS)
-                    intermediate_res[2*EMBEDDING_DEPTH+2*(NUM_PATCHES+1)] = result;
+                    float result = MAC(MAC_in1_addr, MAC_in2_addr, NUM_HEADS, INTERMEDIATE_RES); // gen_reg_16b hold the matrix in the Z-stack
+                    intermediate_res[MAC_storage_addr] = result;
+
+                    result = DIV(MAC_storage_addr, param_addr_map[SINGLE_PARAMS].addr+ENC_SQRT_NUM_HEADS_OFF); // /sqrt(NUM_HEADS)
+                    intermediate_res[MAC_storage_addr] = result;
                 }
+                if (gen_cnt_10b_2.get_cnt() == NUM_HEADS) { // Done with all input rows of QK^T
+                    is_idle = true;
+                    current_inf_step = ENC_MHSA_SOFTMAX;
+                    gen_cnt_10b_2.reset();
+                }
+            }
+            break;
+
+        case ENC_MHSA_SOFTMAX:
+            if (gen_cnt_10b_2.get_cnt() < NUM_HEADS) {
+                if (compute_in_progress == false){
+                    compute_done = false;
+                    uint16_t MAC_storage_addr = 2*EMBEDDING_DEPTH + 3*(NUM_PATCHES + 1) + gen_cnt_10b_2.get_cnt()*(NUM_PATCHES+1); // Storage location of MAC result
+                    SOFTMAX(/*input addr*/ MAC_storage_addr, /*len*/ NUM_PATCHES+1);
+                }
+                if (compute_done) { gen_cnt_10b_2.inc(); }
+            } else { // Done with softmax
+                is_idle = true;
+                current_inf_step = ENC_MHSA_MULT_V;
             }
             break;
 
@@ -249,6 +275,7 @@ float CiM::DIV(uint16_t num_addr, uint16_t den_addr) {
     compute_in_progress = true; // Using this compute_in_progress signal as it will be used in the CiM (in ASIC, this compute is multi-cycle, so leaving this here for visibility)
     result = intermediate_res[num_addr] / params[den_addr];
     compute_in_progress = false;
+    return result;
 }
 
 float CiM::ADD(uint16_t input_addr, uint16_t params_addr) {
@@ -299,6 +326,27 @@ void CiM::LAYERNORM_2ND_HALF(uint16_t input_addr, float gamma, float beta) {
         intermediate_res[input_addr+i] = gamma * intermediate_res[input_addr+i] + beta;
     }
 
+    compute_in_progress = false;
+}
+
+void CiM::SOFTMAX(uint16_t input_addr, uint16_t len) {
+    /* Softmax of input (performed in-place). Input is in intermediate storage location. Note: All Softmax are done over a row of len length. */
+
+    float exp_sum = 0.0f;
+    compute_in_progress = true;
+
+    // Exponentiate all elements and sum
+    for (uint16_t i = 0; i < len; ++i) {
+        intermediate_res[input_addr+i] = exp(intermediate_res[input_addr+i]);
+        exp_sum += intermediate_res[input_addr+i];
+    }
+
+    // Normalize
+    for (uint16_t i = 0; i < len; ++i) {
+        intermediate_res[input_addr+i] = intermediate_res[input_addr+i] / exp_sum;
+    }
+
+    compute_done = true;
     compute_in_progress = false;
 }
 

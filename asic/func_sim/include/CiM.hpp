@@ -27,6 +27,8 @@ class CiM {
             ENC_LAYERNORM_2ND_HALF,
             ENC_MHSA_DENSE,
             ENC_MHSA_QK_T,
+            ENC_MHSA_SOFTMAX,
+            ENC_MHSA_MULT_V,
             INVALID_INF_STEP = -1
         };
 
@@ -56,6 +58,7 @@ class CiM {
         void LAYERNORM_1ST_HALF(uint16_t input_addr);
         void LAYERNORM_2ND_HALF(uint16_t input_addr, float gamma, float beta);
         float MAC(uint16_t input_start_addr, uint16_t params_start_addr, uint16_t len, INPUT_TYPE param_type);
+        void SOFTMAX(uint16_t input_addr, uint16_t len);
 };
 
 #endif //CIM_H

@@ -87,7 +87,6 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
         }
 
         case ENC_MHSA_QK_T_STEP:
-            // TODO: Loop here or somewhere else for Z-stack of Q and K matrices
             prepare_for_broadcast(broadcast_ops.at(high_level_inf_step), bus);
             cout << "Performing encoder's MHSA QK_T. Starting matrix #" << gen_reg_16b_3 << " in the Z-stack (out of " << NUM_HEADS << ")" << endl;
             break;
