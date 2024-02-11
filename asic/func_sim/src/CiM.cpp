@@ -111,7 +111,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             }
 
             // Prep new instruction to send
-            if (bytes_sent_cnt.get_cnt() < data_len_reg && inst.target_or_sender == id) { // If last time was me and I have more data to send
+            if ((bytes_sent_cnt.get_cnt() < data_len_reg) && (inst.target_or_sender == id)) { // If last time was me and I have more data to send
                 struct instruction new_inst = {/*op*/ inst.op, /*target_or_sender*/id, /*data*/{0, 0}, /*extra_fields*/0};
                 if ((data_len_reg - bytes_rec_cnt.get_cnt() == 2)) { // Only two bytes left
                     new_inst.data = {intermediate_res[gen_reg_16b+bytes_rec_cnt.get_cnt()], intermediate_res[gen_reg_16b+bytes_rec_cnt.get_cnt()+1]};
@@ -172,13 +172,13 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     is_idle = false;
                 }
             } else if (compute_in_progress == false && gen_reg_16b == 1) { // Done with LayerNorm
-                if (id == 0) { cout << "CiM: Finished LayerNorm (1st half)" << endl; }
                 is_idle = true;
             } else { // Still collecting data
                 is_idle = false;
             }
 
             if (inst.op == PISTOL_START_OP) {
+                if (id == 0) { cout << "CiM: Finished LayerNorm (1st half)" << endl; }
                 current_inf_step = ENC_LAYERNORM_2ND_HALF;
                 gen_reg_16b = 0;
             }
@@ -195,7 +195,6 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     bytes_rec_cnt.reset();
                 }
             } else if (compute_in_progress == false && gen_reg_16b == 1) { // Done
-                if (id == 0) { cout << "CiM: Finished LayerNorm (2nd half)" << endl; }
                 is_idle = true;
             } else { // Still collecting data
                 is_idle = false;
@@ -204,6 +203,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             if (inst.op == PISTOL_START_OP) {
                 current_inf_step = POST_LAYERNORM_TRANSPOSE_STEP;
                 gen_reg_16b = 0;
+                if (id == 0) { cout << "CiM: Finished LayerNorm (2nd half)" << endl; }
             }
             break;
 
@@ -307,12 +307,12 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
                 }
             } else {
-                if (id == 0) { cout << "CiM: Finished encoder's MHSA softmax" << endl; }
                 bytes_rec_cnt.reset();
                 is_idle = true;
             }
 
             if (inst.op == PISTOL_START_OP) {
+                if (id == 0) { cout << "CiM: Finished encoder's MHSA softmax" << endl; }
                 current_inf_step = ENC_MHSA_MULT_V;
                 gen_cnt_10b.reset();
                 gen_cnt_10b_2.reset();
@@ -357,13 +357,13 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 }
             } else if (compute_in_progress == false && gen_reg_16b == 1) { // Done with this MAC
                 gen_cnt_10b_2.inc();
-                if (id == 0 && gen_cnt_10b_2.get_cnt() == (NUM_PATCHES+1)) { cout << "CiM: Finished encoder's post-MHSA Dense" << endl; }
                 is_idle = true;
             } else { // Still collecting data
                 is_idle = false;
             }
 
             if (inst.op == PISTOL_START_OP) {
+                if (id == 0 && gen_cnt_10b_2.get_cnt() == (NUM_PATCHES+1)) { cout << "CiM: Finished encoder's post-MHSA Dense" << endl; }
                 current_inf_step = INVALID_INF_STEP; // TODO: Change this step to the next step in the inference pipeline
                 gen_reg_16b = 0;
                 gen_cnt_10b_2.reset();

@@ -109,10 +109,10 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
         break;
 
     case BROADCAST_MANAGEMENT:
-        if ((gen_cnt_10b.get_cnt() == 0) && (bus->get_inst().op == NOP)) { // All transactions sent and bus free, start a new CiM 
+        if ((gen_cnt_10b.get_cnt() == 0) && (bus->get_inst().op == NOP)) { // All transactions sent and bus free, start a new CiM
             gen_cnt_8b.inc(); // CiM counter
 
-            if (gen_cnt_8b.get_cnt() == gen_reg_16b_2) { // All CiMs sent all data and finished using it, can go back to running inference            
+            if (gen_cnt_8b.get_cnt() == gen_reg_16b_2) { // All CiMs sent all data and finished using it, can go back to running inference
                 if ((high_level_inf_step != ENC_MHSA_QK_T_STEP && high_level_inf_step != ENC_MHSA_V_MULT_STEP) || (gen_reg_16b_3 == NUM_HEADS)) { // These two steps require going through the Z-stack of the Q and K matrices so only increment the step counter when we're done with the Z-stack
                     state = WAITING_FOR_CIM_COMPLETION;
                     high_level_inf_step = static_cast<HIGH_LEVEL_INFERENCE_STEP> (high_level_inf_step+1);
