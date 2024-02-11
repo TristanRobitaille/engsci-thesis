@@ -16,7 +16,7 @@ int init(){
     ext_sigs.master_nrst = false;
     ext_sigs.new_sleep_epoch = false;
 
-    // Define schedule for external events
+    // Define schedule for external events (triggered by he RISC-V processor)
     event_schedule[0] = master_nrst;
     event_schedule[2] = master_nrst_reset;
     event_schedule[4] = master_param_load;
@@ -38,7 +38,7 @@ int main(){
     while (1) {
         if (event_schedule.count(epoch_cnt) > 0) { event_schedule[epoch_cnt](&ext_sigs); } // Update external signals if needed
         for (auto& cim: cims) { cim.run(&ext_sigs, &bus); } // Run CiMs
-        if (ctrl.run(&ext_sigs, &bus, cims) == INFERENCE_FINISHED) { break; }; // Run Master Controller
+        if (ctrl.run(&ext_sigs, &bus, cims) == EVERYTHING_FINISHED) { break; }; // Run Master Controller
         bus.run(); // Run bus
         epoch_cnt++;
     }

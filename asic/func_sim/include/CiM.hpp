@@ -10,6 +10,9 @@
 #define CIM_PARAMS_STORAGE_SIZE_KB 3072
 #define CIM_INT_RES_SIZE_KB 3328
 
+#define HAS_MY_DATA(x) ((id >= (x-3)) && (id < x)) // Determines whether the current broadcast transaction contains data I need
+#define IS_MY_MATRIX(x) ((id >= x*NUM_HEADS) && (id < (x+1)*NUM_HEADS)) // Returns whether a given count corresponds to my matrix (for the *V matmul in encoder's MHSA)
+
 /*----- CLASS -----*/
 class CiM {
     private:
@@ -25,10 +28,15 @@ class CiM {
             POS_EMB,
             ENC_LAYERNORM_1ST_HALF,
             ENC_LAYERNORM_2ND_HALF,
+            POST_LAYERNORM_TRANSPOSE_STEP,
             ENC_MHSA_DENSE,
+            ENC_MHSA_Q_TRANSPOSE_STEP,
+            ENC_MHSA_K_TRANSPOSE_STEP,
             ENC_MHSA_QK_T,
             ENC_MHSA_SOFTMAX,
             ENC_MHSA_MULT_V,
+            ENC_POST_MHSA_TRANSPOSE_STEP,
+            ENC_POST_MHSA_DENSE_STEP,
             INVALID_INF_STEP = -1
         };
 
@@ -37,7 +45,7 @@ class CiM {
         bool compute_done = false; // Used by compute element to notify CiM controller when is done
         int16_t id; // ID of the CiM
         int16_t gen_reg_16b; // General-purpose register
-        int16_t gen_reg_16b_2; // General-purpose register
+        int16_t data_len_reg; // General-purpose register used to record len of data sent/received on the bus
         float params[CIM_PARAMS_STORAGE_SIZE_KB / sizeof(float)];
         float intermediate_res[CIM_INT_RES_SIZE_KB / sizeof(float)];
 
@@ -46,9 +54,11 @@ class CiM {
         OP prev_bus_op;
         Counter gen_cnt_10b;
         Counter gen_cnt_10b_2;
+        Counter bytes_rec_cnt; // Tracks the # of bytes received from the bus that are relevant to me
+        Counter bytes_sent_cnt; // Tracks the # of bytes sent to the bus
 
     public:
-        CiM() : id(-1), gen_cnt_10b(10), gen_cnt_10b_2(10) {}
+        CiM() : id(-1), gen_cnt_10b(10), gen_cnt_10b_2(10), bytes_rec_cnt(8), bytes_sent_cnt(8) {}
         CiM(const int16_t cim_id);
         bool get_is_idle();
         int reset();

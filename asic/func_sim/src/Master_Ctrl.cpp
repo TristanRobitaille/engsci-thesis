@@ -22,6 +22,7 @@ int Master_ctrl::reset(){
     gen_cnt_10b.reset();
     gen_reg_16b = 0;
     gen_reg_16b_2 = 0;
+    gen_reg_16b_3 = 0;
     return 0;
 }
 
@@ -34,11 +35,15 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
     // Act on priority external signals
     if  (ext_sigs->master_nrst == false) { state = RESET; }
 
+    // Check if CiMs are idle
+    for (int i=0; i<num_necessary_idles.at(high_level_inf_step); i++){ all_cims_idle &= cims[i].get_is_idle(); }
+
     switch (state) {
     case IDLE:
         if (ext_sigs->start_param_load == true) {
             assert(ext_sigs->new_sleep_epoch == false && "ERROR: Both 'start_param_load' and 'new_sleep_epoch' are set simultaneously!");
             state = PARAM_LOAD;
+            cout << "Starting parameters load" << endl;
         } else if (ext_sigs->new_sleep_epoch == true) { start_signal_load(); }
         break;
 
@@ -64,57 +69,66 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
         }
         break;
 
-    case INFERENCE_RUNNING:
-        // Wait for CiM to be done
-        for (int i=0; i<NUM_CIM; i++){ all_cims_idle &= cims[i].get_is_idle(); }
+    case WAITING_FOR_CIM_COMPLETION:
+        if (all_cims_idle == true) {
+            struct instruction inst = {/*op*/ PISTOL_START_OP, /*target_or_sender*/ 0, /*data*/ {0,0}, /*extra_fields*/ 0}; // Tell CiMs that they can go to the next step
+            bus->push_inst(inst);
+            state = INFERENCE_RUNNING;
+        }
+        break;
 
+    case INFERENCE_RUNNING:
         switch (high_level_inf_step){
         case PRE_LAYERNORM_TRANSPOSE_STEP:
-        case POST_LAYERNORM_TRANSPOSE_STEP:
         case INTRA_LAYERNORM_TRANSPOSE_STEP:
+        case POST_LAYERNORM_TRANSPOSE_STEP:
+        case ENC_MHSA_DENSE_STEP:
+        case ENC_MHSA_Q_TRANSPOSE_STEP:
+        case ENC_MHSA_K_TRANSPOSE_STEP:
+        case ENC_MHSA_QK_T_STEP:
+        case ENC_MHSA_V_MULT_STEP:
+        case ENC_MHSA_POST_V_TRANSPOSE_STEP:
+        case ENC_MHSA_POST_V_DENSE_STEP:
             if (all_cims_idle == true) {
+                if (high_level_inf_step == INFERENCE_FINISHED) {
+                    sys_state = EVERYTHING_FINISHED;
+                    break;
+                }
+
+                if (high_level_inf_step == ENC_MHSA_QK_T_STEP) { cout << "Master: Performing encoder's MHSA QK_T. Starting matrix #" << gen_reg_16b_3 << " in the Z-stack (out of " << NUM_HEADS << ")" << endl; }
+                else if (high_level_inf_step == ENC_MHSA_V_MULT_STEP) { cout << "Master: Performing encoder's MHSA V_MULT. Starting matrix #" << gen_reg_16b_3 << " in the Z-stack (out of " << NUM_HEADS << ")" << endl; }
+                else { cout << "Master: Starting high-level step #" << high_level_inf_step << endl; }
                 prepare_for_broadcast(broadcast_ops.at(high_level_inf_step), bus);
-                cout << "Starting high-level step #" << high_level_inf_step << endl;
             }
             break;
 
-        case ENC_MHSA_DENSE_STEP:
-        case ENC_MHSA_Q_TRANSPOSE_STEP:
-        case ENC_MHSA_K_TRANSPOSE_STEP: {
-            prepare_for_broadcast(broadcast_ops.at(high_level_inf_step), bus);
-            cout << "Starting high-level step #" << high_level_inf_step << endl;
-            break;
-        }
-
-        case ENC_MHSA_QK_T_STEP:
-            prepare_for_broadcast(broadcast_ops.at(high_level_inf_step), bus);
-            cout << "Performing encoder's MHSA QK_T. Starting matrix #" << gen_reg_16b_3 << " in the Z-stack (out of " << NUM_HEADS << ")" << endl;
-            break;
-
         default:
-            sys_state = INFERENCE_FINISHED; // TODO: For now
+            sys_state = EVERYTHING_FINISHED; // TODO: For now
             break;
         }
         break;
 
     case BROADCAST_MANAGEMENT:
-        if (bus->get_inst().op == TRANSPOSE_BROADCAST_DATA_OP || bus->get_inst().op == DENSE_BROADCAST_DATA_OP){
-            gen_cnt_10b.dec();
-        }
-        if (gen_cnt_10b.get_cnt() == 0) { // All transactions sent, start a new CiM
+        if ((gen_cnt_10b.get_cnt() == 0) && (bus->get_inst().op == NOP)) { // All transactions sent and bus free, start a new CiM 
             gen_cnt_8b.inc(); // CiM counter
 
-            if (gen_cnt_8b.get_cnt() == gen_reg_16b_2) { // All CiMs sent all data and finished using it, can go back to running inference
-                state = INFERENCE_RUNNING;
-                if (!((high_level_inf_step == ENC_MHSA_QK_T_STEP) && (gen_reg_16b_3 < NUM_HEADS))) { high_level_inf_step = static_cast<HIGH_LEVEL_INFERENCE_STEP> (high_level_inf_step+1); } // Remain in the same step if we are in the Z-stack of the Q and K matrices, else go to the next step
-                struct instruction inst = {/*op*/ PISTOL_START_OP, /*target_or_sender*/ 0, /*data*/ {0,0}, /*extra_fields*/ 0}; // Tell CiMs that they can go to the next step
-                bus->push_inst(inst);
-            } else if (all_cims_idle == true) { // Trigger new CiM to send data
+            if (gen_cnt_8b.get_cnt() == gen_reg_16b_2) { // All CiMs sent all data and finished using it, can go back to running inference            
+                if ((high_level_inf_step != ENC_MHSA_QK_T_STEP && high_level_inf_step != ENC_MHSA_V_MULT_STEP) || (gen_reg_16b_3 == NUM_HEADS)) { // These two steps require going through the Z-stack of the Q and K matrices so only increment the step counter when we're done with the Z-stack
+                    state = WAITING_FOR_CIM_COMPLETION;
+                    high_level_inf_step = static_cast<HIGH_LEVEL_INFERENCE_STEP> (high_level_inf_step+1);
+                    gen_reg_16b_3 = 0;
+                } else if (gen_reg_16b_3 < NUM_HEADS) { // Not done with the Z-stack
+                    state = INFERENCE_RUNNING;
+                }
+            } else { // Trigger new CiM to send data
                 struct broadcast_op_info op_info = broadcast_ops.at(high_level_inf_step);
                 struct instruction inst = {op_info.op, /*target_or_sender*/ gen_cnt_8b.get_cnt(), {op_info.tx_addr, op_info.len}, op_info.rx_addr};
                 bus->push_inst(inst);
-                gen_cnt_10b.set_val(gen_reg_16b); // Transaction counter
+                gen_cnt_10b.set_val(NUM_TRANS(op_info.len)); // Transaction counter
             }
+        }
+        if (bus->get_inst().op == TRANS_BROADCAST_DATA_OP || bus->get_inst().op == DENSE_BROADCAST_DATA_OP){
+            gen_cnt_10b.dec();
         }
         break;
 
@@ -136,6 +150,7 @@ int Master_ctrl::start_signal_load(){
     state = SIGNAL_LOAD;
     gen_cnt_8b.reset();
     gen_cnt_10b.reset();
+    cout << "Starting signal load" << endl;
     return 0;
 }
 
@@ -150,6 +165,7 @@ struct instruction Master_ctrl::param_to_send(){
     case ENC_Q_DENSE_PARAMS:
     case ENC_K_DENSE_PARAMS:
     case ENC_V_DENSE_PARAMS:
+    case ENC_COMB_HEAD_PARAMS:
         if ((params_cim_cnt == NUM_CIM-1) && (params_data_cnt >= param_addr_map[params_curr_layer].len)) { // Start new layer
             params_cim_cnt = -1;
             params_data_cnt = -1;
@@ -221,7 +237,7 @@ int Master_ctrl::load_params_from_h5(const std::string params_filepath) {
     params.patch_proj_bias = file.getGroup("patch_projection_dense").getGroup("vision_transformer").getGroup("patch_projection_dense").getDataSet("bias:0").read<EmbDepthVect_t>();
 
     params.class_emb = file.getGroup("top_level_model_weights").getDataSet("class_emb:0").read<EmbDepthVect_t>();
-    params.pos_emb = file.getGroup("top_level_model_weights").getDataSet("pos_emb:0").read<array<array<array<float, EMBEDDING_DEPTH>, NUM_PATCHES+1>, 1>>()[0];
+    params.pos_emb = file.getGroup("top_level_model_weights").getDataSet("pos_emb:0").read<array<array<array<float, EMB_DEPTH>, NUM_PATCHES+1>, 1>>()[0];
 
     // Encoders
     HighFive::Group enc = file.getGroup("encoder");
@@ -277,6 +293,10 @@ void Master_ctrl::update_inst_with_params(PARAM_NAME param_name, struct instruct
         inst->data = {params.enc_mhsa_V_kernel[params_data_cnt][params_cim_cnt], (num_left <= 2) ? (0) : (params.enc_mhsa_V_kernel[params_data_cnt+1][params_cim_cnt])};
         inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_V_kernel[params_data_cnt+2][params_cim_cnt];
         break;
+    case ENC_COMB_HEAD_PARAMS:
+        inst->data = {params.enc_mhsa_combine_kernel[params_data_cnt][params_cim_cnt], (num_left <= 2) ? (0) : (params.enc_mhsa_combine_kernel[params_data_cnt+1][params_cim_cnt])};
+        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_combine_kernel[params_data_cnt+2][params_cim_cnt];
+        break;
     default:
         throw invalid_argument("Invalid parameter name");
     }
@@ -290,11 +310,14 @@ int Master_ctrl::prepare_for_broadcast(broadcast_op_info op_info, Bus* bus) {
     gen_reg_16b = NUM_TRANS(op_info.len); // Holds the number of transactions each CiM will send (3 elements per transaction)
     gen_reg_16b_2 = op_info.num_cims; // Number of CiMs that will need to send data
     gen_cnt_8b.reset(); // Count CiMs
-    gen_cnt_10b.set_val(gen_reg_16b); // Count transactions
+    gen_cnt_10b.set_val(gen_reg_16b); // Count transactions (add 3 such that we will wait 1 cycle after CiM sent its last transaction to avoid shorting the bus)
 
     if (high_level_inf_step == ENC_MHSA_QK_T_STEP) { // Need to modify instruction based on where we are in the Z-stack of the Q and K matrices
         inst.data[0] = op_info.tx_addr + NUM_HEADS*gen_reg_16b_3; // tx addr
         inst.extra_fields = op_info.rx_addr + NUM_HEADS*gen_reg_16b_3; // rx addr
+        gen_reg_16b_3++;
+    } else if (high_level_inf_step == ENC_MHSA_V_MULT_STEP) {
+        inst.data[0] = op_info.tx_addr + gen_reg_16b_3*(NUM_PATCHES+1); // tx addr
         gen_reg_16b_3++;
     }
     return 0;

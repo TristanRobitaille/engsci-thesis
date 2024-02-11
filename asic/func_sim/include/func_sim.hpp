@@ -2,6 +2,7 @@
 #define FUNC_SIM_H
 
 #include <iostream>
+#include <stdlib.h>
 #include <cmath>
 #include <map>
 #include <variant>

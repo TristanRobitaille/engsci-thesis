@@ -7,7 +7,7 @@
 #define NUM_CIM 64
 #define PATCH_LENGTH_NUM_SAMPLES 64
 #define NUM_PATCHES 60
-#define EMBEDDING_DEPTH 64
+#define EMB_DEPTH 64
 #define NUM_HEADS 8
 #define LAYERNORM_EPSILON 0.000001f // 1e-6
 
@@ -23,15 +23,15 @@ enum OP {
     DENSE_BROADCAST_DATA_OP, // Sent from a CiM. Contains 3 bytes of data
     DATA_STREAM_START_OP, // Indicates that the next x data transmission will contain only parameters data (except op field, so 3B)
     DATA_STREAM_OP, // This instruction contains three bytes of data, and follow DATA_STREAM_START_OP
-    TRANSPOSE_BROADCAST_START_OP, // Tell the target CiM that it needs to broadcast its data starting at a given addr and length. Non-target CiM will then listen to the broadcast and grab the data they need.
-    TRANSPOSE_BROADCAST_DATA_OP, // Sent from a CiM. Contains 3 bytes of data
+    TRANS_BROADCAST_START_OP, // Tell the target CiM that it needs to broadcast its data starting at a given addr and length. Non-target CiM will then listen to the broadcast and grab the data they need.
+    TRANS_BROADCAST_DATA_OP, // Sent from a CiM. Contains 3 bytes of data
     PISTOL_START_OP, // Used to instruct CiMs to move to their next step in the inference pipeline
     NOP // Represents the no tranmission
 };
 
 enum SYSTEM_STATE {
     RUNNING,
-    INFERENCE_FINISHED
+    EVERYTHING_FINISHED
 };
 
 enum INPUT_TYPE { // Type of input for a given computation
@@ -97,6 +97,7 @@ class Bus {
     private:
         struct instruction inst;
         std::queue<struct instruction> q;
+        uint32_t _num_transpose_data_op_sent = 0; // Used to track the number of transpose data ops (for debugging purposes)
 
     public:
         struct instruction get_inst() { return inst; };
@@ -119,6 +120,7 @@ class Bus {
             else {
                 inst = q.front();
                 q.pop();
+                if (inst.op == TRANS_BROADCAST_DATA_OP) { _num_transpose_data_op_sent++; }
             }
             return 0;
         };
