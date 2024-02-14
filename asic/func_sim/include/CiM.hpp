@@ -36,7 +36,7 @@ class CiM {
             ENC_MHSA_SOFTMAX,
             ENC_MHSA_MULT_V,
             ENC_POST_MHSA_TRANSPOSE_STEP,
-            ENC_POST_MHSA_DENSE_STEP,
+            ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP,
             INVALID_INF_STEP = -1
         };
 
@@ -63,7 +63,7 @@ class CiM {
         bool get_is_idle();
         int reset();
         int run(struct ext_signals* ext_sigs, Bus* bus);
-        float ADD(uint16_t input_addr, uint16_t params_addr);
+        float ADD(uint16_t in1_addr, uint16_t in2_addr, INPUT_TYPE param_type);
         float DIV(uint16_t num_addr, uint16_t den_addr);
         void LAYERNORM_1ST_HALF(uint16_t input_addr);
         void LAYERNORM_2ND_HALF(uint16_t input_addr, float gamma, float beta);

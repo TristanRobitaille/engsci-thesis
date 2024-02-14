@@ -152,7 +152,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
         case POS_EMB:
             if (bytes_rec_cnt.get_cnt() < NUM_PATCHES+1) {
-                intermediate_res[bytes_rec_cnt.get_cnt()] = ADD(PATCH_LENGTH_NUM_SAMPLES+bytes_rec_cnt.get_cnt(), param_addr_map[POS_EMB_PARAMS].addr+bytes_rec_cnt.get_cnt());
+                intermediate_res[bytes_rec_cnt.get_cnt()] = ADD(PATCH_LENGTH_NUM_SAMPLES+bytes_rec_cnt.get_cnt(), param_addr_map[POS_EMB_PARAMS].addr+bytes_rec_cnt.get_cnt(), MODEL_PARAM);
                 bytes_rec_cnt.inc();
                 if (bytes_rec_cnt.get_cnt() == NUM_PATCHES) { // Done with positional embedding
                     bytes_rec_cnt.reset();
@@ -347,11 +347,13 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             }
             break;
 
-        case ENC_POST_MHSA_DENSE_STEP:
+        case ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP:
             if (bytes_rec_cnt.get_cnt() >= EMB_DEPTH) { // No more data to receive for this broadcast, start MACs
                 if (compute_in_progress == false){
                     float result = MAC(NUM_PATCHES+1, 320, EMB_DEPTH, MODEL_PARAM);
                     intermediate_res[NUM_PATCHES+1 + EMB_DEPTH + inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_COMB_HEAD_BIAS_OFF];
+                    result = ADD(NUM_PATCHES+1 + EMB_DEPTH + inst.target_or_sender, inst.target_or_sender, INTERMEDIATE_RES); // Sum with encoder's input as a residual connection
+                    intermediate_res[NUM_PATCHES+1 + EMB_DEPTH + inst.target_or_sender] = result;
                     gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
                     bytes_rec_cnt.reset();
                 }
@@ -411,9 +413,13 @@ float CiM::DIV(uint16_t num_addr, uint16_t den_addr) {
     return result;
 }
 
-float CiM::ADD(uint16_t input_addr, uint16_t params_addr) {
-    /* Return sum of two inputs. First input is in intermediate storage location, and second is in the params storage. */
-    return intermediate_res[input_addr] + params[params_addr];
+float CiM::ADD(uint16_t in1_addr, uint16_t in2_addr, INPUT_TYPE param_type) {
+    /* Return sum of two inputs. */
+    float results = 0.0f;
+    if (param_type == INTERMEDIATE_RES) { results = intermediate_res[in1_addr] + intermediate_res[in2_addr]; }
+    else { results = intermediate_res[in1_addr] + params[in2_addr]; }
+
+    return results;
 }
 
 void CiM::LAYERNORM_1ST_HALF(uint16_t input_addr) {
