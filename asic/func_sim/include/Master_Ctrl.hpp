@@ -29,9 +29,9 @@ class Master_ctrl {
         };
 
         enum HIGH_LEVEL_INFERENCE_STEP {
-            PRE_LAYERNORM_TRANSPOSE_STEP,
-            INTRA_LAYERNORM_TRANSPOSE_STEP, // After the first transpose (row to column) for LayerNorm
-            POST_LAYERNORM_TRANSPOSE_STEP, // After the second transpose (column to row) for LayerNorm and final normalization with gamma/beta
+            PRE_LAYERNORM_1_TRANSPOSE_STEP,
+            INTRA_LAYERNORM_1_TRANSPOSE_STEP, // After the first half of transpose (row to column) for LayerNorm
+            POST_LAYERNORM_1_TRANSPOSE_STEP, // After the second half of transpose (column to row) for LayerNorm and final normalization with gamma/beta
             ENC_MHSA_DENSE_STEP, // Perform all three dense operations (Q, K, V) for the Multi-Head Self-Attention
             ENC_MHSA_Q_TRANSPOSE_STEP, // Transpose (row to column) for encoder MHSA's Q
             ENC_MHSA_K_TRANSPOSE_STEP, // Transpose (row to column) for encoder MHSA's K
@@ -39,6 +39,8 @@ class Master_ctrl {
             ENC_MHSA_V_MULT_STEP, // Multiplication of softmax with V for encoder MHSA,
             ENC_MHSA_POST_V_TRANSPOSE_STEP, // Transpose following the V multiplication for encoder MHSA
             ENC_MHSA_POST_V_DENSE_STEP, // Perform the tranpose dense operation for the encoder's MLP
+            PRE_LAYERNORM_2_TRANSPOSE_STEP, // Transpose (row to column) for the second half of LayerNorm
+            INTRA_LAYERNORM_2_TRANSPOSE_STEP, // Transpose (column to row) for the second half of LayerNorm
             INFERENCE_FINISHED
        };
 
@@ -75,9 +77,9 @@ class Master_ctrl {
         };
 
         const std::map<HIGH_LEVEL_INFERENCE_STEP, broadcast_op_info> broadcast_ops = {
-            {PRE_LAYERNORM_TRANSPOSE_STEP,      {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 0,                                /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_CIM}},
-            {INTRA_LAYERNORM_TRANSPOSE_STEP,    {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1,                    /*tx len*/ EMB_DEPTH,      /*rx addr*/ NUM_PATCHES+1+EMB_DEPTH,        /*num cims*/ NUM_PATCHES+1}},
-            {POST_LAYERNORM_TRANSPOSE_STEP,     {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1+EMB_DEPTH,          /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_CIM}},
+            {PRE_LAYERNORM_1_TRANSPOSE_STEP,    {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 0,                                /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_CIM}},
+            {INTRA_LAYERNORM_1_TRANSPOSE_STEP,  {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1,                    /*tx len*/ EMB_DEPTH,      /*rx addr*/ NUM_PATCHES+1+EMB_DEPTH,        /*num cims*/ NUM_PATCHES+1}},
+            {POST_LAYERNORM_1_TRANSPOSE_STEP,   {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1+EMB_DEPTH,          /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_CIM}},
             {ENC_MHSA_DENSE_STEP,               {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1,                    /*tx len*/ EMB_DEPTH,      /*rx addr*/ NUM_PATCHES+1+EMB_DEPTH,        /*num cims*/ NUM_CIM}},
             {ENC_MHSA_Q_TRANSPOSE_STEP,         {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 2*EMB_DEPTH+NUM_PATCHES+1,        /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ NUM_PATCHES+1+EMB_DEPTH,        /*num cims*/ NUM_CIM}},
             {ENC_MHSA_K_TRANSPOSE_STEP,         {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 2*(EMB_DEPTH+NUM_PATCHES+1),      /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ 2*EMB_DEPTH+NUM_PATCHES+1,      /*num cims*/ NUM_CIM}},
@@ -85,12 +87,14 @@ class Master_ctrl {
             {ENC_MHSA_V_MULT_STEP,              {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ 3*(NUM_PATCHES+1)+2*EMB_DEPTH,    /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ NUM_PATCHES+1+EMB_DEPTH,        /*num cims*/ NUM_PATCHES+1}},  // Will need to call this NUM_HEADS times to go through the Z-stack of the QK_T matrices
             {ENC_MHSA_POST_V_TRANSPOSE_STEP,    {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 2*EMB_DEPTH+NUM_PATCHES+1,        /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_CIM}},
             {ENC_MHSA_POST_V_DENSE_STEP,        {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1,                    /*tx len*/ EMB_DEPTH,      /*rx addr*/ NUM_PATCHES+1+EMB_DEPTH,        /*num cims*/ NUM_PATCHES+1}},
+            {PRE_LAYERNORM_2_TRANSPOSE_STEP,    {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1+EMB_DEPTH,          /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_CIM}},
+            {INTRA_LAYERNORM_2_TRANSPOSE_STEP,  {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1,                    /*tx len*/ EMB_DEPTH,      /*rx addr*/ NUM_PATCHES+1+EMB_DEPTH,        /*num cims*/ NUM_PATCHES+1}}
         };
 
         const std::map<HIGH_LEVEL_INFERENCE_STEP, int> num_necessary_idles = { // Gives the number of necessary CiM is_idle signals to be high for the master controller to enter the given step
-            {PRE_LAYERNORM_TRANSPOSE_STEP,      EMB_DEPTH},
-            {INTRA_LAYERNORM_TRANSPOSE_STEP,    NUM_PATCHES+1},
-            {POST_LAYERNORM_TRANSPOSE_STEP,     EMB_DEPTH},
+            {PRE_LAYERNORM_1_TRANSPOSE_STEP,    EMB_DEPTH},
+            {INTRA_LAYERNORM_1_TRANSPOSE_STEP,  NUM_PATCHES+1},
+            {POST_LAYERNORM_1_TRANSPOSE_STEP,   EMB_DEPTH},
             {ENC_MHSA_DENSE_STEP,               NUM_PATCHES+1},
             {ENC_MHSA_Q_TRANSPOSE_STEP,         NUM_PATCHES+1},
             {ENC_MHSA_K_TRANSPOSE_STEP,         NUM_PATCHES+1},
@@ -98,7 +102,9 @@ class Master_ctrl {
             {ENC_MHSA_V_MULT_STEP,              NUM_HEADS},
             {ENC_MHSA_POST_V_TRANSPOSE_STEP,    NUM_PATCHES+1},
             {ENC_MHSA_POST_V_DENSE_STEP,        NUM_PATCHES+1},
-            {INFERENCE_FINISHED,                NUM_PATCHES+1}
+            {PRE_LAYERNORM_2_TRANSPOSE_STEP,    EMB_DEPTH},
+            {INTRA_LAYERNORM_2_TRANSPOSE_STEP,  NUM_PATCHES+1},
+            {INFERENCE_FINISHED,                EMB_DEPTH},
         };
 
         float storage[CENTRALIZED_STORAGE_WEIGHTS_KB / sizeof(float)];
@@ -108,7 +114,7 @@ class Master_ctrl {
         uint16_t gen_reg_16b_2 = 0;
         uint16_t gen_reg_16b_3 = 0;
         STATE state;
-        HIGH_LEVEL_INFERENCE_STEP high_level_inf_step = PRE_LAYERNORM_TRANSPOSE_STEP;
+        HIGH_LEVEL_INFERENCE_STEP high_level_inf_step = PRE_LAYERNORM_1_TRANSPOSE_STEP;
 
         // EEG file
         std::vector<float> eeg_ds;

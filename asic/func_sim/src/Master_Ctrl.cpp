@@ -79,9 +79,9 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
 
     case INFERENCE_RUNNING:
         switch (high_level_inf_step){
-        case PRE_LAYERNORM_TRANSPOSE_STEP:
-        case INTRA_LAYERNORM_TRANSPOSE_STEP:
-        case POST_LAYERNORM_TRANSPOSE_STEP:
+        case PRE_LAYERNORM_1_TRANSPOSE_STEP:
+        case INTRA_LAYERNORM_1_TRANSPOSE_STEP:
+        case POST_LAYERNORM_1_TRANSPOSE_STEP:
         case ENC_MHSA_DENSE_STEP:
         case ENC_MHSA_Q_TRANSPOSE_STEP:
         case ENC_MHSA_K_TRANSPOSE_STEP:
@@ -89,6 +89,8 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
         case ENC_MHSA_V_MULT_STEP:
         case ENC_MHSA_POST_V_TRANSPOSE_STEP:
         case ENC_MHSA_POST_V_DENSE_STEP:
+        case PRE_LAYERNORM_2_TRANSPOSE_STEP:
+        case INTRA_LAYERNORM_2_TRANSPOSE_STEP:
             if (all_cims_idle == true) {
                 if (high_level_inf_step == INFERENCE_FINISHED) {
                     sys_state = EVERYTHING_FINISHED;

@@ -5,7 +5,7 @@ using namespace std;
 
 /*----- DECLARATION -----*/
 CiM::CiM(const int16_t cim_id) : id(cim_id), gen_cnt_10b(10), gen_cnt_10b_2(10), bytes_rec_cnt(10), bytes_sent_cnt(8) {
-    state = RESET_CIM;
+    cim_state = RESET_CIM;
 }
 
 int CiM::reset(){
@@ -35,7 +35,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 gen_cnt_10b_2.inc(); // Increment number of patches received
                 bytes_rec_cnt.reset();
                 if (gen_cnt_10b_2.get_cnt() == NUM_PATCHES) { // Received all patches, automatically start inference
-                    state = INFERENCE_RUNNING_CIM;
+                    cim_state = INFERENCE_RUNNING_CIM;
                     compute_done = false;
                     gen_cnt_10b_2.reset();
                 }
@@ -133,12 +133,12 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
     prev_bus_op = inst.op;
 
     // Run FSM
-    switch (state){
+    switch (cim_state){
     case IDLE_CIM:
         break;
 
     case RESET_CIM:
-        if (ext_sigs->master_nrst == true) { state = IDLE_CIM; }
+        if (ext_sigs->master_nrst == true) { cim_state = IDLE_CIM; }
         reset();
         break;
 
@@ -156,14 +156,15 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 bytes_rec_cnt.inc();
                 if (bytes_rec_cnt.get_cnt() == NUM_PATCHES) { // Done with positional embedding
                     bytes_rec_cnt.reset();
-                    current_inf_step = ENC_LAYERNORM_1ST_HALF;
+                    current_inf_step = ENC_LAYERNORM_1_1ST_HALF_STEP;
                     if (id == 0) { cout << "CiM: Finished positional embedding" << endl; }
                     is_idle = true; // Indicate to master controller that positional embedding computation is done
                 } else { is_idle = false; }
             }
             break;
 
-        case ENC_LAYERNORM_1ST_HALF:
+        case ENC_LAYERNORM_1_1ST_HALF_STEP:
+        case ENC_LAYERNORM_2_1ST_HALF_STEP:
             if (bytes_rec_cnt.get_cnt() == EMB_DEPTH) { // No more data to receive, start LayerNorm
                 if (compute_in_progress == false) {
                     gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
@@ -179,16 +180,25 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
             if (inst.op == PISTOL_START_OP) {
                 if (id == 0) { cout << "CiM: Finished LayerNorm (1st half)" << endl; }
-                current_inf_step = ENC_LAYERNORM_2ND_HALF;
+                if (current_inf_step == ENC_LAYERNORM_1_1ST_HALF_STEP) { current_inf_step = ENC_LAYERNORM_1_2ND_HALF_STEP; }
+                else if (current_inf_step == ENC_LAYERNORM_2_1ST_HALF_STEP) { current_inf_step = ENC_LAYERNORM_2_2ND_HALF_STEP; }
                 gen_reg_16b = 0;
             }
             break;
 
-        case ENC_LAYERNORM_2ND_HALF:
+        case ENC_LAYERNORM_1_2ND_HALF_STEP:
+        case ENC_LAYERNORM_2_2ND_HALF_STEP:
             if (bytes_rec_cnt.get_cnt() == NUM_PATCHES+1) { // No more data to receive, start LayerNorm
                 if (compute_in_progress == false) {
-                    float gamma = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM1_GAMMA_OFF];
-                    float beta = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM1_BETA_OFF];
+                    float gamma = 0.0f;
+                    float beta = 0.0f;
+                    if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) {
+                        gamma = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_GAMMA_OFF];
+                        beta = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_BETA_OFF];
+                    } else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) {
+                        gamma = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_GAMMA_OFF];
+                        beta = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_BETA_OFF];
+                    }
                     gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
                     is_idle = false;
                     LAYERNORM_2ND_HALF(0, gamma, beta);
@@ -201,7 +211,8 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             }
 
             if (inst.op == PISTOL_START_OP) {
-                current_inf_step = POST_LAYERNORM_TRANSPOSE_STEP;
+                if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) { current_inf_step = POST_LAYERNORM_TRANSPOSE_STEP; }
+                else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) { current_inf_step = MLP_DENSE_1_STEP; }
                 gen_reg_16b = 0;
                 if (id == 0) { cout << "CiM: Finished LayerNorm (2nd half)" << endl; }
             }
@@ -366,13 +377,13 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
             if (inst.op == PISTOL_START_OP) {
                 if (id == 0 && gen_cnt_10b_2.get_cnt() == (NUM_PATCHES+1)) { cout << "CiM: Finished encoder's post-MHSA Dense" << endl; }
-                current_inf_step = INVALID_INF_STEP; // TODO: Change this step to the next step in the inference pipeline
+                current_inf_step = ENC_LAYERNORM_2_1ST_HALF_STEP; // Start another round of LayerNorm
                 gen_reg_16b = 0;
                 gen_cnt_10b_2.reset();
             }
-
             break;
 
+        case MLP_DENSE_1_STEP:
         case INVALID_INF_STEP:
         default:
             is_idle = true;
@@ -382,7 +393,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
     case INVALID_CIM:
     default:
-        cout << "CiM " << id << " controller in an invalid state (" << state << ")! Exiting.\n" << endl;
+        cout << "CiM " << id << " controller in an invalid state (" << cim_state << ")! Exiting.\n" << endl;
         exit(-1);
         break;
     }

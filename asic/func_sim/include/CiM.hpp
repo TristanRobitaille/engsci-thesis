@@ -26,8 +26,10 @@ class CiM {
         enum INFERENCE_STEP {
             CLASS_TOKEN_CONCAT,
             POS_EMB,
-            ENC_LAYERNORM_1ST_HALF,
-            ENC_LAYERNORM_2ND_HALF,
+            ENC_LAYERNORM_1_1ST_HALF_STEP,
+            ENC_LAYERNORM_1_2ND_HALF_STEP,
+            ENC_LAYERNORM_2_1ST_HALF_STEP,
+            ENC_LAYERNORM_2_2ND_HALF_STEP,
             POST_LAYERNORM_TRANSPOSE_STEP,
             ENC_MHSA_DENSE,
             ENC_MHSA_Q_TRANSPOSE_STEP,
@@ -37,6 +39,7 @@ class CiM {
             ENC_MHSA_MULT_V,
             ENC_POST_MHSA_TRANSPOSE_STEP,
             ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP,
+            MLP_DENSE_1_STEP,
             INVALID_INF_STEP = -1
         };
 
@@ -49,7 +52,7 @@ class CiM {
         float params[CIM_PARAMS_STORAGE_SIZE_KB / sizeof(float)];
         float intermediate_res[CIM_INT_RES_SIZE_KB / sizeof(float)];
 
-        STATE state;
+        STATE cim_state;
         INFERENCE_STEP current_inf_step = CLASS_TOKEN_CONCAT;
         OP prev_bus_op;
         Counter gen_cnt_10b;
