@@ -42,6 +42,7 @@ class Master_ctrl {
             PRE_LAYERNORM_2_TRANSPOSE_STEP, // Transpose (row to column) for the second half of LayerNorm
             INTRA_LAYERNORM_2_TRANSPOSE_STEP, // Transpose (column to row) for the second half of LayerNorm
             ENC_MLP_DENSE_1_STEP, // Perform the first dense operation for the encoder's MLP
+            ENC_MLP_DENSE_2_STEP, // Perform the second dense operation for the encoder's MLP
             INFERENCE_FINISHED
        };
 
@@ -92,7 +93,8 @@ class Master_ctrl {
             {ENC_MHSA_POST_V_DENSE_STEP,        {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1,                    /*tx len*/ EMB_DEPTH,      /*rx addr*/ NUM_PATCHES+1+EMB_DEPTH,        /*num cims*/ NUM_PATCHES+1}},
             {PRE_LAYERNORM_2_TRANSPOSE_STEP,    {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1+EMB_DEPTH,          /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_CIM}},
             {INTRA_LAYERNORM_2_TRANSPOSE_STEP,  {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1,                    /*tx len*/ EMB_DEPTH,      /*rx addr*/ NUM_PATCHES+1+EMB_DEPTH,        /*num cims*/ NUM_PATCHES+1}},
-            {ENC_MLP_DENSE_1_STEP,              {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1+EMB_DEPTH,          /*tx len*/ EMB_DEPTH,      /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ MLP_DIM}}
+            {ENC_MLP_DENSE_1_STEP,              {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1+EMB_DEPTH,          /*tx len*/ EMB_DEPTH,      /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ MLP_DIM}},
+            {ENC_MLP_DENSE_2_STEP,              {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1,                    /*tx len*/ MLP_DIM,        /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_PATCHES+1}}
         };
 
         const std::map<HIGH_LEVEL_INFERENCE_STEP, int> num_necessary_idles = { // Gives the number of necessary CiM is_idle signals to be high for the master controller to enter the given step
@@ -109,6 +111,7 @@ class Master_ctrl {
             {PRE_LAYERNORM_2_TRANSPOSE_STEP,    EMB_DEPTH},
             {INTRA_LAYERNORM_2_TRANSPOSE_STEP,  NUM_PATCHES+1},
             {ENC_MLP_DENSE_1_STEP,              EMB_DEPTH},
+            {ENC_MLP_DENSE_2_STEP,              MLP_DIM},
             {INFERENCE_FINISHED,                EMB_DEPTH},
         };
 
