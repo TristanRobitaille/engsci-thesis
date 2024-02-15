@@ -29,9 +29,9 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             if (prev_bus_op != PATCH_LOAD_BROADCAST_OP) { bytes_rec_cnt.reset(); };
             intermediate_res[bytes_rec_cnt.get_cnt()] = inst.data[0];
             bytes_rec_cnt.inc();
-            if (bytes_rec_cnt.get_cnt() == PATCH_LENGTH_NUM_SAMPLES) { // Received a complete patch, perform part of Dense layer
-                float result = MAC(0 /* patch starting address */, 0 /* weight starting address */, PATCH_LENGTH_NUM_SAMPLES, MODEL_PARAM);
-                intermediate_res[gen_cnt_10b_2.get_cnt() + PATCH_LENGTH_NUM_SAMPLES] = result + intermediate_res[param_addr_map[SINGLE_PARAMS].addr+PATCH_PROJ_BIAS_OFF];
+            if (bytes_rec_cnt.get_cnt() == PATCH_LEN) { // Received a complete patch, perform part of Dense layer
+                float result = MAC(0 /* patch starting address */, 0 /* weight starting address */, PATCH_LEN, MODEL_PARAM, LINEAR);
+                intermediate_res[gen_cnt_10b_2.get_cnt() + PATCH_LEN] = result + intermediate_res[param_addr_map[SINGLE_PARAMS].addr+PATCH_PROJ_BIAS_OFF];
                 gen_cnt_10b_2.inc(); // Increment number of patches received
                 bytes_rec_cnt.reset();
                 if (gen_cnt_10b_2.get_cnt() == NUM_PATCHES) { // Received all patches, automatically start inference
@@ -43,10 +43,8 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             break;
 
         case DATA_STREAM_START_OP:
-            if (inst.target_or_sender == id) {
-                gen_reg_16b = inst.data[0]; // Address
-                bytes_rec_cnt.reset();
-            }
+            gen_reg_16b = inst.data[0]; // Address
+            bytes_rec_cnt.reset();
             break;
 
         case DATA_STREAM_OP:
@@ -54,6 +52,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 params[bytes_rec_cnt.get_cnt() + gen_reg_16b] = inst.data[0];
                 params[bytes_rec_cnt.get_cnt()+1 + gen_reg_16b] = inst.data[1]; // Note: If the length is less than 3, we will be loading junk. That's OK since it will get overwritten
                 params[bytes_rec_cnt.get_cnt()+2 + gen_reg_16b] = inst.extra_fields;
+                bytes_rec_cnt.inc(3);
             }
             break;
 
@@ -79,8 +78,9 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 gen_reg_16b = static_cast<int> (inst.extra_fields); // Save address where to store data
             }
 
-            if ((current_inf_step == ENC_MHSA_MULT_V) && inst.target_or_sender == 0) { // Count the number of matrices that have been started broadcasting
-                gen_cnt_10b_2.inc();
+            if (current_inf_step == ENC_MHSA_MULT_V) {
+                if (inst.target_or_sender == 0) { gen_cnt_10b_2.inc(); }
+                bytes_rec_cnt.reset(); // We also want to reset this counter here because the CiM that don't have to multiply anything for this matrix could overflow the counter
             }
 
             data_len_reg = inst.data[1]; // Save length of data to send/receive
@@ -145,14 +145,14 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
     case INFERENCE_RUNNING_CIM:
         switch (current_inf_step) {
         case CLASS_TOKEN_CONCAT:
-            intermediate_res[PATCH_LENGTH_NUM_SAMPLES+NUM_PATCHES] = params[param_addr_map[SINGLE_PARAMS].addr+CLASS_EMB_OFF]; // Move classification token from parameters memory to intermediate storage
+            intermediate_res[PATCH_LEN+NUM_PATCHES] = params[param_addr_map[SINGLE_PARAMS].addr+CLASS_EMB_OFF]; // Move classification token from parameters memory to intermediate storage
             current_inf_step = POS_EMB;
             bytes_rec_cnt.reset();
             break;
 
         case POS_EMB:
             if (bytes_rec_cnt.get_cnt() < NUM_PATCHES+1) {
-                intermediate_res[bytes_rec_cnt.get_cnt()] = ADD(PATCH_LENGTH_NUM_SAMPLES+bytes_rec_cnt.get_cnt(), param_addr_map[POS_EMB_PARAMS].addr+bytes_rec_cnt.get_cnt(), MODEL_PARAM);
+                intermediate_res[bytes_rec_cnt.get_cnt()] = ADD(PATCH_LEN+bytes_rec_cnt.get_cnt(), param_addr_map[POS_EMB_PARAMS].addr+bytes_rec_cnt.get_cnt(), MODEL_PARAM);
                 bytes_rec_cnt.inc();
                 if (bytes_rec_cnt.get_cnt() == NUM_PATCHES) { // Done with positional embedding
                     bytes_rec_cnt.reset();
@@ -229,28 +229,33 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             break;
 
         case ENC_MHSA_DENSE:
+        case MLP_DENSE_1_STEP:
             if (bytes_rec_cnt.get_cnt() >= EMB_DEPTH) { // No more data to receive for this broadcast, start MACs
-                if (compute_in_progress == false){
-                    // Note: In ASIC, these would be sequential MACs, but here we are doing them in parallel
-                    float result = MAC(NUM_PATCHES+1+EMB_DEPTH, 128, EMB_DEPTH, MODEL_PARAM);
+                if ((compute_in_progress == false) && (current_inf_step == ENC_MHSA_DENSE)) {
+                    float result = MAC(NUM_PATCHES+1+EMB_DEPTH, 128, EMB_DEPTH, MODEL_PARAM, LINEAR);
                     intermediate_res[189+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_Q_DENSE_BIAS_0FF]; // Q
-                    result = MAC(NUM_PATCHES+1+EMB_DEPTH, 192, EMB_DEPTH, MODEL_PARAM);
+                    result = MAC(NUM_PATCHES+1+EMB_DEPTH, 192, EMB_DEPTH, MODEL_PARAM, LINEAR);
                     intermediate_res[250+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_K_DENSE_BIAS_0FF]; // K
-                    result = MAC(NUM_PATCHES+1+EMB_DEPTH, 256, EMB_DEPTH, MODEL_PARAM);
+                    result = MAC(NUM_PATCHES+1+EMB_DEPTH, 256, EMB_DEPTH, MODEL_PARAM, LINEAR);
                     intermediate_res[NUM_PATCHES+1+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_V_DENSE_BIAS_0FF]; // V
-                    gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
-                    bytes_rec_cnt.reset();
+                } else if ((compute_in_progress == false) && (current_inf_step == MLP_DENSE_1_STEP) && (id < MLP_DIM)) { // Only MLP_DIM number of CiMs will perform this computation
+                    float result = MAC(NUM_PATCHES+1, 384, EMB_DEPTH, MODEL_PARAM, SWISH);
+                    intermediate_res[192+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_1_BIAS_OFF]; // MLP Dense 1
                 }
-            } else if (compute_in_progress == false && gen_reg_16b == 1){ // Done
+                gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
+                bytes_rec_cnt.reset();
+            } else if ((compute_in_progress == false) && (gen_reg_16b == 1)){ // Done
                 gen_cnt_10b_2.inc();
-                if (id == 0 && gen_cnt_10b_2.get_cnt() == EMB_DEPTH) { cout << "CiM: Finished encoder's MHSA Q/K/V Dense" << endl; }
+                if ((id == 0) && (gen_cnt_10b_2.get_cnt() == EMB_DEPTH) && (current_inf_step == ENC_MHSA_DENSE)) { cout << "CiM: Finished encoder's MHSA Q/K/V Dense" << endl; }
+                else if ((id == 0) && (gen_cnt_10b_2.get_cnt() == MLP_DIM) && (current_inf_step == MLP_DENSE_1_STEP)) { cout << "CiM: Finished MLP Dense 1" << endl; }
                 is_idle = true;
             } else { // Still collecting data
                 is_idle = false;
             }
-
+            
             if (inst.op == PISTOL_START_OP) {
-                current_inf_step = ENC_MHSA_Q_TRANSPOSE_STEP;
+                if (current_inf_step == ENC_MHSA_DENSE) { current_inf_step = ENC_MHSA_Q_TRANSPOSE_STEP; }
+                else if (current_inf_step == MLP_DENSE_1_STEP) { current_inf_step = INVALID_INF_STEP; } // TODO: Temporary next step
                 gen_reg_16b = 0;
                 gen_cnt_10b_2.reset();
             }
@@ -277,7 +282,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     uint16_t MAC_in2_addr = 2*(EMB_DEPTH+NUM_PATCHES+1); // Temp storage location of broadcast QK_T clip
                     uint16_t MAC_storage_addr = 2*EMB_DEPTH+3*(NUM_PATCHES+1) + (gen_cnt_10b_2.get_cnt()-1)*(NUM_PATCHES+1) + inst.target_or_sender; // Storage location of MAC result
 
-                    float result = MAC(MAC_in1_addr, MAC_in2_addr, NUM_HEADS, INTERMEDIATE_RES);
+                    float result = MAC(MAC_in1_addr, MAC_in2_addr, NUM_HEADS, INTERMEDIATE_RES, LINEAR);
                     intermediate_res[MAC_storage_addr] = result;
 
                     result = DIV(MAC_storage_addr, param_addr_map[SINGLE_PARAMS].addr+ENC_SQRT_NUM_HEADS_OFF); // /sqrt(NUM_HEADS)
@@ -335,7 +340,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 if (IS_MY_MATRIX(gen_cnt_10b_2.get_cnt()-1)) { // Only if matrix being broadcast corresponds to mine (-1 because gen_cnt_10b_2 is incremented when the matrix starts broadcast)
                     if (compute_in_progress == false) {
                         uint16_t MAC_in1_addr = 3*(NUM_PATCHES+1)+2*EMB_DEPTH + (gen_cnt_10b_2.get_cnt()-1)*(NUM_PATCHES+1);
-                        float result = MAC(MAC_in1_addr, /*in2 addr*/ NUM_PATCHES+1+EMB_DEPTH, NUM_PATCHES+1, INTERMEDIATE_RES);
+                        float result = MAC(MAC_in1_addr, /*in2 addr*/ NUM_PATCHES+1+EMB_DEPTH, NUM_PATCHES+1, INTERMEDIATE_RES, LINEAR);
                         intermediate_res[2*EMB_DEPTH + NUM_PATCHES+1 + inst.target_or_sender] = result;
                         gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
                         bytes_rec_cnt.reset();
@@ -361,7 +366,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP:
             if (bytes_rec_cnt.get_cnt() >= EMB_DEPTH) { // No more data to receive for this broadcast, start MACs
                 if (compute_in_progress == false){
-                    float result = MAC(NUM_PATCHES+1, 320, EMB_DEPTH, MODEL_PARAM);
+                    float result = MAC(NUM_PATCHES+1, 320, EMB_DEPTH, MODEL_PARAM, LINEAR);
                     intermediate_res[NUM_PATCHES+1 + EMB_DEPTH + inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_COMB_HEAD_BIAS_OFF];
                     result = ADD(NUM_PATCHES+1 + EMB_DEPTH + inst.target_or_sender, inst.target_or_sender, INTERMEDIATE_RES); // Sum with encoder's input as a residual connection
                     intermediate_res[NUM_PATCHES+1 + EMB_DEPTH + inst.target_or_sender] = result;
@@ -383,7 +388,6 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             }
             break;
 
-        case MLP_DENSE_1_STEP:
         case INVALID_INF_STEP:
         default:
             is_idle = true;
@@ -393,21 +397,34 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
     case INVALID_CIM:
     default:
-        cout << "CiM " << id << " controller in an invalid state (" << cim_state << ")! Exiting.\n" << endl;
-        exit(-1);
+        throw invalid_argument("CiM controller in an invalid state!");
         break;
     }
     return 0;
 }
 
-float CiM::MAC(uint16_t in1_start_addr, uint16_t in2_start_addr, uint16_t len, INPUT_TYPE param_type) {
+float CiM::MAC(uint16_t in1_start_addr, uint16_t in2_start_addr, uint16_t len, INPUT_TYPE param_type, ACTIVATION activation) {
     /* Dot-product between two vectors. The first vector is in the intermediate storage location, and the second is in params storage. */
 
     float result = 0.0f;
     compute_in_progress = true;
     for (uint16_t i = 0; i < len; ++i) {
-        if (param_type == INTERMEDIATE_RES) {result += intermediate_res[in1_start_addr+i] * intermediate_res[in2_start_addr+i]; } // The second vector is an intermediate result
-        else { result += intermediate_res[in1_start_addr+i] * params[in2_start_addr+i]; } // The second vector is a model parameter
+        float input2 = intermediate_res[in2_start_addr+i];
+
+        // Grab second input
+        if (param_type == INTERMEDIATE_RES) { input2 = intermediate_res[in2_start_addr+i]; } 
+        else if (param_type == MODEL_PARAM) { input2 = params[in2_start_addr+i]; }
+        else {
+            cout << "Received unknown activation function " << activation << endl;
+            exit(-1);
+        }
+
+        // Compute
+        if (activation == LINEAR) {
+            result += intermediate_res[in1_start_addr+i] * input2; // The second vector is an intermediate result
+        } else if (activation == SWISH) {
+            result += input2 * intermediate_res[in1_start_addr+i] * (1.0f / (1.0f + exp(-intermediate_res[in1_start_addr+i])));
+        }
     }
     compute_in_progress = false;
     compute_done = true;

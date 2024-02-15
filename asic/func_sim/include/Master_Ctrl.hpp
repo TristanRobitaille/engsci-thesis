@@ -41,6 +41,7 @@ class Master_ctrl {
             ENC_MHSA_POST_V_DENSE_STEP, // Perform the tranpose dense operation for the encoder's MLP
             PRE_LAYERNORM_2_TRANSPOSE_STEP, // Transpose (row to column) for the second half of LayerNorm
             INTRA_LAYERNORM_2_TRANSPOSE_STEP, // Transpose (column to row) for the second half of LayerNorm
+            ENC_MLP_DENSE_1_STEP, // Perform the first dense operation for the encoder's MLP
             INFERENCE_FINISHED
        };
 
@@ -66,13 +67,15 @@ class Master_ctrl {
             EncEmbDepthMat_t enc_mhsa_Q_kernel;
             EncEmbDepthMat_t enc_mhsa_K_kernel;
             EncEmbDepthMat_t enc_mhsa_V_kernel;
-            EncEmbDepthVect_t enc_mhsa_Q_bias;
-            EncEmbDepthVect_t enc_mhsa_K_bias;
-            EncEmbDepthVect_t enc_mhsa_V_bias;
-            EncEmbDepthVect_t enc_mhsa_combine_bias;
+            EmbDepthVect_t enc_mhsa_Q_bias;
+            EmbDepthVect_t enc_mhsa_K_bias;
+            EmbDepthVect_t enc_mhsa_V_bias;
+            EmbDepthVect_t enc_mhsa_combine_bias;
             EncEmbDepthMat_t enc_mhsa_combine_kernel;;
-            EncEmbDepthMat2_t enc_mlp_dense_kernel;
-            EncEmbDepthVect2_t enc_mlp_dense_bias;
+            EncEmbDepthxMlpDimMat_t enc_mlp_1_dense_kernel;
+            MlpDimVect_t enc_mlp_1_dense_bias;
+            EncMlpDimxEmbDepthMat_t enc_mlp_2_dense_kernel;
+            EmbDepthVect_t enc_mlp_2_dense_bias;
             float enc_mhsa_sqrt_num_heads;
         };
 
@@ -88,7 +91,8 @@ class Master_ctrl {
             {ENC_MHSA_POST_V_TRANSPOSE_STEP,    {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 2*EMB_DEPTH+NUM_PATCHES+1,        /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_CIM}},
             {ENC_MHSA_POST_V_DENSE_STEP,        {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1,                    /*tx len*/ EMB_DEPTH,      /*rx addr*/ NUM_PATCHES+1+EMB_DEPTH,        /*num cims*/ NUM_PATCHES+1}},
             {PRE_LAYERNORM_2_TRANSPOSE_STEP,    {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1+EMB_DEPTH,          /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_CIM}},
-            {INTRA_LAYERNORM_2_TRANSPOSE_STEP,  {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1,                    /*tx len*/ EMB_DEPTH,      /*rx addr*/ NUM_PATCHES+1+EMB_DEPTH,        /*num cims*/ NUM_PATCHES+1}}
+            {INTRA_LAYERNORM_2_TRANSPOSE_STEP,  {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1,                    /*tx len*/ EMB_DEPTH,      /*rx addr*/ NUM_PATCHES+1+EMB_DEPTH,        /*num cims*/ NUM_PATCHES+1}},
+            {ENC_MLP_DENSE_1_STEP,              {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1+EMB_DEPTH,          /*tx len*/ EMB_DEPTH,      /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ MLP_DIM}}
         };
 
         const std::map<HIGH_LEVEL_INFERENCE_STEP, int> num_necessary_idles = { // Gives the number of necessary CiM is_idle signals to be high for the master controller to enter the given step
@@ -104,6 +108,7 @@ class Master_ctrl {
             {ENC_MHSA_POST_V_DENSE_STEP,        NUM_PATCHES+1},
             {PRE_LAYERNORM_2_TRANSPOSE_STEP,    EMB_DEPTH},
             {INTRA_LAYERNORM_2_TRANSPOSE_STEP,  NUM_PATCHES+1},
+            {ENC_MLP_DENSE_1_STEP,              EMB_DEPTH},
             {INFERENCE_FINISHED,                EMB_DEPTH},
         };
 
@@ -122,8 +127,6 @@ class Master_ctrl {
 
         // Parameters
         PARAM_NAME params_curr_layer = PATCH_PROJ_KERNEL_PARAMS; // Keeps track of which layer of parameters we are sending
-        int params_cim_cnt = -1; // Keeps track of current CiM to which we send parameters
-        int params_data_cnt = -1; // Keeps track of data element we've sent to current CiM
         struct parameters params;
 
         int load_params_from_h5(const std::string params_filepath);

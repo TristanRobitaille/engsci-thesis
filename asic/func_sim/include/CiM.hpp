@@ -70,7 +70,7 @@ class CiM {
         float DIV(uint16_t num_addr, uint16_t den_addr);
         void LAYERNORM_1ST_HALF(uint16_t input_addr);
         void LAYERNORM_2ND_HALF(uint16_t input_addr, float gamma, float beta);
-        float MAC(uint16_t input_start_addr, uint16_t params_start_addr, uint16_t len, INPUT_TYPE param_type);
+        float MAC(uint16_t input_start_addr, uint16_t params_start_addr, uint16_t len, INPUT_TYPE param_type, ACTIVATION activation);
         void SOFTMAX(uint16_t input_addr, uint16_t len);
 };
 

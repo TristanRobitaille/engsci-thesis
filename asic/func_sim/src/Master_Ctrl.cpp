@@ -42,6 +42,7 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
     case IDLE:
         if (ext_sigs->start_param_load == true) {
             assert(ext_sigs->new_sleep_epoch == false && "ERROR: Both 'start_param_load' and 'new_sleep_epoch' are set simultaneously!");
+            gen_reg_16b = false; // Need to make sure this is false before starting the parameter load
             state = PARAM_LOAD;
             cout << "Starting parameters load" << endl;
         } else if (ext_sigs->new_sleep_epoch == true) { start_signal_load(); }
@@ -54,9 +55,7 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
     case SIGNAL_LOAD:
         /* Sequentially parses the input EEG file and broadcasts it to all CiMs to emulate the ADC feed in the ASIC*/
         if (eeg != eeg_ds.end()) {
-            struct instruction inst = {
-                /*op*/ PATCH_LOAD_BROADCAST_OP,
-                /*target_or_sender*/ 0,
+            struct instruction inst = {/*op*/ PATCH_LOAD_BROADCAST_OP, /*target_or_sender*/ 0,
                 /*data*/ {*eeg,0}, // In ASIC, we would split the 16b into 2x 8b
                 /*extra_field*/ 0
             };
@@ -91,6 +90,7 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
         case ENC_MHSA_POST_V_DENSE_STEP:
         case PRE_LAYERNORM_2_TRANSPOSE_STEP:
         case INTRA_LAYERNORM_2_TRANSPOSE_STEP:
+        case ENC_MLP_DENSE_1_STEP:
             if (all_cims_idle == true) {
                 if (high_level_inf_step == INFERENCE_FINISHED) {
                     sys_state = EVERYTHING_FINISHED;
@@ -141,7 +141,7 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
 
     case INVALID:
     default:
-        cout << "Master controller in an invalid state!\n" << endl;
+        throw invalid_argument("Master controller in an invalid state!");
         break;
     }
 
@@ -160,6 +160,12 @@ struct instruction Master_ctrl::param_to_send(){
     /* Parses the parameter file and returns the instruction that master needs to send to CiM */
     struct instruction inst;
 
+    /* 
+    * Note: gen_reg_16b holds whether we've sent the first CiM of a layer
+    *       gen_cnt_8b() holds number of bytes sent to the current CiM for the current param
+    *       gen_cnt_10b() holds the current CiM we are sending data to for the current param
+    */
+
     // New params layer
     switch (params_curr_layer) {
     case PATCH_PROJ_KERNEL_PARAMS:
@@ -168,58 +174,62 @@ struct instruction Master_ctrl::param_to_send(){
     case ENC_K_DENSE_PARAMS:
     case ENC_V_DENSE_PARAMS:
     case ENC_COMB_HEAD_PARAMS:
-        if ((params_cim_cnt == NUM_CIM-1) && (params_data_cnt >= param_addr_map[params_curr_layer].len)) { // Start new layer
-            params_cim_cnt = -1;
-            params_data_cnt = -1;
-            gen_cnt_8b.reset();
-            params_curr_layer = static_cast<PARAM_NAME> (params_curr_layer+1);
-
-        } else if (params_data_cnt >= param_addr_map[params_curr_layer].len || params_data_cnt == -1) { // Sending to a new CiM
+    case MLP_DENSE_1_PARAMS:
+    case MLP_DENSE_2_PARAMS:
+        if (((gen_reg_16b == false) || (gen_cnt_8b.get_cnt() >= param_addr_map[params_curr_layer].len)) && (gen_cnt_10b.get_cnt() < param_addr_map[params_curr_layer].num_rec)) { // Starting a new CiM (if not done all layers)
             uint16_t addr = param_addr_map[params_curr_layer].addr;
             uint16_t length = param_addr_map[params_curr_layer].len;
             array<float, 2> data = {static_cast<float>(addr), static_cast<float>(length)};
 
-            params_cim_cnt++;
-            inst = {DATA_STREAM_START_OP, /*target_or_sender*/ params_cim_cnt, /*data={start_addr, length_elem}*/ data, /*extra_fields*/ 0};
-            params_data_cnt = 0;
-
-        } else { // Stream data to current CiM
+            inst = {DATA_STREAM_START_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data={start_addr, length_elem}*/ data, /*extra_fields*/ 0};
+            gen_reg_16b = true;
+            gen_cnt_8b.reset();
+        } else if (gen_cnt_8b.get_cnt() < param_addr_map[params_curr_layer].len) { // Sending data to a CiM
             inst.op = DATA_STREAM_OP;
-            inst.target_or_sender = params_cim_cnt;
+            inst.target_or_sender = gen_cnt_10b.get_cnt();
             update_inst_with_params(params_curr_layer, &inst);
-            params_data_cnt = params_data_cnt + 3; // Increment by 3 since we send 3 bytes per transaction
+            gen_cnt_8b.inc(3); // Increment by 3 since we send 3 bytes per transaction
+            if (gen_cnt_8b.get_cnt() >= param_addr_map[params_curr_layer].len) { gen_cnt_10b.inc(); } // Increment number of CiM we've sent data to as we've now sent all the data to the current CiM
+        } else if ((gen_cnt_10b.get_cnt() == param_addr_map[params_curr_layer].num_rec) && (gen_cnt_8b.get_cnt() >= param_addr_map[params_curr_layer].len)) { // Need to start a new param layer
+            gen_cnt_10b.reset(); // Holds number of CiMs we've sent data to for the current param
+            gen_cnt_8b.reset(); // Holds number of bytes we've sent to the current CiM for the current param
+            params_curr_layer = static_cast<PARAM_NAME> (params_curr_layer+1);
+            gen_reg_16b = false;
+        } else { // Shouldn't get here
+            cout << "ERROR: Got into invalid state while sending parameters! Exiting." << endl;
+            exit(-1);
         }
         break;
-
     case SINGLE_PARAMS:
-        if ((params_cim_cnt < NUM_CIM) && (gen_cnt_8b.get_cnt() == 0)) {
+        if ((gen_cnt_10b.get_cnt() < param_addr_map[params_curr_layer].num_rec) && (gen_cnt_8b.get_cnt() == 0)) {
             uint16_t addr = param_addr_map[params_curr_layer].addr;
             uint16_t length = param_addr_map[params_curr_layer].len;
             std::array<float, 2> data = {static_cast<float>(addr), static_cast<float>(length)};
-            inst = {DATA_STREAM_START_OP, /*target_or_sender*/ params_cim_cnt, /*data={start_addr, length_elem}*/ data, /*extra_fields*/ 0};
+            inst = {DATA_STREAM_START_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data={start_addr, length_elem}*/ data, /*extra_fields*/ 0};
             gen_cnt_8b.inc(); // Use as indication that next time this runs, we go to the else if () below
 
-        } else if (params_cim_cnt < NUM_CIM){
+        } else if (gen_cnt_10b.get_cnt() < param_addr_map[params_curr_layer].num_rec){
             // TODO: Incomplete
             if (gen_cnt_8b.get_cnt() == 1) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ params_cim_cnt, /*data*/ {params.patch_proj_bias[params_cim_cnt], params.class_emb[params_cim_cnt]}, /*extra_fields*/ params.enc_layernorm_gamma[0][params_cim_cnt]};
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.patch_proj_bias[gen_cnt_10b.get_cnt()], params.class_emb[gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.enc_layernorm_gamma[0][gen_cnt_10b.get_cnt()]};
                 gen_cnt_8b.inc();
             } else if (gen_cnt_8b.get_cnt() == 2) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ params_cim_cnt, /*data*/ {params.enc_layernorm_beta[0][params_cim_cnt], params.enc_mhsa_Q_bias[params_cim_cnt]}, /*extra_fields*/ params.enc_mhsa_K_bias[params_cim_cnt]};
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.enc_layernorm_beta[0][gen_cnt_10b.get_cnt()], params.enc_mhsa_Q_bias[gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.enc_mhsa_K_bias[gen_cnt_10b.get_cnt()]};
                 gen_cnt_8b.inc();
             } else if (gen_cnt_8b.get_cnt() == 3) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ params_cim_cnt, /*data*/ {params.enc_mhsa_V_bias[params_cim_cnt], params.enc_mhsa_sqrt_num_heads}, /*extra_fields*/ 0};
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.enc_mhsa_V_bias[gen_cnt_10b.get_cnt()], params.enc_mhsa_combine_bias[gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.enc_layernorm_gamma[1][gen_cnt_10b.get_cnt()]};
+                gen_cnt_8b.inc();
+            } else if (gen_cnt_8b.get_cnt() == 4) {
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.enc_layernorm_beta[1][gen_cnt_10b.get_cnt()], params.enc_mlp_1_dense_bias[gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.enc_mlp_1_dense_bias[gen_cnt_10b.get_cnt()]};
                 gen_cnt_8b.reset();
-                params_cim_cnt++;
+                gen_cnt_10b.inc();
             }
         } else {
-            params_cim_cnt = -1;
-            params_data_cnt = -1;
+            gen_cnt_10b.reset();
             gen_cnt_8b.reset();
             params_curr_layer = static_cast<PARAM_NAME> (params_curr_layer+1);
         }
         break;
-
     case PARAM_LOAD_FINISHED:
     default:
         state = IDLE;
@@ -261,43 +271,54 @@ int Master_ctrl::load_params_from_h5(const std::string params_filepath) {
     params.enc_mhsa_sqrt_num_heads = static_cast<float>(sqrt(NUM_HEADS));
 
     // MLP
-    params.enc_mlp_dense_kernel[0] = enc.getGroup("mlp_dense1_encoder").getDataSet("kernel:0").read<EncEmbDepthMat_t>();
-    params.enc_mlp_dense_bias[0] = enc.getGroup("mlp_dense1_encoder").getDataSet("bias:0").read<EmbDepthVect_t>();
-    params.enc_mlp_dense_kernel[1] = enc.getGroup("mlp_dense2_encoder").getDataSet("kernel:0").read<EncEmbDepthMat_t>();
-    params.enc_mlp_dense_bias[1] = enc.getGroup("mlp_dense2_encoder").getDataSet("bias:0").read<EmbDepthVect_t>();
+    params.enc_mlp_1_dense_kernel = enc.getGroup("mlp_dense1_encoder").getDataSet("kernel:0").read<EncEmbDepthxMlpDimMat_t>();
+    params.enc_mlp_1_dense_bias = enc.getGroup("mlp_dense1_encoder").getDataSet("bias:0").read<MlpDimVect_t>();
+    params.enc_mlp_2_dense_kernel = enc.getGroup("mlp_dense2_encoder").getDataSet("kernel:0").read<EncMlpDimxEmbDepthMat_t>();
+    params.enc_mlp_2_dense_bias = enc.getGroup("mlp_dense2_encoder").getDataSet("bias:0").read<EmbDepthVect_t>();
 
     return 0;
 }
 
 void Master_ctrl::update_inst_with_params(PARAM_NAME param_name, struct instruction* inst) {
-    /* Returns the parameters loaded from the .h5 file corresponding to the passed name */
+    /* Returns the parameters loaded from the .h5 file corresponding to the passed name 
+    *  Note: gen_cnt_8b() holds number of bytes sent to the current CiM for the current param
+    *        gen_cnt_10b() holds the current CiM we are sending data to for the current param
+    */
 
-    int num_left = (param_addr_map[param_name].len-params_data_cnt-1);
+    int num_left = (param_addr_map[param_name].len-gen_cnt_8b.get_cnt()-1);
 
     switch (param_name) {
     case PATCH_PROJ_KERNEL_PARAMS:
-        inst->data = {params.patch_proj_kernel[params_data_cnt][params_cim_cnt], (num_left <= 2) ? (0) : (params.patch_proj_kernel[params_data_cnt+1][params_cim_cnt])};
-        inst->extra_fields = (num_left <= 1) ? (0) : params.patch_proj_kernel[params_data_cnt+2][params_cim_cnt];
+        inst->data = {params.patch_proj_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.patch_proj_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+        inst->extra_fields = (num_left <= 1) ? (0) : params.patch_proj_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
         break;
     case POS_EMB_PARAMS:
-        inst->data = {params.pos_emb[params_data_cnt][params_cim_cnt], (num_left <= 2) ? (0) : (params.pos_emb[params_data_cnt+1][params_cim_cnt])};
-        inst->extra_fields = (num_left <= 1) ? (0) : params.pos_emb[params_data_cnt+2][params_cim_cnt];
+        inst->data = {params.pos_emb[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.pos_emb[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+        inst->extra_fields = (num_left <= 1) ? (0) : params.pos_emb[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
         break;
     case ENC_Q_DENSE_PARAMS:
-        inst->data = {params.enc_mhsa_Q_kernel[params_data_cnt][params_cim_cnt], (num_left <= 2) ? (0) : (params.enc_mhsa_Q_kernel[params_data_cnt+1][params_cim_cnt])};
-        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_Q_kernel[params_data_cnt+2][params_cim_cnt];
+        inst->data = {params.enc_mhsa_Q_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.enc_mhsa_Q_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_Q_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
         break;
     case ENC_K_DENSE_PARAMS:
-        inst->data = {params.enc_mhsa_K_kernel[params_data_cnt][params_cim_cnt], (num_left <= 2) ? (0) : (params.enc_mhsa_K_kernel[params_data_cnt+1][params_cim_cnt])};
-        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_K_kernel[params_data_cnt+2][params_cim_cnt];
+        inst->data = {params.enc_mhsa_K_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.enc_mhsa_K_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_K_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
         break;
     case ENC_V_DENSE_PARAMS:
-        inst->data = {params.enc_mhsa_V_kernel[params_data_cnt][params_cim_cnt], (num_left <= 2) ? (0) : (params.enc_mhsa_V_kernel[params_data_cnt+1][params_cim_cnt])};
-        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_V_kernel[params_data_cnt+2][params_cim_cnt];
+        inst->data = {params.enc_mhsa_V_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.enc_mhsa_V_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_V_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
         break;
     case ENC_COMB_HEAD_PARAMS:
-        inst->data = {params.enc_mhsa_combine_kernel[params_data_cnt][params_cim_cnt], (num_left <= 2) ? (0) : (params.enc_mhsa_combine_kernel[params_data_cnt+1][params_cim_cnt])};
-        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_combine_kernel[params_data_cnt+2][params_cim_cnt];
+        inst->data = {params.enc_mhsa_combine_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.enc_mhsa_combine_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_combine_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
+        break;
+    case MLP_DENSE_1_PARAMS:
+        inst->data = {params.enc_mlp_1_dense_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.enc_mlp_1_dense_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mlp_1_dense_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
+        break;
+    case MLP_DENSE_2_PARAMS:
+        inst->data = {params.enc_mlp_2_dense_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.enc_mlp_2_dense_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mlp_2_dense_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
         break;
     default:
         throw invalid_argument("Invalid parameter name");
@@ -308,7 +329,6 @@ int Master_ctrl::prepare_for_broadcast(broadcast_op_info op_info, Bus* bus) {
     /* Prepares the master controller for a broadcast operation */
     struct instruction inst = {op_info.op, /*target_or_sender*/ 0, {op_info.tx_addr, op_info.len}, op_info.rx_addr};
     state = BROADCAST_MANAGEMENT;
-    bus->push_inst(inst);
     gen_reg_16b = NUM_TRANS(op_info.len); // Holds the number of transactions each CiM will send (3 elements per transaction)
     gen_reg_16b_2 = op_info.num_cims; // Number of CiMs that will need to send data
     gen_cnt_8b.reset(); // Count CiMs
@@ -322,5 +342,7 @@ int Master_ctrl::prepare_for_broadcast(broadcast_op_info op_info, Bus* bus) {
         inst.data[0] = op_info.tx_addr + gen_reg_16b_3*(NUM_PATCHES+1); // tx addr
         gen_reg_16b_3++;
     }
+
+    bus->push_inst(inst);
     return 0;
 }

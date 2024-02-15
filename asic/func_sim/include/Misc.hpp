@@ -5,9 +5,10 @@
 
 /*----- DEFINE -----*/
 #define NUM_CIM 64
-#define PATCH_LENGTH_NUM_SAMPLES 64
+#define PATCH_LEN 64 // Patch length (in number of samples)
 #define NUM_PATCHES 60
 #define EMB_DEPTH 64
+#define MLP_DIM 32
 #define NUM_HEADS 8
 #define LAYERNORM_EPSILON 0.000001f // 1e-6
 
@@ -32,6 +33,11 @@ enum OP {
 enum SYSTEM_STATE {
     RUNNING,
     EVERYTHING_FINISHED
+};
+
+enum ACTIVATION {
+    LINEAR,
+    SWISH
 };
 
 enum INPUT_TYPE { // Type of input for a given computation
@@ -59,21 +65,25 @@ struct ext_signals {
 /* Counter with overflow behaviour and reset */
 class Counter {
     private:
-        uint8_t width;
+        uint16_t width;
         int val;
+        int max_val_seen; // Keep track of the maximum value seen by the counter to determine the number of bits needed to represent the counter
     public:
-        Counter(int width) : width(width), val(0) {}
+        Counter(int width) : width(width), val(0), max_val_seen(0) {}
         int inc(int increment=1) {
             val = val + increment;
             if (val >= (1 << width)) {
+                std::cout << "Counter overflow (width: " << width << ")!" << std::endl;
                 val &= (1 << width) - 1; // Wrap within width using bitwise AND
             }
+            if (val > max_val_seen) { max_val_seen = val; }
             return val;
         }
 
         int dec(int decrement=1) {
             val = val - decrement;
             if (val < 0) {
+                std::cout << "Counter underflow (width: " << width << "!\n" << std::endl;
                 val = (1 << width) + val; // Wrap around
             }
             return val;
@@ -98,6 +108,7 @@ class Bus {
         struct instruction inst;
         std::queue<struct instruction> q;
         uint32_t _num_transpose_data_op_sent = 0; // Used to track the number of transpose data ops (for debugging purposes)
+        uint32_t _num_dense_broadcast_data_op_sent = 0; // Used to track the number of dense transpose data ops (for debugging purposes)
 
     public:
         struct instruction get_inst() { return inst; };
@@ -121,6 +132,7 @@ class Bus {
                 inst = q.front();
                 q.pop();
                 if (inst.op == TRANS_BROADCAST_DATA_OP) { _num_transpose_data_op_sent++; }
+                if (inst.op == DENSE_BROADCAST_DATA_OP) { _num_dense_broadcast_data_op_sent++; }
             }
             return 0;
         };
