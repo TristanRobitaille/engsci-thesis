@@ -91,7 +91,7 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
         case PRE_LAYERNORM_2_TRANSPOSE_STEP:
         case INTRA_LAYERNORM_2_TRANSPOSE_STEP:
         case ENC_MLP_DENSE_1_STEP:
-        case ENC_MLP_DENSE_2_STEP:
+        case ENC_MLP_DENSE_2_AND_SUM_STEP:
             if (all_cims_idle == true) {
                 if (high_level_inf_step == INFERENCE_FINISHED) {
                     sys_state = EVERYTHING_FINISHED;
