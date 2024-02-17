@@ -68,7 +68,7 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
         }
         break;
 
-    case WAITING_FOR_CIM_COMPLETION:
+    case WAITING_FOR_CIM_COMPLETION: // TODO: How to handle mlp head dense, where it is CiMs 32-63 that are used?
         if (all_cims_idle == true) {
             struct instruction inst = {/*op*/ PISTOL_START_OP, /*target_or_sender*/ 0, /*data*/ {0,0}, /*extra_fields*/ 0}; // Tell CiMs that they can go to the next step
             bus->push_inst(inst);
@@ -94,6 +94,7 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
         case ENC_MLP_DENSE_2_AND_SUM_STEP:
         case PRE_LAYERNORM_3_TRANSPOSE_STEP:
         case INTRA_LAYERNORM_3_TRANSPOSE_STEP:
+        case MLP_HEAD_DENSE_1_STEP:
         case INFERENCE_FINISHED:
             if (all_cims_idle == true) {
                 if (high_level_inf_step == INFERENCE_FINISHED) {
@@ -178,8 +179,8 @@ struct instruction Master_ctrl::param_to_send(){
     case ENC_K_DENSE_PARAMS:
     case ENC_V_DENSE_PARAMS:
     case ENC_COMB_HEAD_PARAMS:
-    case MLP_DENSE_1_PARAMS:
-    case MLP_DENSE_2_PARAMS:
+    case ENC_MLP_DENSE_2_PARAMS:
+    case ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS:
         if (((gen_reg_16b == false) || (gen_cnt_8b.get_cnt() >= param_addr_map[params_curr_layer].len)) && (gen_cnt_10b.get_cnt() < param_addr_map[params_curr_layer].num_rec)) { // Starting a new CiM (if not done all layers)
             uint16_t addr = param_addr_map[params_curr_layer].addr;
             uint16_t length = param_addr_map[params_curr_layer].len;
@@ -224,10 +225,12 @@ struct instruction Master_ctrl::param_to_send(){
                 inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.enc_mhsa_V_bias[gen_cnt_10b.get_cnt()], params.enc_mhsa_sqrt_num_heads}, /*extra_fields*/ params.enc_mhsa_combine_bias[gen_cnt_10b.get_cnt()]};
                 gen_cnt_8b.inc();
             } else if (gen_cnt_8b.get_cnt() == 4) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.layernorm_gamma[1][gen_cnt_10b.get_cnt()], params.layernorm_beta[1][gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.enc_mlp_1_dense_bias[gen_cnt_10b.get_cnt()]};
+                // Note: CiM's 0-31 receive bias for the encoder's MLP and CiM's 32-63 receive bias for the MLP head
+                if (gen_cnt_10b.get_cnt() < MLP_DIM) { inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.layernorm_gamma[1][gen_cnt_10b.get_cnt()], params.layernorm_beta[1][gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.enc_mlp_dense_1_bias[gen_cnt_10b.get_cnt()]}; }
+                else {                                 inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.layernorm_gamma[1][gen_cnt_10b.get_cnt()], params.layernorm_beta[1][gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.mlp_head_dense_1_bias[gen_cnt_10b.get_cnt()-MLP_DIM]}; }
                 gen_cnt_8b.inc();
             } else if (gen_cnt_8b.get_cnt() == 5) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.enc_mlp_2_dense_bias[gen_cnt_10b.get_cnt()], params.layernorm_gamma[2][gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.layernorm_beta[2][gen_cnt_10b.get_cnt()]};
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.enc_mlp_dense_2_bias[gen_cnt_10b.get_cnt()], params.layernorm_gamma[2][gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.layernorm_beta[2][gen_cnt_10b.get_cnt()]};
                 gen_cnt_8b.reset();
                 gen_cnt_10b.inc();
             }
@@ -265,8 +268,6 @@ int Master_ctrl::load_params_from_h5(const std::string params_filepath) {
     params.layernorm_gamma[0] = enc.getGroup("vision_transformer").getGroup("encoder").getGroup("layerNorm1_encoder").getDataSet("gamma:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 1
     params.layernorm_beta[1] = enc.getGroup("vision_transformer").getGroup("encoder").getGroup("layerNorm2_encoder").getDataSet("beta:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 2
     params.layernorm_gamma[1] = enc.getGroup("vision_transformer").getGroup("encoder").getGroup("layerNorm2_encoder").getDataSet("gamma:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 2
-    params.layernorm_beta[2] = file.getGroup("mlp_head").getGroup("mlp_head_layerNorm").getDataSet("beta:0").read<EmbDepthVect_t>(); // MLP head's LayerNorm 1
-    params.layernorm_gamma[2] = file.getGroup("mlp_head").getGroup("mlp_head_layerNorm").getDataSet("gamma:0").read<EmbDepthVect_t>(); // MLP head's LayerNorm 1
 
     // MHSA
     params.enc_mhsa_Q_kernel = enc.getGroup("mhsa_query_dense").getDataSet("kernel:0").read<EncEmbDepthMat_t>();
@@ -280,10 +281,16 @@ int Master_ctrl::load_params_from_h5(const std::string params_filepath) {
     params.enc_mhsa_sqrt_num_heads = static_cast<float>(sqrt(NUM_HEADS));
 
     // MLP
-    params.enc_mlp_1_dense_kernel = enc.getGroup("mlp_dense1_encoder").getDataSet("kernel:0").read<EncEmbDepthxMlpDimMat_t>();
-    params.enc_mlp_1_dense_bias = enc.getGroup("mlp_dense1_encoder").getDataSet("bias:0").read<MlpDimVect_t>();
-    params.enc_mlp_2_dense_kernel = enc.getGroup("mlp_dense2_encoder").getDataSet("kernel:0").read<EncMlpDimxEmbDepthMat_t>();
-    params.enc_mlp_2_dense_bias = enc.getGroup("mlp_dense2_encoder").getDataSet("bias:0").read<EmbDepthVect_t>();
+    params.enc_mlp_dense_1_kernel = enc.getGroup("mlp_dense1_encoder").getDataSet("kernel:0").read<EmbDepthxMlpDimMat_t>();
+    params.enc_mlp_dense_1_bias = enc.getGroup("mlp_dense1_encoder").getDataSet("bias:0").read<MlpDimVect_t>();
+    params.enc_mlp_dense_2_kernel = enc.getGroup("mlp_dense2_encoder").getDataSet("kernel:0").read<EncMlpDimxEmbDepthMat_t>();
+    params.enc_mlp_dense_2_bias = enc.getGroup("mlp_dense2_encoder").getDataSet("bias:0").read<EmbDepthVect_t>();
+
+    // MLP head
+    params.layernorm_beta[2] = file.getGroup("mlp_head").getGroup("mlp_head_layerNorm").getDataSet("beta:0").read<EmbDepthVect_t>(); // MLP head's LayerNorm 1
+    params.layernorm_gamma[2] = file.getGroup("mlp_head").getGroup("mlp_head_layerNorm").getDataSet("gamma:0").read<EmbDepthVect_t>(); // MLP head's LayerNorm 1
+    params.mlp_head_dense_1_kernel = file.getGroup("mlp_head").getGroup("mlp_head_dense1").getDataSet("kernel:0").read<EmbDepthxMlpDimMat_t>();
+    params.mlp_head_dense_1_bias = file.getGroup("mlp_head").getGroup("mlp_head_dense1").getDataSet("bias:0").read<MlpDimVect_t>();
 
     return 0;
 }
@@ -321,13 +328,18 @@ void Master_ctrl::update_inst_with_params(PARAM_NAME param_name, struct instruct
         inst->data = {params.enc_mhsa_combine_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.enc_mhsa_combine_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
         inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_combine_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
         break;
-    case MLP_DENSE_1_PARAMS:
-        inst->data = {params.enc_mlp_1_dense_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.enc_mlp_1_dense_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
-        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mlp_1_dense_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
+    case ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS:
+        if (gen_cnt_10b.get_cnt() < MLP_DIM) { // Encoder's MLP (onyl CiMs 0-31 receive bias for the encoder's MLP and CiM's 32-63 receive bias for the MLP head)
+            inst->data = {params.enc_mlp_dense_1_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.enc_mlp_dense_1_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+            inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mlp_dense_1_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
+        } else { // MLP head (only 1 layer)
+            inst->data = {params.mlp_head_dense_1_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()-MLP_DIM], (num_left <= 2) ? (0) : (params.mlp_head_dense_1_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()-MLP_DIM])};
+            inst->extra_fields = (num_left <= 1) ? (0) : params.mlp_head_dense_1_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()-MLP_DIM];
+        }
         break;
-    case MLP_DENSE_2_PARAMS:
-        inst->data = {params.enc_mlp_2_dense_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.enc_mlp_2_dense_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
-        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mlp_2_dense_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
+    case ENC_MLP_DENSE_2_PARAMS:
+        inst->data = {params.enc_mlp_dense_2_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.enc_mlp_dense_2_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mlp_dense_2_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
         break;
     default:
         throw invalid_argument("Invalid parameter name");

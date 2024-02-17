@@ -219,7 +219,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             if (inst.op == PISTOL_START_OP) {
                 if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) { current_inf_step = POST_LAYERNORM_TRANSPOSE_STEP; }
                 else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) { current_inf_step = MLP_DENSE_1_STEP; }
-                else if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) { current_inf_step = INVALID_INF_STEP; }
+                else if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) { current_inf_step = MLP_HEAD_DENSE_1_STEP; }
                 gen_reg_16b = 0;
                 if (id == 0) { cout << "CiM: Finished LayerNorm (2nd half)" << endl; }
             }
@@ -238,6 +238,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case ENC_MHSA_DENSE:
         case MLP_DENSE_1_STEP:
         case MLP_DENSE_2_AND_SUM_STEP:
+        case MLP_HEAD_DENSE_1_STEP:
             if (bytes_rec_cnt.get_cnt() >= EMB_DEPTH) { // No more data to receive for this broadcast, start MACs
                 if ((compute_in_progress == false) && (current_inf_step == ENC_MHSA_DENSE)) {
                     float result = MAC(NUM_PATCHES+1+EMB_DEPTH, 128, EMB_DEPTH, MODEL_PARAM, LINEAR);
@@ -246,17 +247,20 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     intermediate_res[250+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_K_DENSE_BIAS_0FF]; // K
                     result = MAC(NUM_PATCHES+1+EMB_DEPTH, 256, EMB_DEPTH, MODEL_PARAM, LINEAR);
                     intermediate_res[NUM_PATCHES+1+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_V_DENSE_BIAS_0FF]; // V
-                } else if ((compute_in_progress == false) && (current_inf_step == MLP_DENSE_1_STEP) && (id < MLP_DIM)) { // Only MLP_DIM number of CiMs will perform this computation
+                } else if ((compute_in_progress == false) && (current_inf_step == MLP_DENSE_1_STEP) && (id < MLP_DIM)) { // Only least significant MLP_DIM number of CiMs will perform this computation
                     float result = MAC(NUM_PATCHES+1, 384, EMB_DEPTH, MODEL_PARAM, SWISH);
-                    intermediate_res[190+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_1_BIAS_OFF]; // MLP Dense 1
+                    intermediate_res[190+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_1_MLP_HEAD_DENSE_1_BIAS_OFF]; // MLP Dense 1
+                } else if ((compute_in_progress == false) && (current_inf_step == MLP_HEAD_DENSE_1_STEP) && (id >= MLP_DIM)) { // Only most significant MLP_DIM number of CiMs will perform this computation
+                    float result = MAC(0, 384, EMB_DEPTH, MODEL_PARAM, SWISH);
+                    intermediate_res[125+inst.target_or_sender] = result + params[param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_1_MLP_HEAD_DENSE_1_BIAS_OFF]; // MLP Dense 2
                 }
                 gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
                 bytes_rec_cnt.reset();
-            } else if (bytes_rec_cnt.get_cnt() >= MLP_DIM) { // No more data to receive for this broadcast (for MLP's dense #2), start MACs
+            } else if ((bytes_rec_cnt.get_cnt() >= MLP_DIM) && (current_inf_step == MLP_DENSE_2_AND_SUM_STEP)) { // No more data to receive for this broadcast (for MLP's dense #2), start MACs
                 if (compute_in_progress) {
-                    float result = MAC(NUM_PATCHES+1, 384, EMB_DEPTH, MODEL_PARAM, SWISH);
+                    float result = MAC(NUM_PATCHES+1, 448, MLP_DIM, MODEL_PARAM, SWISH);
                     float enc_input = intermediate_res[inst.target_or_sender];
-                    result += params[param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_1_BIAS_OFF]; // MLP Dense 2
+                    result += params[param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_2_BIAS_OFF]; // MLP Dense 2
                     result += enc_input; // Sum with encoder's input (next step in inference pipeline, but do it now to avoid retrieving from intermediate storage)
                     intermediate_res[190+inst.target_or_sender] = result;
                 }
@@ -267,6 +271,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 if ((id == 0) && (gen_cnt_10b_2.get_cnt() == EMB_DEPTH) && (current_inf_step == ENC_MHSA_DENSE)) { cout << "CiM: Finished encoder's MHSA Q/K/V Dense" << endl; }
                 else if ((id == 0) && (gen_cnt_10b_2.get_cnt() == MLP_DIM) && (current_inf_step == MLP_DENSE_1_STEP)) { cout << "CiM: Finished MLP Dense 1" << endl; }
                 else if ((id == 0) && (gen_cnt_10b_2.get_cnt() == EMB_DEPTH) && (current_inf_step == MLP_DENSE_2_AND_SUM_STEP)) { cout << "CiM: Finished MLP Dense 2" << endl; }
+                else if ((id == 0) && (gen_cnt_10b_2.get_cnt() == EMB_DEPTH) && (current_inf_step == MLP_HEAD_DENSE_1_STEP)) { cout << "CiM: Finished MLP head's Dense 1" << endl; }
                 is_idle = true;
             } else { // Still collecting data
                 is_idle = false;

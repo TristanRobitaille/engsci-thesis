@@ -43,6 +43,7 @@ class CiM {
             ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP,
             MLP_DENSE_1_STEP,
             MLP_DENSE_2_AND_SUM_STEP,
+            MLP_HEAD_DENSE_1_STEP,
             INVALID_INF_STEP = -1
         };
 

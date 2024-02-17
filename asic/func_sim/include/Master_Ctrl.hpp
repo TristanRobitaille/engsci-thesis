@@ -45,6 +45,7 @@ class Master_ctrl {
             ENC_MLP_DENSE_2_AND_SUM_STEP, // Perform the second dense operation for the encoder's MLP and the sum with the encoder's input (residual connection)
             PRE_LAYERNORM_3_TRANSPOSE_STEP, // Transpose (row to column) for the first half of LayerNorm 3
             INTRA_LAYERNORM_3_TRANSPOSE_STEP, // Transpose (column to row) for the second half of LayerNorm 3 and final normalization with gamma/beta
+            MLP_HEAD_DENSE_1_STEP, // Perform the first dense operation for the MLP head
             INFERENCE_FINISHED
        };
 
@@ -53,7 +54,7 @@ class Master_ctrl {
             float tx_addr;
             float len;
             float rx_addr;
-            uint16_t num_cims;
+            uint16_t num_cims; // Number of CiMs that will need to send data
         };
 
         struct parameters {
@@ -65,8 +66,8 @@ class Master_ctrl {
             PosEmb_t pos_emb; // Positional embeddding
 
             // Encoders
-            EncEmbDepthVect3_t layernorm_gamma;
-            EncEmbDepthVect3_t layernorm_beta;
+            EncEmbDepthVect3_t layernorm_gamma; // Includes MLP head's LayerNorm
+            EncEmbDepthVect3_t layernorm_beta; // Includes MLP head's LayerNorm
             EncEmbDepthMat_t enc_mhsa_Q_kernel;
             EncEmbDepthMat_t enc_mhsa_K_kernel;
             EncEmbDepthMat_t enc_mhsa_V_kernel;
@@ -75,11 +76,15 @@ class Master_ctrl {
             EmbDepthVect_t enc_mhsa_V_bias;
             EmbDepthVect_t enc_mhsa_combine_bias;
             EncEmbDepthMat_t enc_mhsa_combine_kernel;;
-            EncEmbDepthxMlpDimMat_t enc_mlp_1_dense_kernel;
-            MlpDimVect_t enc_mlp_1_dense_bias;
-            EncMlpDimxEmbDepthMat_t enc_mlp_2_dense_kernel;
-            EmbDepthVect_t enc_mlp_2_dense_bias;
+            EmbDepthxMlpDimMat_t enc_mlp_dense_1_kernel;
+            MlpDimVect_t enc_mlp_dense_1_bias;
+            EncMlpDimxEmbDepthMat_t enc_mlp_dense_2_kernel;
+            EmbDepthVect_t enc_mlp_dense_2_bias;
             float enc_mhsa_sqrt_num_heads;
+
+            // MLP head
+            MlpDimVect_t mlp_head_dense_1_bias;
+            EmbDepthxMlpDimMat_t mlp_head_dense_1_kernel;
         };
 
         const std::map<HIGH_LEVEL_INFERENCE_STEP, broadcast_op_info> broadcast_ops = {
@@ -98,7 +103,8 @@ class Master_ctrl {
             {ENC_MLP_DENSE_1_STEP,              {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1+EMB_DEPTH,          /*tx len*/ EMB_DEPTH,      /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ MLP_DIM}},
             {ENC_MLP_DENSE_2_AND_SUM_STEP,      {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1,                    /*tx len*/ MLP_DIM,        /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_PATCHES+1}},
             {PRE_LAYERNORM_3_TRANSPOSE_STEP,    {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 2*EMB_DEPTH+NUM_PATCHES+1,        /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ 0,                              /*num cims*/ NUM_CIM}},
-            {INTRA_LAYERNORM_3_TRANSPOSE_STEP,  {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 0,                                /*tx len*/ EMB_DEPTH,      /*rx addr*/ EMB_DEPTH,                      /*num cims*/ NUM_PATCHES+1}}
+            {INTRA_LAYERNORM_3_TRANSPOSE_STEP,  {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 0,                                /*tx len*/ EMB_DEPTH,      /*rx addr*/ EMB_DEPTH,                      /*num cims*/ NUM_PATCHES+1}},
+            {MLP_HEAD_DENSE_1_STEP,             {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ 0,                                /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_CIM}}
         };
 
         const std::map<HIGH_LEVEL_INFERENCE_STEP, int> num_necessary_idles = { // Gives the number of necessary CiM is_idle signals to be high for the master controller to enter the given step
@@ -118,6 +124,7 @@ class Master_ctrl {
             {ENC_MLP_DENSE_2_AND_SUM_STEP,      MLP_DIM},
             {PRE_LAYERNORM_3_TRANSPOSE_STEP,    EMB_DEPTH},
             {INTRA_LAYERNORM_3_TRANSPOSE_STEP,  NUM_PATCHES+1},
+            {MLP_HEAD_DENSE_1_STEP,             EMB_DEPTH},
             {INFERENCE_FINISHED,                EMB_DEPTH},
         };
 
