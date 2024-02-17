@@ -16,6 +16,18 @@
 /*----- CLASS -----*/
 class CiM {
     private:
+        enum ACTIVATION {
+            NO_ACTIVATION, // Used for simple matrix multiplies
+            LINEAR_ACTIVATION,
+            SWISH_ACTIVATION,
+            SOFTMAX_ACTIVATION
+        };
+
+        enum INPUT_TYPE { // Type of input for a given computation
+            MODEL_PARAM,
+            INTERMEDIATE_RES
+        };
+
         enum STATE {
             IDLE_CIM,
             RESET_CIM,
@@ -44,6 +56,10 @@ class CiM {
             MLP_DENSE_1_STEP,
             MLP_DENSE_2_AND_SUM_STEP,
             MLP_HEAD_DENSE_1_STEP,
+            MLP_HEAD_DENSE_2_STEP,
+            MLP_HEAD_PRE_SOFTMAX_TRANSPOSE_STEP,
+            MLP_HEAD_SOFTMAX_STEP,
+            INFERENCE_COMPLETE,
             INVALID_INF_STEP = -1
         };
 
@@ -74,7 +90,7 @@ class CiM {
         float DIV(uint16_t num_addr, uint16_t den_addr);
         void LAYERNORM_1ST_HALF(uint16_t input_addr);
         void LAYERNORM_2ND_HALF(uint16_t input_addr, float gamma, float beta);
-        float MAC(uint16_t input_start_addr, uint16_t params_start_addr, uint16_t len, INPUT_TYPE param_type, ACTIVATION activation);
+        float MAC(uint16_t in1_start_addr, uint16_t in2_start_addr, uint16_t len, uint16_t bias_addr, INPUT_TYPE param_type, ACTIVATION activation);
         void SOFTMAX(uint16_t input_addr, uint16_t len);
 };
 

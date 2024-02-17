@@ -46,6 +46,8 @@ class Master_ctrl {
             PRE_LAYERNORM_3_TRANSPOSE_STEP, // Transpose (row to column) for the first half of LayerNorm 3
             INTRA_LAYERNORM_3_TRANSPOSE_STEP, // Transpose (column to row) for the second half of LayerNorm 3 and final normalization with gamma/beta
             MLP_HEAD_DENSE_1_STEP, // Perform the first dense operation for the MLP head
+            MLP_HEAD_DENSE_2_STEP, // Final softmax operation for the MLP head
+            MLP_HEAD_SOFTMAX_TRANSPOSE_STEP, // Transpose (row to column) for the final softmax operation to be done on CiM #0
             INFERENCE_FINISHED
        };
 
@@ -85,6 +87,8 @@ class Master_ctrl {
             // MLP head
             MlpDimVect_t mlp_head_dense_1_bias;
             EmbDepthxMlpDimMat_t mlp_head_dense_1_kernel;
+            NumSleepStagesxMlpDimMat_t mlp_head_dense_2_kernel;
+            NumSleepStagesVect_t mlp_head_dense_2_bias;
         };
 
         const std::map<HIGH_LEVEL_INFERENCE_STEP, broadcast_op_info> broadcast_ops = {
@@ -101,10 +105,12 @@ class Master_ctrl {
             {PRE_LAYERNORM_2_TRANSPOSE_STEP,    {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1+EMB_DEPTH,          /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_CIM}},
             {INTRA_LAYERNORM_2_TRANSPOSE_STEP,  {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1,                    /*tx len*/ EMB_DEPTH,      /*rx addr*/ NUM_PATCHES+1+EMB_DEPTH,        /*num cims*/ NUM_PATCHES+1}},
             {ENC_MLP_DENSE_1_STEP,              {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1+EMB_DEPTH,          /*tx len*/ EMB_DEPTH,      /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ MLP_DIM}},
-            {ENC_MLP_DENSE_2_AND_SUM_STEP,      {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1,                    /*tx len*/ MLP_DIM,        /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_PATCHES+1}},
-            {PRE_LAYERNORM_3_TRANSPOSE_STEP,    {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 2*EMB_DEPTH+NUM_PATCHES+1,        /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ 0,                              /*num cims*/ NUM_CIM}},
-            {INTRA_LAYERNORM_3_TRANSPOSE_STEP,  {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 0,                                /*tx len*/ EMB_DEPTH,      /*rx addr*/ EMB_DEPTH,                      /*num cims*/ NUM_PATCHES+1}},
-            {MLP_HEAD_DENSE_1_STEP,             {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ 0,                                /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_CIM}}
+            {ENC_MLP_DENSE_2_AND_SUM_STEP,      {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1,                    /*tx len*/ MLP_DIM,        /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ 1}}, // Since we will select only the top row to send to MLP head, we only need CiM 0 to send data
+            {PRE_LAYERNORM_3_TRANSPOSE_STEP,    {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 2*EMB_DEPTH+NUM_PATCHES+1,        /*tx len*/ 1,              /*rx addr*/ 0,                              /*num cims*/ NUM_CIM}}, // Only need to send the first element of all columns
+            {INTRA_LAYERNORM_3_TRANSPOSE_STEP,  {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 0,                                /*tx len*/ EMB_DEPTH,      /*rx addr*/ EMB_DEPTH,                      /*num cims*/ 1}}, // Since we will select only the top row to send to MLP head, we only need CiM 0 to send data
+            {MLP_HEAD_DENSE_1_STEP,             {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ 0,                                /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_CIM}},
+            {MLP_HEAD_DENSE_2_STEP,             {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1+EMB_DEPTH,          /*tx len*/ 1,              /*rx addr*/ 0,                              /*num cims*/ MLP_DIM}}, // Only CiMs 32 to 63 will need to send data
+            {MLP_HEAD_SOFTMAX_TRANSPOSE_STEP,   {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 0,                                /*tx len*/ 1,              /*rx addr*/ MLP_DIM,                        /*num cims*/ NUM_SLEEP_STAGES}},
         };
 
         const std::map<HIGH_LEVEL_INFERENCE_STEP, int> num_necessary_idles = { // Gives the number of necessary CiM is_idle signals to be high for the master controller to enter the given step
@@ -123,9 +129,11 @@ class Master_ctrl {
             {ENC_MLP_DENSE_1_STEP,              EMB_DEPTH},
             {ENC_MLP_DENSE_2_AND_SUM_STEP,      MLP_DIM},
             {PRE_LAYERNORM_3_TRANSPOSE_STEP,    EMB_DEPTH},
-            {INTRA_LAYERNORM_3_TRANSPOSE_STEP,  NUM_PATCHES+1},
+            {INTRA_LAYERNORM_3_TRANSPOSE_STEP,  1},
             {MLP_HEAD_DENSE_1_STEP,             EMB_DEPTH},
-            {INFERENCE_FINISHED,                EMB_DEPTH},
+            {MLP_HEAD_DENSE_2_STEP,             NUM_SLEEP_STAGES},
+            {MLP_HEAD_SOFTMAX_TRANSPOSE_STEP,   1},
+            {INFERENCE_FINISHED,                1},
         };
 
         float storage[CENTRALIZED_STORAGE_WEIGHTS_KB / sizeof(float)];

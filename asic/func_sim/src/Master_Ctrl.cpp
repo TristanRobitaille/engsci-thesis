@@ -95,6 +95,8 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
         case PRE_LAYERNORM_3_TRANSPOSE_STEP:
         case INTRA_LAYERNORM_3_TRANSPOSE_STEP:
         case MLP_HEAD_DENSE_1_STEP:
+        case MLP_HEAD_DENSE_2_STEP:
+        case MLP_HEAD_SOFTMAX_TRANSPOSE_STEP:
         case INFERENCE_FINISHED:
             if (all_cims_idle == true) {
                 if (high_level_inf_step == INFERENCE_FINISHED) {
@@ -129,7 +131,12 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
                 }
             } else { // Trigger new CiM to send data
                 struct broadcast_op_info op_info = broadcast_ops.at(high_level_inf_step);
-                struct instruction inst = {op_info.op, /*target_or_sender*/ gen_cnt_8b.get_cnt(), {op_info.tx_addr, op_info.len}, op_info.rx_addr};
+                struct instruction inst;
+                if (high_level_inf_step == MLP_HEAD_DENSE_2_STEP) {
+                    inst = {op_info.op, /*target_or_sender*/ gen_cnt_8b.get_cnt()+MLP_DIM, {op_info.tx_addr, op_info.len}, op_info.rx_addr}; // CiMs 32-63 have the data that we want to broadcast
+                } else {
+                    inst = {op_info.op, /*target_or_sender*/ gen_cnt_8b.get_cnt(), {op_info.tx_addr, op_info.len}, op_info.rx_addr};
+                }
                 bus->push_inst(inst);
                 gen_cnt_10b.set_val(NUM_TRANS(op_info.len)); // Transaction counter
             }
@@ -181,6 +188,7 @@ struct instruction Master_ctrl::param_to_send(){
     case ENC_COMB_HEAD_PARAMS:
     case ENC_MLP_DENSE_2_PARAMS:
     case ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS:
+    case MLP_HEAD_DENSE_2_PARAMS:
         if (((gen_reg_16b == false) || (gen_cnt_8b.get_cnt() >= param_addr_map[params_curr_layer].len)) && (gen_cnt_10b.get_cnt() < param_addr_map[params_curr_layer].num_rec)) { // Starting a new CiM (if not done all layers)
             uint16_t addr = param_addr_map[params_curr_layer].addr;
             uint16_t length = param_addr_map[params_curr_layer].len;
@@ -214,7 +222,6 @@ struct instruction Master_ctrl::param_to_send(){
             gen_cnt_8b.inc(); // Use as indication that next time this runs, we go to the else if () below
 
         } else if (gen_cnt_10b.get_cnt() < param_addr_map[params_curr_layer].num_rec){
-            // TODO: Incomplete
             if (gen_cnt_8b.get_cnt() == 1) {
                 inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.patch_proj_bias[gen_cnt_10b.get_cnt()], params.class_emb[gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.layernorm_gamma[0][gen_cnt_10b.get_cnt()]};
                 gen_cnt_8b.inc();
@@ -231,8 +238,11 @@ struct instruction Master_ctrl::param_to_send(){
                 gen_cnt_8b.inc();
             } else if (gen_cnt_8b.get_cnt() == 5) {
                 inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.enc_mlp_dense_2_bias[gen_cnt_10b.get_cnt()], params.layernorm_gamma[2][gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.layernorm_beta[2][gen_cnt_10b.get_cnt()]};
-                gen_cnt_8b.reset();
                 gen_cnt_10b.inc();
+            } else if (gen_cnt_8b.get_cnt() == 6) {
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.mlp_head_dense_2_bias[gen_cnt_10b.get_cnt()], 0}, /*extra_fields*/ 0};
+                gen_cnt_8b.inc();
+                gen_cnt_8b.reset();
             }
         } else {
             gen_cnt_10b.reset();
@@ -291,6 +301,8 @@ int Master_ctrl::load_params_from_h5(const std::string params_filepath) {
     params.layernorm_gamma[2] = file.getGroup("mlp_head").getGroup("mlp_head_layerNorm").getDataSet("gamma:0").read<EmbDepthVect_t>(); // MLP head's LayerNorm 1
     params.mlp_head_dense_1_kernel = file.getGroup("mlp_head").getGroup("mlp_head_dense1").getDataSet("kernel:0").read<EmbDepthxMlpDimMat_t>();
     params.mlp_head_dense_1_bias = file.getGroup("mlp_head").getGroup("mlp_head_dense1").getDataSet("bias:0").read<MlpDimVect_t>();
+    params.mlp_head_dense_2_kernel = file.getGroup("mlp_head").getGroup("mlp_head_softmax").getDataSet("kernel:0").read<NumSleepStagesxMlpDimMat_t>();
+    params.mlp_head_dense_2_bias = file.getGroup("mlp_head").getGroup("mlp_head_softmax").getDataSet("bias:0").read<NumSleepStagesVect_t>();
 
     return 0;
 }
@@ -340,6 +352,10 @@ void Master_ctrl::update_inst_with_params(PARAM_NAME param_name, struct instruct
     case ENC_MLP_DENSE_2_PARAMS:
         inst->data = {params.enc_mlp_dense_2_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.enc_mlp_dense_2_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
         inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mlp_dense_2_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
+        break;
+    case MLP_HEAD_DENSE_2_PARAMS:
+        inst->data = {params.mlp_head_dense_2_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.mlp_head_dense_2_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+        inst->extra_fields = (num_left <= 1) ? (0) : params.mlp_head_dense_2_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
         break;
     default:
         throw invalid_argument("Invalid parameter name");

@@ -10,6 +10,7 @@
 #define EMB_DEPTH 64
 #define MLP_DIM 32
 #define NUM_HEADS 8
+#define NUM_SLEEP_STAGES 5
 #define LAYERNORM_EPSILON 0.000001f // 1e-6
 
 /*----- MACROS -----*/
@@ -33,16 +34,6 @@ enum OP {
 enum SYSTEM_STATE {
     RUNNING,
     EVERYTHING_FINISHED
-};
-
-enum ACTIVATION {
-    LINEAR,
-    SWISH
-};
-
-enum INPUT_TYPE { // Type of input for a given computation
-    MODEL_PARAM,
-    INTERMEDIATE_RES
 };
 
 /*----- STRUCT -----*/
@@ -113,6 +104,7 @@ class Bus {
     public:
         struct instruction get_inst() { return inst; };
         int push_inst(struct instruction inst) {
+            if (inst.target_or_sender > NUM_CIM) throw std::runtime_error("Invalid target or sender (out of range)");
             q.push(inst);
             return 0;
         };
