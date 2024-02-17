@@ -30,8 +30,8 @@ class Master_ctrl {
 
         enum HIGH_LEVEL_INFERENCE_STEP {
             PRE_LAYERNORM_1_TRANSPOSE_STEP,
-            INTRA_LAYERNORM_1_TRANSPOSE_STEP, // After the first half of transpose (row to column) for LayerNorm
-            POST_LAYERNORM_1_TRANSPOSE_STEP, // After the second half of transpose (column to row) for LayerNorm and final normalization with gamma/beta
+            INTRA_LAYERNORM_1_TRANSPOSE_STEP, // After the first half of transpose (row to column) for LayerNorm 1
+            POST_LAYERNORM_1_TRANSPOSE_STEP, // After the second half of transpose (column to row) for LayerNorm 1 and final normalization with gamma/beta
             ENC_MHSA_DENSE_STEP, // Perform all three dense operations (Q, K, V) for the Multi-Head Self-Attention
             ENC_MHSA_Q_TRANSPOSE_STEP, // Transpose (row to column) for encoder MHSA's Q
             ENC_MHSA_K_TRANSPOSE_STEP, // Transpose (row to column) for encoder MHSA's K
@@ -39,10 +39,12 @@ class Master_ctrl {
             ENC_MHSA_V_MULT_STEP, // Multiplication of softmax with V for encoder MHSA,
             ENC_MHSA_POST_V_TRANSPOSE_STEP, // Transpose following the V multiplication for encoder MHSA
             ENC_MHSA_POST_V_DENSE_STEP, // Perform the tranpose dense operation for the encoder's MLP
-            PRE_LAYERNORM_2_TRANSPOSE_STEP, // Transpose (row to column) for the second half of LayerNorm
-            INTRA_LAYERNORM_2_TRANSPOSE_STEP, // Transpose (column to row) for the second half of LayerNorm
+            PRE_LAYERNORM_2_TRANSPOSE_STEP, // Transpose (row to column) for the first half of LayerNorm 2
+            INTRA_LAYERNORM_2_TRANSPOSE_STEP, // Transpose (column to row) for the second half of LayerNorm 2 and final normalization with gamma/beta
             ENC_MLP_DENSE_1_STEP, // Perform the first dense operation for the encoder's MLP
             ENC_MLP_DENSE_2_AND_SUM_STEP, // Perform the second dense operation for the encoder's MLP and the sum with the encoder's input (residual connection)
+            PRE_LAYERNORM_3_TRANSPOSE_STEP, // Transpose (row to column) for the first half of LayerNorm 3
+            INTRA_LAYERNORM_3_TRANSPOSE_STEP, // Transpose (column to row) for the second half of LayerNorm 3 and final normalization with gamma/beta
             INFERENCE_FINISHED
        };
 
@@ -63,8 +65,8 @@ class Master_ctrl {
             PosEmb_t pos_emb; // Positional embeddding
 
             // Encoders
-            EncEmbDepthVect2_t enc_layernorm_gamma;
-            EncEmbDepthVect2_t enc_layernorm_beta;
+            EncEmbDepthVect3_t layernorm_gamma;
+            EncEmbDepthVect3_t layernorm_beta;
             EncEmbDepthMat_t enc_mhsa_Q_kernel;
             EncEmbDepthMat_t enc_mhsa_K_kernel;
             EncEmbDepthMat_t enc_mhsa_V_kernel;
@@ -94,7 +96,9 @@ class Master_ctrl {
             {PRE_LAYERNORM_2_TRANSPOSE_STEP,    {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1+EMB_DEPTH,          /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_CIM}},
             {INTRA_LAYERNORM_2_TRANSPOSE_STEP,  {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1,                    /*tx len*/ EMB_DEPTH,      /*rx addr*/ NUM_PATCHES+1+EMB_DEPTH,        /*num cims*/ NUM_PATCHES+1}},
             {ENC_MLP_DENSE_1_STEP,              {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1+EMB_DEPTH,          /*tx len*/ EMB_DEPTH,      /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ MLP_DIM}},
-            {ENC_MLP_DENSE_2_AND_SUM_STEP,      {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1,                    /*tx len*/ MLP_DIM,        /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_PATCHES+1}}
+            {ENC_MLP_DENSE_2_AND_SUM_STEP,      {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1,                    /*tx len*/ MLP_DIM,        /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_PATCHES+1}},
+            {PRE_LAYERNORM_3_TRANSPOSE_STEP,    {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 2*EMB_DEPTH+NUM_PATCHES+1,        /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ 0,                              /*num cims*/ NUM_CIM}},
+            {INTRA_LAYERNORM_3_TRANSPOSE_STEP,  {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 0,                                /*tx len*/ EMB_DEPTH,      /*rx addr*/ EMB_DEPTH,                      /*num cims*/ NUM_PATCHES+1}}
         };
 
         const std::map<HIGH_LEVEL_INFERENCE_STEP, int> num_necessary_idles = { // Gives the number of necessary CiM is_idle signals to be high for the master controller to enter the given step
@@ -112,6 +116,8 @@ class Master_ctrl {
             {INTRA_LAYERNORM_2_TRANSPOSE_STEP,  NUM_PATCHES+1},
             {ENC_MLP_DENSE_1_STEP,              EMB_DEPTH},
             {ENC_MLP_DENSE_2_AND_SUM_STEP,      MLP_DIM},
+            {PRE_LAYERNORM_3_TRANSPOSE_STEP,    EMB_DEPTH},
+            {INTRA_LAYERNORM_3_TRANSPOSE_STEP,  NUM_PATCHES+1},
             {INFERENCE_FINISHED,                EMB_DEPTH},
         };
 

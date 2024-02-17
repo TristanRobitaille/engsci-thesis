@@ -92,6 +92,9 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
         case INTRA_LAYERNORM_2_TRANSPOSE_STEP:
         case ENC_MLP_DENSE_1_STEP:
         case ENC_MLP_DENSE_2_AND_SUM_STEP:
+        case PRE_LAYERNORM_3_TRANSPOSE_STEP:
+        case INTRA_LAYERNORM_3_TRANSPOSE_STEP:
+        case INFERENCE_FINISHED:
             if (all_cims_idle == true) {
                 if (high_level_inf_step == INFERENCE_FINISHED) {
                     sys_state = EVERYTHING_FINISHED;
@@ -212,16 +215,19 @@ struct instruction Master_ctrl::param_to_send(){
         } else if (gen_cnt_10b.get_cnt() < param_addr_map[params_curr_layer].num_rec){
             // TODO: Incomplete
             if (gen_cnt_8b.get_cnt() == 1) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.patch_proj_bias[gen_cnt_10b.get_cnt()], params.class_emb[gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.enc_layernorm_gamma[0][gen_cnt_10b.get_cnt()]};
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.patch_proj_bias[gen_cnt_10b.get_cnt()], params.class_emb[gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.layernorm_gamma[0][gen_cnt_10b.get_cnt()]};
                 gen_cnt_8b.inc();
             } else if (gen_cnt_8b.get_cnt() == 2) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.enc_layernorm_beta[0][gen_cnt_10b.get_cnt()], params.enc_mhsa_Q_bias[gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.enc_mhsa_K_bias[gen_cnt_10b.get_cnt()]};
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.layernorm_beta[0][gen_cnt_10b.get_cnt()], params.enc_mhsa_Q_bias[gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.enc_mhsa_K_bias[gen_cnt_10b.get_cnt()]};
                 gen_cnt_8b.inc();
             } else if (gen_cnt_8b.get_cnt() == 3) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.enc_mhsa_V_bias[gen_cnt_10b.get_cnt()], params.enc_mhsa_combine_bias[gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.enc_layernorm_gamma[1][gen_cnt_10b.get_cnt()]};
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.enc_mhsa_V_bias[gen_cnt_10b.get_cnt()], params.enc_mhsa_sqrt_num_heads}, /*extra_fields*/ params.enc_mhsa_combine_bias[gen_cnt_10b.get_cnt()]};
                 gen_cnt_8b.inc();
             } else if (gen_cnt_8b.get_cnt() == 4) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.enc_layernorm_beta[1][gen_cnt_10b.get_cnt()], params.enc_mlp_1_dense_bias[gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.enc_mlp_1_dense_bias[gen_cnt_10b.get_cnt()]};
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.layernorm_gamma[1][gen_cnt_10b.get_cnt()], params.layernorm_beta[1][gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.enc_mlp_1_dense_bias[gen_cnt_10b.get_cnt()]};
+                gen_cnt_8b.inc();
+            } else if (gen_cnt_8b.get_cnt() == 5) {
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.enc_mlp_2_dense_bias[gen_cnt_10b.get_cnt()], params.layernorm_gamma[2][gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.layernorm_beta[2][gen_cnt_10b.get_cnt()]};
                 gen_cnt_8b.reset();
                 gen_cnt_10b.inc();
             }
@@ -255,10 +261,12 @@ int Master_ctrl::load_params_from_h5(const std::string params_filepath) {
     // Encoders
     HighFive::Group enc = file.getGroup("encoder");
     // LayerNorm
-    params.enc_layernorm_beta[0] = enc.getGroup("vision_transformer").getGroup("encoder").getGroup("layerNorm1_encoder").getDataSet("beta:0").read<EmbDepthVect_t>();
-    params.enc_layernorm_gamma[0] = enc.getGroup("vision_transformer").getGroup("encoder").getGroup("layerNorm1_encoder").getDataSet("gamma:0").read<EmbDepthVect_t>();
-    params.enc_layernorm_beta[1] = enc.getGroup("vision_transformer").getGroup("encoder").getGroup("layerNorm2_encoder").getDataSet("beta:0").read<EmbDepthVect_t>();
-    params.enc_layernorm_gamma[1] = enc.getGroup("vision_transformer").getGroup("encoder").getGroup("layerNorm2_encoder").getDataSet("gamma:0").read<EmbDepthVect_t>();
+    params.layernorm_beta[0] = enc.getGroup("vision_transformer").getGroup("encoder").getGroup("layerNorm1_encoder").getDataSet("beta:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 1
+    params.layernorm_gamma[0] = enc.getGroup("vision_transformer").getGroup("encoder").getGroup("layerNorm1_encoder").getDataSet("gamma:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 1
+    params.layernorm_beta[1] = enc.getGroup("vision_transformer").getGroup("encoder").getGroup("layerNorm2_encoder").getDataSet("beta:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 2
+    params.layernorm_gamma[1] = enc.getGroup("vision_transformer").getGroup("encoder").getGroup("layerNorm2_encoder").getDataSet("gamma:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 2
+    params.layernorm_beta[2] = file.getGroup("mlp_head").getGroup("mlp_head_layerNorm").getDataSet("beta:0").read<EmbDepthVect_t>(); // MLP head's LayerNorm 1
+    params.layernorm_gamma[2] = file.getGroup("mlp_head").getGroup("mlp_head_layerNorm").getDataSet("gamma:0").read<EmbDepthVect_t>(); // MLP head's LayerNorm 1
 
     // MHSA
     params.enc_mhsa_Q_kernel = enc.getGroup("mhsa_query_dense").getDataSet("kernel:0").read<EncEmbDepthMat_t>();
