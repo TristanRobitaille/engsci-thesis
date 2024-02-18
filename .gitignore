@@ -87,5 +87,12 @@ asic/func_sim/include/src/
 asic/func_sim/Makefile
 asic/~$*
 
+### ASIC IP verif
+asic/ip_verif/__pycache__
+asic/ip_verif/*/__pycache__
+asic/ip_verif/*/sim_build
+asic/ip_verif/*/dump.vcd
+asic/ip_verif/*/results.xml
+
 ### Documentation
 doc/CMC_VLSI_User_Manual_2023.pdf
