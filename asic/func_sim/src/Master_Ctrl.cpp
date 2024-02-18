@@ -23,6 +23,8 @@ int Master_ctrl::reset(){
     gen_reg_16b = 0;
     gen_reg_16b_2 = 0;
     gen_reg_16b_3 = 0;
+    high_level_inf_step = PRE_LAYERNORM_1_TRANSPOSE_STEP;
+    state = IDLE;
     return 0;
 }
 

@@ -9,6 +9,7 @@
 /*----- DEFINE -----*/
 #define CIM_PARAMS_STORAGE_SIZE_KB 3072
 #define CIM_INT_RES_SIZE_KB 3328
+#define COMPUTE_CNT_THRESHOLD 1000 // Used to simulate the delay in the computation to match the real hardware
 
 #define HAS_MY_DATA(x) ((id >= (x-3)) && (id < x)) // Determines whether the current broadcast transaction contains data I need
 #define IS_MY_MATRIX(x) ((id >= x*NUM_HEADS) && (id < (x+1)*NUM_HEADS)) // Returns whether a given count corresponds to my matrix (for the *V matmul in encoder's MHSA)
@@ -65,10 +66,10 @@ class CiM {
 
         bool is_idle = true; // Used by Ctrl to know whether CiMs have completed a given inference step. To avoid routing NUM_CIM bits to ctrl, these signals will be daisy-chained ANDed from one CiM to the next... or could just always use CiM #63 as a proxy for all CiM...TBD
         bool compute_in_progress = false; // Used by compute element to notify CiM controller when is in progress
-        bool compute_done = false; // Used by compute element to notify CiM controller when is done
         uint16_t id; // ID of the CiM
         uint16_t gen_reg_16b; // General-purpose register
         uint16_t data_len_reg; // General-purpose register used to record len of data sent/received on the bus
+        uint16_t compute_process_cnt; // Counter used to track the progress of the current computation (used to simulate the delay in the computation to match the real hardware)
         float params[CIM_PARAMS_STORAGE_SIZE_KB / sizeof(float)];
         float intermediate_res[CIM_INT_RES_SIZE_KB / sizeof(float)];
 
@@ -86,6 +87,7 @@ class CiM {
         bool get_is_idle();
         int reset();
         int run(struct ext_signals* ext_sigs, Bus* bus);
+        void update_compute_process_cnt();
         float ADD(uint16_t in1_addr, uint16_t in2_addr, INPUT_TYPE param_type);
         float DIV(uint16_t num_addr, uint16_t den_addr);
         void LAYERNORM_1ST_HALF(uint16_t input_addr);

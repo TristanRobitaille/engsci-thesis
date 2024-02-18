@@ -8,7 +8,7 @@
 using namespace std;
 
 /*----- DECLARATION -----*/
-CiM::CiM(const int16_t cim_id) : id(cim_id), gen_cnt_10b(10), gen_cnt_10b_2(10), bytes_rec_cnt(10), bytes_sent_cnt(8) {
+CiM::CiM(const int16_t cim_id) : id(cim_id), gen_cnt_10b(10), gen_cnt_10b_2(10), bytes_rec_cnt(12), bytes_sent_cnt(8) {
     cim_state = RESET_CIM;
 }
 
@@ -18,12 +18,17 @@ int CiM::reset(){
     gen_cnt_10b.reset();
     gen_cnt_10b_2.reset();
     bytes_rec_cnt.reset();
+    compute_process_cnt = 0;
+    cim_state = IDLE_CIM;
     is_idle = true;
     return 0;
 }
 
 int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
     /* Run the CiM FSM */
+
+    // Update compute process counter
+    update_compute_process_cnt();
 
     // Read bus if new instruction
     struct instruction inst = bus->get_inst();
@@ -40,7 +45,6 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 bytes_rec_cnt.reset();
                 if (gen_cnt_10b_2.get_cnt() == NUM_PATCHES) { // Received all patches, automatically start inference
                     cim_state = INFERENCE_RUNNING_CIM;
-                    compute_done = false;
                     gen_cnt_10b_2.reset();
                 }
             }
@@ -395,14 +399,12 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
         case ENC_MHSA_MULT_V:
             if (bytes_rec_cnt.get_cnt() >= (NUM_PATCHES+1)) { // No more data to receive for this given row
-                if (IS_MY_MATRIX(gen_cnt_10b_2.get_cnt()-1)) { // Only if matrix being broadcast corresponds to mine (-1 because gen_cnt_10b_2 is incremented when the matrix starts broadcast)
-                    if (compute_in_progress == false) {
-                        uint16_t MAC_in1_addr = 3*(NUM_PATCHES+1)+2*EMB_DEPTH + (gen_cnt_10b_2.get_cnt()-1)*(NUM_PATCHES+1);
-                        float result = MAC(MAC_in1_addr, /*in2 addr*/ NUM_PATCHES+1+EMB_DEPTH, /*bias addr unused when NO_ACTIVATION*/ 0, NUM_PATCHES+1, INTERMEDIATE_RES, NO_ACTIVATION);
-                        intermediate_res[2*EMB_DEPTH + NUM_PATCHES+1 + inst.target_or_sender] = result;
-                        gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
-                        bytes_rec_cnt.reset();
-                    }
+                if (IS_MY_MATRIX(gen_cnt_10b_2.get_cnt()-1) && (compute_in_progress == false)) { // Only if matrix being broadcast corresponds to mine (-1 because gen_cnt_10b_2 is incremented when the matrix starts broadcast)
+                    uint16_t MAC_in1_addr = 3*(NUM_PATCHES+1)+2*EMB_DEPTH + (gen_cnt_10b_2.get_cnt()-1)*(NUM_PATCHES+1);
+                    float result = MAC(MAC_in1_addr, /*in2 addr*/ NUM_PATCHES+1+EMB_DEPTH, /*bias addr unused when NO_ACTIVATION*/ 0, NUM_PATCHES+1, INTERMEDIATE_RES, NO_ACTIVATION);
+                    intermediate_res[2*EMB_DEPTH + NUM_PATCHES+1 + inst.target_or_sender] = result;
+                    gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
+                    bytes_rec_cnt.reset();
                 } else {
                     is_idle = true;
                 }
@@ -466,6 +468,14 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
     return 0;
 }
 
+void CiM::update_compute_process_cnt() {
+    if (compute_in_progress == true) { compute_process_cnt++; }
+    if (compute_process_cnt == COMPUTE_CNT_THRESHOLD) {
+        compute_process_cnt = 0;
+        compute_in_progress = false;
+    }
+}
+
 float CiM::MAC(uint16_t in1_start_addr, uint16_t in2_start_addr, uint16_t len, uint16_t bias_addr, INPUT_TYPE param_type, ACTIVATION activation) {
     /* Dot-product between two vectors. */
 
@@ -502,24 +512,21 @@ float CiM::MAC(uint16_t in1_start_addr, uint16_t in2_start_addr, uint16_t len, u
     default:
         break;
     }
-    compute_in_progress = false;
-    compute_done = true;
     return mac_result;
 }
 
 float CiM::DIV(uint16_t num_addr, uint16_t den_addr) {
     /* Return division of two inputs. First input is in intermediate storage location, and second is in the params storage. */
     float result = 0.0f;
-    compute_in_progress = true; // Using this compute_in_progress signal as it will be used in the CiM (in ASIC, this compute is multi-cycle, so leaving this here for visibility)
     result = intermediate_res[num_addr] / params[den_addr];
     compute_in_progress = false;
-    compute_done = true;
     return result;
 }
 
 float CiM::ADD(uint16_t in1_addr, uint16_t in2_addr, INPUT_TYPE param_type) {
     /* Return sum of two inputs. */
     float results = 0.0f;
+    compute_in_progress = true;
     if (param_type == INTERMEDIATE_RES) { results = intermediate_res[in1_addr] + intermediate_res[in2_addr]; }
     else { results = intermediate_res[in1_addr] + params[in2_addr]; }
 
@@ -555,8 +562,6 @@ void CiM::LAYERNORM_1ST_HALF(uint16_t input_addr) {
     for (uint16_t i = 0; i < EMB_DEPTH; ++i) {
         intermediate_res[input_addr+i] = intermediate_res[input_addr+i] / result2;
     }
-
-    compute_in_progress = false;
 }
 
 void CiM::LAYERNORM_2ND_HALF(uint16_t input_addr, float gamma, float beta) {
@@ -568,8 +573,6 @@ void CiM::LAYERNORM_2ND_HALF(uint16_t input_addr, float gamma, float beta) {
     for (uint16_t i = 0; i < EMB_DEPTH; ++i) {
         intermediate_res[input_addr+i] = gamma * intermediate_res[input_addr+i] + beta;
     }
-
-    compute_in_progress = false;
 }
 
 void CiM::SOFTMAX(uint16_t input_addr, uint16_t len) {
@@ -588,9 +591,6 @@ void CiM::SOFTMAX(uint16_t input_addr, uint16_t len) {
     for (uint16_t i = 0; i < len; ++i) {
         intermediate_res[input_addr+i] = intermediate_res[input_addr+i] / exp_sum;
     }
-
-    compute_done = true;
-    compute_in_progress = false;
 }
 
 bool CiM::get_is_idle() {
