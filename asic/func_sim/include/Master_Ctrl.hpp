@@ -48,6 +48,7 @@ class Master_ctrl {
             MLP_HEAD_DENSE_1_STEP, // Perform the first dense operation for the MLP head
             MLP_HEAD_DENSE_2_STEP, // Final softmax operation for the MLP head
             MLP_HEAD_SOFTMAX_TRANSPOSE_STEP, // Transpose (row to column) for the final softmax operation to be done on CiM #0
+            SOFTMAX_AVERAGING, // Give time to CiM to finish averaging after softmax
             INFERENCE_FINISHED
        };
 
@@ -108,9 +109,9 @@ class Master_ctrl {
             {ENC_MLP_DENSE_2_AND_SUM_STEP,      {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1,                    /*tx len*/ MLP_DIM,        /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ 1}}, // Since we will select only the top row to send to MLP head, we only need CiM 0 to send data
             {PRE_LAYERNORM_3_TRANSPOSE_STEP,    {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 2*EMB_DEPTH+NUM_PATCHES+1,        /*tx len*/ 1,              /*rx addr*/ 0,                              /*num cims*/ NUM_CIM}}, // Only need to send the first element of all columns
             {INTRA_LAYERNORM_3_TRANSPOSE_STEP,  {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 0,                                /*tx len*/ EMB_DEPTH,      /*rx addr*/ EMB_DEPTH,                      /*num cims*/ 1}}, // Since we will select only the top row to send to MLP head, we only need CiM 0 to send data
-            {MLP_HEAD_DENSE_1_STEP,             {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ 0,                                /*tx len*/ NUM_PATCHES+1,  /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_CIM}},
+            {MLP_HEAD_DENSE_1_STEP,             {/*op*/ DENSE_BROADCAST_START_OP, /*tx addr*/ 0,                                /*tx len*/ EMB_DEPTH,      /*rx addr*/ NUM_PATCHES+1,                  /*num cims*/ NUM_CIM}},
             {MLP_HEAD_DENSE_2_STEP,             {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ NUM_PATCHES+1+EMB_DEPTH,          /*tx len*/ 1,              /*rx addr*/ 0,                              /*num cims*/ MLP_DIM}}, // Only CiMs 32 to 63 will need to send data
-            {MLP_HEAD_SOFTMAX_TRANSPOSE_STEP,   {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 0,                                /*tx len*/ 1,              /*rx addr*/ MLP_DIM,                        /*num cims*/ NUM_SLEEP_STAGES}},
+            {MLP_HEAD_SOFTMAX_TRANSPOSE_STEP,   {/*op*/ TRANS_BROADCAST_START_OP, /*tx addr*/ 0,                                /*tx len*/ 1,              /*rx addr*/ MLP_DIM,                        /*num cims*/ NUM_SLEEP_STAGES}}
         };
 
         const std::map<HIGH_LEVEL_INFERENCE_STEP, int> num_necessary_idles = { // Gives the number of necessary CiM is_idle signals to be high for the master controller to enter the given step
@@ -126,14 +127,15 @@ class Master_ctrl {
             {ENC_MHSA_POST_V_DENSE_STEP,        NUM_PATCHES+1},
             {PRE_LAYERNORM_2_TRANSPOSE_STEP,    EMB_DEPTH},
             {INTRA_LAYERNORM_2_TRANSPOSE_STEP,  NUM_PATCHES+1},
-            {ENC_MLP_DENSE_1_STEP,              EMB_DEPTH},
+            {ENC_MLP_DENSE_1_STEP,              MLP_DIM},
             {ENC_MLP_DENSE_2_AND_SUM_STEP,      MLP_DIM},
             {PRE_LAYERNORM_3_TRANSPOSE_STEP,    EMB_DEPTH},
             {INTRA_LAYERNORM_3_TRANSPOSE_STEP,  1},
-            {MLP_HEAD_DENSE_1_STEP,             EMB_DEPTH},
-            {MLP_HEAD_DENSE_2_STEP,             NUM_SLEEP_STAGES},
+            {MLP_HEAD_DENSE_1_STEP,             1},
+            {MLP_HEAD_DENSE_2_STEP,             MLP_DIM},
             {MLP_HEAD_SOFTMAX_TRANSPOSE_STEP,   1},
-            {INFERENCE_FINISHED,                1},
+            {SOFTMAX_AVERAGING,                 1},
+            {INFERENCE_FINISHED,                1}
         };
 
         float storage[CENTRALIZED_STORAGE_WEIGHTS_KB / sizeof(float)];
@@ -160,7 +162,7 @@ class Master_ctrl {
         Master_ctrl(const std::string eeg_filepath, const std::string params_filepath);
         int reset();
         SYSTEM_STATE run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]);
-        int start_signal_load();
+        int start_signal_load(Bus* bus);
         struct instruction param_to_send();
         int prepare_for_broadcast(broadcast_op_info op_info, Bus* bus);
 };

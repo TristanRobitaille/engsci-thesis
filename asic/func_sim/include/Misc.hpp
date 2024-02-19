@@ -11,6 +11,7 @@
 #define MLP_DIM 32
 #define NUM_HEADS 8
 #define NUM_SLEEP_STAGES 5
+#define NUM_SAMPLES_OUT_AVG 3 // Number of samples in output averaging filter
 #define LAYERNORM_EPSILON 0.000001f // 1e-6
 
 /*----- MACROS -----*/
@@ -20,6 +21,7 @@
 
 /*----- ENUM -----*/
 enum OP {
+    PATCH_LOAD_BROADCAST_START_OP, // Broadcast the start of a new patch to all CiM
     PATCH_LOAD_BROADCAST_OP, // Broadcast current patch to all CiM, which perform vector-matrix multiplication after each patch
     DENSE_BROADCAST_START_OP, // Tell the target CiM that it needs to broadcast its data starting at a given addr and length. Non-target CiM will then listen to the broadcast and perform MAC once the full vector is received.
     DENSE_BROADCAST_DATA_OP, // Sent from a CiM. Contains 3 bytes of data
@@ -28,6 +30,7 @@ enum OP {
     TRANS_BROADCAST_START_OP, // Tell the target CiM that it needs to broadcast its data starting at a given addr and length. Non-target CiM will then listen to the broadcast and grab the data they need.
     TRANS_BROADCAST_DATA_OP, // Sent from a CiM. Contains 3 bytes of data
     PISTOL_START_OP, // Used to instruct CiMs to move to their next step in the inference pipeline
+    INFERENCE_RESULT_OP, // Sent from CiM #0 to master. Contains inference result.
     NOP // Represents the no tranmission
 };
 

@@ -31,14 +31,17 @@ int Master_ctrl::reset(){
 SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]){
     /* Run the master controller FSM */
 
-    bool all_cims_idle = true;
+    bool all_cims_compute_done = true;
     SYSTEM_STATE sys_state = RUNNING;
 
     // Act on priority external signals
     if  (ext_sigs->master_nrst == false) { state = RESET; }
 
     // Check if CiMs are idle
-    for (int i=0; i<num_necessary_idles.at(high_level_inf_step); i++){ all_cims_idle &= cims[i].get_is_idle(); }
+    for (int i=0; i<num_necessary_idles.at(high_level_inf_step); i++){ 
+        if (high_level_inf_step == MLP_HEAD_DENSE_2_STEP) { all_cims_compute_done &= cims[i+MLP_DIM].get_is_compute_done(); }
+        else { all_cims_compute_done &= cims[i].get_is_compute_done(); }
+    }
 
     switch (state) {
     case IDLE:
@@ -47,34 +50,22 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
             gen_reg_16b = false; // Need to make sure this is false before starting the parameter load
             state = PARAM_LOAD;
             cout << "Starting parameters load" << endl;
-        } else if (ext_sigs->new_sleep_epoch == true) { start_signal_load(); }
+        } else if (ext_sigs->new_sleep_epoch == true) { start_signal_load(bus); }
         break;
 
     case PARAM_LOAD:
-        bus->push_inst(param_to_send());
+        if (all_cims_compute_done) { bus->push_inst(param_to_send()); }
         break;
 
     case SIGNAL_LOAD:
-        /* Sequentially parses the input EEG file and broadcasts it to all CiMs to emulate the ADC feed in the ASIC*/
-        if (eeg != eeg_ds.end()) {
-            struct instruction inst = {/*op*/ PATCH_LOAD_BROADCAST_OP, /*target_or_sender*/ 0,
-                /*data*/ {*eeg,0}, // In ASIC, we would split the 16b into 2x 8b
-                /*extra_field*/ 0
-            };
-
+        /* Sequentially parses the input EEG file and broadcasts it to all CiMs to emulate the ADC feed in the ASIC */
+        if ((eeg != eeg_ds.end()) && (all_cims_compute_done == true)) {
+            struct instruction inst = {/*op*/ PATCH_LOAD_BROADCAST_OP, /*target_or_sender*/ 0, /*data*/ {*eeg,0}, /*extra_field*/ 0};
             bus->push_inst(inst); // Broadcast on bus
             ++eeg;
-        } else {
+        } else if ((eeg == eeg_ds.end()) && (all_cims_compute_done == true)) {
             state = INFERENCE_RUNNING;
             cout << "Reached end of signal file" << endl;
-        }
-        break;
-
-    case WAITING_FOR_CIM_COMPLETION: // TODO: How to handle mlp head dense, where it is CiMs 32-63 that are used?
-        if (all_cims_idle == true) {
-            struct instruction inst = {/*op*/ PISTOL_START_OP, /*target_or_sender*/ 0, /*data*/ {0,0}, /*extra_fields*/ 0}; // Tell CiMs that they can go to the next step
-            bus->push_inst(inst);
-            state = INFERENCE_RUNNING;
         }
         break;
 
@@ -99,13 +90,11 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
         case MLP_HEAD_DENSE_1_STEP:
         case MLP_HEAD_DENSE_2_STEP:
         case MLP_HEAD_SOFTMAX_TRANSPOSE_STEP:
-        case INFERENCE_FINISHED:
-            if (all_cims_idle == true) {
-                if (high_level_inf_step == INFERENCE_FINISHED) {
-                    sys_state = EVERYTHING_FINISHED;
-                    break;
-                }
-
+        case SOFTMAX_AVERAGING:
+            if (bus->get_inst().op == INFERENCE_RESULT_OP && all_cims_compute_done == true) {
+                sys_state = EVERYTHING_FINISHED;
+                break;
+            } else if (high_level_inf_step != SOFTMAX_AVERAGING) {
                 if (high_level_inf_step == ENC_MHSA_QK_T_STEP) { cout << "Master: Performing encoder's MHSA QK_T. Starting matrix #" << gen_reg_16b_3 << " in the Z-stack (out of " << NUM_HEADS << ")" << endl; }
                 else if (high_level_inf_step == ENC_MHSA_V_MULT_STEP) { cout << "Master: Performing encoder's MHSA V_MULT. Starting matrix #" << gen_reg_16b_3 << " in the Z-stack (out of " << NUM_HEADS << ")" << endl; }
                 else { cout << "Master: Starting high-level step #" << high_level_inf_step << endl; }
@@ -114,18 +103,20 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
             break;
 
         default:
-            sys_state = EVERYTHING_FINISHED; // TODO: For now
+            sys_state = EVERYTHING_FINISHED;
             break;
         }
         break;
 
     case BROADCAST_MANAGEMENT:
-        if ((gen_cnt_10b.get_cnt() == 0) && (bus->get_inst().op == NOP)) { // All transactions sent and bus free, start a new CiM
+        if ((gen_cnt_10b.get_cnt() == 0) && (bus->get_inst().op == NOP) && (all_cims_compute_done == true)) { // All transactions sent and bus free, start a new CiM
             gen_cnt_8b.inc(); // CiM counter
 
             if (gen_cnt_8b.get_cnt() == gen_reg_16b_2) { // All CiMs sent all data and finished using it, can go back to running inference
                 if ((high_level_inf_step != ENC_MHSA_QK_T_STEP && high_level_inf_step != ENC_MHSA_V_MULT_STEP) || (gen_reg_16b_3 == NUM_HEADS)) { // These two steps require going through the Z-stack of the Q and K matrices so only increment the step counter when we're done with the Z-stack
-                    state = WAITING_FOR_CIM_COMPLETION;
+                    state = INFERENCE_RUNNING;
+                    struct instruction inst = {/*op*/ PISTOL_START_OP, /*target_or_sender*/ 0, /*data*/ {0,0}, /*extra_fields*/ 0}; // Tell CiMs that they can go to the next step
+                    bus->push_inst(inst);
                     high_level_inf_step = static_cast<HIGH_LEVEL_INFERENCE_STEP> (high_level_inf_step+1);
                     gen_reg_16b_3 = 0;
                 } else if (gen_reg_16b_3 < NUM_HEADS) { // Not done with the Z-stack
@@ -162,11 +153,13 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
     return sys_state;
 }
 
-int Master_ctrl::start_signal_load(){
+int Master_ctrl::start_signal_load(Bus* bus){
     state = SIGNAL_LOAD;
     gen_cnt_8b.reset();
     gen_cnt_10b.reset();
     cout << "Starting signal load" << endl;
+    instruction inst = {PATCH_LOAD_BROADCAST_START_OP, /*target_or_sender*/ 0, /*data*/ {0,0}, /*extra_fields*/ 0};
+    bus->push_inst(inst);
     return 0;
 }
 
