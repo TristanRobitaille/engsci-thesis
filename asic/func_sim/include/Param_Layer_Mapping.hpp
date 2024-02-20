@@ -6,7 +6,6 @@
 /*----- ENUM -----*/
 enum PARAM_NAME { // Master goes through these layers sequentially, loading weights into the appropriate CiM
     PATCH_PROJ_KERNEL_PARAMS,
-    SINGLE_PARAMS, // The 1-element parameters stored at the bottom of the storage
     POS_EMB_PARAMS,
     ENC_Q_DENSE_PARAMS,
     ENC_K_DENSE_PARAMS,
@@ -15,6 +14,7 @@ enum PARAM_NAME { // Master goes through these layers sequentially, loading weig
     ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS, // Because these two share the same space in different CiMs, we will use the same enum for both
     ENC_MLP_DENSE_2_PARAMS,
     MLP_HEAD_DENSE_2_PARAMS,    
+    SINGLE_PARAMS, // The 1-element parameters stored at the bottom of the storage
     PARAM_LOAD_FINISHED,
 };
 
@@ -61,7 +61,7 @@ struct ParamInfo {
 /*----- STATIC -----*/
 static std::map<PARAM_NAME, ParamInfo> param_addr_map = {
     {PATCH_PROJ_KERNEL_PARAMS,                      {0,     /*len*/ PATCH_LEN,      /*num rec*/ NUM_CIM}},
-    {SINGLE_PARAMS,                                 {64*11, /*len*/ 15,             /*num rec*/ NUM_CIM}},
+    {SINGLE_PARAMS,                                 {64*8,  /*len*/ 16,             /*num rec*/ NUM_CIM}},
     {POS_EMB_PARAMS,                                {64*1,  /*len*/ NUM_PATCHES+1,  /*num rec*/ NUM_CIM}},
     {ENC_Q_DENSE_PARAMS,                            {128,   /*len*/ EMB_DEPTH,      /*num rec*/ NUM_CIM}},
     {ENC_K_DENSE_PARAMS,                            {192,   /*len*/ EMB_DEPTH,      /*num rec*/ NUM_CIM}},

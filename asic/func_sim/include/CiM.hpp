@@ -7,7 +7,7 @@
 #include <Param_Layer_Mapping.hpp>
 
 /*----- DEFINE -----*/
-#define CIM_PARAMS_STORAGE_SIZE_KB 3072
+#define CIM_PARAMS_STORAGE_SIZE_KB 2112
 #define CIM_INT_RES_SIZE_KB 3328
 #define CIM_PREV_SOFTMAX_SIZE_KB (NUM_SLEEP_STAGES * NUM_SAMPLES_OUT_AVG * sizeof(float))
 #define COMPUTE_CNT_THRESHOLD 10 // Used to simulate the delay in the computation to match the real hardware
@@ -69,7 +69,6 @@ class CiM {
             INVALID_INF_STEP = -1
         };
 
-        bool is_idle = true; // Used by Ctrl to know whether CiMs have completed a given inference step. To avoid routing NUM_CIM bits to ctrl, these signals will be daisy-chained ANDed from one CiM to the next... or could just always use CiM #63 as a proxy for all CiM...TBD
         bool compute_in_progress = false; // Used by compute element to notify CiM controller when is in progress
         uint16_t id; // ID of the CiM
         uint16_t gen_reg_16b; // General-purpose register

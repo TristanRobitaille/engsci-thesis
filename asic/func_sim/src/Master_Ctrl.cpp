@@ -233,10 +233,10 @@ struct instruction Master_ctrl::param_to_send(){
                 gen_cnt_8b.inc();
             } else if (gen_cnt_8b.get_cnt() == 5) {
                 inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.enc_mlp_dense_2_bias[gen_cnt_10b.get_cnt()], params.layernorm_gamma[2][gen_cnt_10b.get_cnt()]}, /*extra_fields*/ params.layernorm_beta[2][gen_cnt_10b.get_cnt()]};
-                gen_cnt_10b.inc();
+                gen_cnt_8b.inc();
             } else if (gen_cnt_8b.get_cnt() == 6) {
                 inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_10b.get_cnt(), /*data*/ {params.mlp_head_dense_2_bias[gen_cnt_10b.get_cnt()], 0}, /*extra_fields*/ 0};
-                gen_cnt_8b.inc();
+                gen_cnt_10b.inc();
                 gen_cnt_8b.reset();
             }
         } else {
@@ -308,49 +308,49 @@ void Master_ctrl::update_inst_with_params(PARAM_NAME param_name, struct instruct
     *        gen_cnt_10b() holds the current CiM we are sending data to for the current param
     */
 
-    int num_left = (param_addr_map[param_name].len-gen_cnt_8b.get_cnt()-1);
+    int num_left = param_addr_map[param_name].len-gen_cnt_8b.get_cnt();
 
     switch (param_name) {
     case PATCH_PROJ_KERNEL_PARAMS:
-        inst->data = {params.patch_proj_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.patch_proj_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
-        inst->extra_fields = (num_left <= 1) ? (0) : params.patch_proj_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
+        inst->data = {params.patch_proj_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left == 1) ? (0) : (params.patch_proj_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+        inst->extra_fields = (num_left <= 2) ? (0) : params.patch_proj_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
         break;
     case POS_EMB_PARAMS:
-        inst->data = {params.pos_emb[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.pos_emb[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
-        inst->extra_fields = (num_left <= 1) ? (0) : params.pos_emb[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
+        inst->data = {params.pos_emb[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left == 1) ? (0) : (params.pos_emb[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+        inst->extra_fields = (num_left <= 2) ? (0) : params.pos_emb[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
         break;
     case ENC_Q_DENSE_PARAMS:
-        inst->data = {params.enc_mhsa_Q_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.enc_mhsa_Q_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
-        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_Q_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
+        inst->data = {params.enc_mhsa_Q_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left == 1) ? (0) : (params.enc_mhsa_Q_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+        inst->extra_fields = (num_left <= 2) ? (0) : params.enc_mhsa_Q_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
         break;
     case ENC_K_DENSE_PARAMS:
-        inst->data = {params.enc_mhsa_K_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.enc_mhsa_K_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
-        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_K_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
+        inst->data = {params.enc_mhsa_K_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left == 1) ? (0) : (params.enc_mhsa_K_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+        inst->extra_fields = (num_left <= 2) ? (0) : params.enc_mhsa_K_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
         break;
     case ENC_V_DENSE_PARAMS:
-        inst->data = {params.enc_mhsa_V_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.enc_mhsa_V_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
-        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_V_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
+        inst->data = {params.enc_mhsa_V_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left == 1) ? (0) : (params.enc_mhsa_V_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+        inst->extra_fields = (num_left <= 2) ? (0) : params.enc_mhsa_V_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
         break;
     case ENC_COMB_HEAD_PARAMS:
-        inst->data = {params.enc_mhsa_combine_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.enc_mhsa_combine_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
-        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mhsa_combine_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
+        inst->data = {params.enc_mhsa_combine_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left == 1) ? (0) : (params.enc_mhsa_combine_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+        inst->extra_fields = (num_left <= 2) ? (0) : params.enc_mhsa_combine_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
         break;
     case ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS:
         if (gen_cnt_10b.get_cnt() < MLP_DIM) { // Encoder's MLP (onyl CiMs 0-31 receive bias for the encoder's MLP and CiM's 32-63 receive bias for the MLP head)
-            inst->data = {params.enc_mlp_dense_1_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.enc_mlp_dense_1_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
-            inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mlp_dense_1_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
+            inst->data = {params.enc_mlp_dense_1_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left == 1) ? (0) : (params.enc_mlp_dense_1_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+            inst->extra_fields = (num_left <= 2) ? (0) : params.enc_mlp_dense_1_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
         } else { // MLP head (only 1 layer)
-            inst->data = {params.mlp_head_dense_1_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()-MLP_DIM], (num_left <= 2) ? (0) : (params.mlp_head_dense_1_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()-MLP_DIM])};
-            inst->extra_fields = (num_left <= 1) ? (0) : params.mlp_head_dense_1_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()-MLP_DIM];
+            inst->data = {params.mlp_head_dense_1_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()-MLP_DIM], (num_left == 1) ? (0) : (params.mlp_head_dense_1_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()-MLP_DIM])};
+            inst->extra_fields = (num_left <= 2) ? (0) : params.mlp_head_dense_1_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()-MLP_DIM];
         }
         break;
     case ENC_MLP_DENSE_2_PARAMS:
-        inst->data = {params.enc_mlp_dense_2_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.enc_mlp_dense_2_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
-        inst->extra_fields = (num_left <= 1) ? (0) : params.enc_mlp_dense_2_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
+        inst->data = {params.enc_mlp_dense_2_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left == 1) ? (0) : (params.enc_mlp_dense_2_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+        inst->extra_fields = (num_left <= 2) ? (0) : params.enc_mlp_dense_2_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
         break;
     case MLP_HEAD_DENSE_2_PARAMS:
-        inst->data = {params.mlp_head_dense_2_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left <= 2) ? (0) : (params.mlp_head_dense_2_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
-        inst->extra_fields = (num_left <= 1) ? (0) : params.mlp_head_dense_2_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
+        inst->data = {params.mlp_head_dense_2_kernel[gen_cnt_8b.get_cnt()][gen_cnt_10b.get_cnt()], (num_left == 1) ? (0) : (params.mlp_head_dense_2_kernel[gen_cnt_8b.get_cnt()+1][gen_cnt_10b.get_cnt()])};
+        inst->extra_fields = (num_left <= 2) ? (0) : params.mlp_head_dense_2_kernel[gen_cnt_8b.get_cnt()+2][gen_cnt_10b.get_cnt()];
         break;
     default:
         throw invalid_argument("Invalid parameter name");
