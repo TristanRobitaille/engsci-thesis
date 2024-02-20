@@ -4,6 +4,7 @@
 ~$weekly_progress.pptx
 logs/*
 WORK/*
+build/*
 
 ### Latex
 # Thesis
@@ -74,11 +75,24 @@ asic/results/*
 asic/command.log
 
 ### ASIC functional simulation
-asic/func_sim/cmake_install.cmake
+asic/func_sim/*.cmake
+asic/func_sim/*/*.cmake
+asic/func_sim/*/Makefile
 asic/func_sim/CMakeCache.txt
 asic/func_sim/func_sim
+asic/func_sim/CMakeFiles/*
+asic/func_sim/include/CMakeFiles/
+asic/func_sim/include/doc/
+asic/func_sim/include/src/
 asic/func_sim/Makefile
-asic/func_sim/CMakeFiles
+asic/~$*
+
+### ASIC IP verif
+asic/ip_verif/__pycache__
+asic/ip_verif/*/__pycache__
+asic/ip_verif/*/sim_build
+asic/ip_verif/*/dump.vcd
+asic/ip_verif/*/results.xml
 
 ### Documentation
 doc/CMC_VLSI_User_Manual_2023.pdf

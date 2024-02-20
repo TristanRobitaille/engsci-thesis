@@ -3,7 +3,7 @@ The purpose of the functional simulation is to ensure the control logic for the 
 
 ### Dependencies
 To generate the Makefile, `CMake` is required. Install it with `brew install cmake`. \
-To compile the simulation, `gcc` is required. Install it with `brew install gcc`.
+To compile the simulation, `gcc`, `hdf5` and `fmt` are required. Install them with `brew install gcc hdf5 boost fmt`.
 
 ### How to run
 Run from the `asic/func_sim/` directory. \

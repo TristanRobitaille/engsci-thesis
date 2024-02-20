@@ -1,3 +1,3 @@
-[submodule "asic/func_sim/csv-parser"]
-	path = asic/func_sim/csv-parser
-	url = git@github.com:vincentlaucsb/csv-parser.git
+[submodule "asic/func_sim/HighFive"]
+	path = asic/func_sim/HighFive
+	url = git@github.com:BlueBrain/HighFive.git
