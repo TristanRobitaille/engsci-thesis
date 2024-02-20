@@ -1,4 +1,5 @@
 import csv
+import h5py
 import glob
 import socket
 import argparse
@@ -9,6 +10,7 @@ import glob as glob
 import tensorflow as tf
 from pyedflib import EdfReader
 import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
 
 """
 Some utility function
@@ -20,16 +22,16 @@ class ArgumentParserWithError(argparse.ArgumentParser):
         raise Exception(message)
 
 class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
-    def __init__(self, embedding_depth, warmup_steps=40000):
+    def __init__(self, embedding_depth, warmup_steps_exponent=-1.5, warmup_steps=4000):
         super().__init__()
-        self.embedding_depth = embedding_depth
-        self.embedding_depth = tf.cast(self.embedding_depth, tf.float32)
+        self.embedding_depth = tf.cast(embedding_depth, tf.float32)
+        self.warmup_steps_exponent = warmup_steps_exponent
         self.warmup_steps = warmup_steps
 
     def __call__(self, step):
         step = tf.cast(step, dtype=tf.float32)
         arg1 = tf.math.rsqrt(step)
-        arg2 = step * (self.warmup_steps ** -1.5)
+        arg2 = step * (self.warmup_steps ** self.warmup_steps_exponent)
 
         return tf.math.rsqrt(self.embedding_depth) * tf.math.minimum(arg1, arg2)
 
@@ -37,6 +39,7 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
         config = {
             'embedding_depth': int(self.embedding_depth),
             'warmup_steps': int(self.warmup_steps),
+            'warmup_steps_exponent': self.warmup_steps_exponent,
         }
         return config
 
@@ -53,14 +56,14 @@ class MovingAverage():
         """ Returns a filtered (self.num_samples.shape[0], 1) tensor."""
         if self.num_samples == 0: # No filtering
             return new_output
-        
+
         if self.self_reset_enabled and (len(self.sleep_stage_samples) >= self.self_reset_threshold) and (self.is_sleep_stage_buffer_constant()): self.reset()
 
         self.output_samples.append(new_output)
         if len(self.output_samples) > self.num_samples: self.output_samples.pop(0)
 
         return tf.reduce_mean(self.output_samples, axis=0)
-    
+
     def reset(self):
         self.output_samples = []
 
@@ -69,7 +72,7 @@ class MovingAverage():
         if len(self.sleep_stage_samples) > self.self_reset_threshold: self.sleep_stage_samples.pop(0)
 
     def is_sleep_stage_buffer_constant(self):
-        """ 
+        """
         Returns whether the sleep stage prediction buffer contains only the same values, up to the self reset threshold
         """
 
@@ -93,12 +96,12 @@ class SleepStageMap():
     _allowed_maps = ["no_combine", "light_only_combine", "deep_only_combine", "both_light_deep_combine"]
 
     def __init__(self, map_name:str="no_combine"):
-        assert (map_name in self._allowed_maps), (f"Mapping name '{map_name}' not in allowed mappings ({self._allowed_maps})") 
+        assert (map_name in self._allowed_maps), (f"Mapping name '{map_name}' not in allowed mappings ({self._allowed_maps})")
         self.map_name = map_name
 
     def set_map_name(self, map_name:str):
         self.map_name = map_name
-    
+
     def get_map_name(self):
         return self.map_name
 
@@ -119,7 +122,7 @@ class SleepStageMap():
         elif (self.map_name == "light_only_combine"):   return ["Unknown", "N4 (deep)",   "N3 (deep)",    "N1/2 (light)", "REM",        "Wake"]
         elif (self.map_name == "deep_only_combine"):    return ["Unknown", "N3/4 (deep)", "N2 (light)",   "N1 (light)",   "REM",        "Wake"]
         else:                                           return ["Unknown", "N3/4 (deep)", "N1/2 (light)", "REM", "Wake"]
-    
+
     def get_num_stages(self):
         """
         Returns the number of sleep stages (excluding the 'unknown' stage)
@@ -136,7 +139,7 @@ def plot_1D_tensor(input_tensor: tf.Tensor) -> None:
     """
 
     data = np.array(input_tensor)
-    
+
     plt.plot(data)
     plt.title(f"min: {min(data)}, max: {max(data)}, shape: {data.shape}")
     plt.show(block=True)
@@ -157,7 +160,7 @@ def random_dataset(clip_length_num_samples:int, max_min:tuple, num_clips:int=100
     sleep_stage_dataset = tf.random.uniform(shape=[num_clips], minval=sleep_min, maxval=sleep_max) #Sleep stages
     sleep_stage_dataset = tf.math.round(sleep_stage_dataset)
     input_dataset = tf.zeros(shape=(0, clip_length_num_samples))
-   
+
     for sleep_stage in sleep_stage_dataset:
         mean = (clip_max) * sleep_stage/sleep_max
         stddev = 2000 # Observed in real dataset
@@ -233,7 +236,7 @@ def get_weight_distribution(model:tf.keras.Model) -> None:
             plt.savefig(f"/home/trobitaille/engsci-thesis/python_prototype/scratch/{layer.name}.png")
         else:
             print(f"No weights found for layer {layer.name}")
-    
+
 def count_instances_per_class(input, num_classes) -> list:
     count = [0 for _ in range(num_classes)]
     for elem in input:
@@ -334,23 +337,48 @@ def round_up_to_nearest_tenth(input) -> float:
     rounded_up_input = rounded_input if (rounded_input > input) else (rounded_input + 0.1) # Round up to nearest tenth
     return rounded_up_input
 
-def edf_to_csv(edf_fp:str, csv_filename:str, channel:str, clip_duration_num_samples:int):
+def edf_to_h5(edf_fp:str, h5_filename:str, channel:str, clip_length_s=-1, sampling_freq_hz:int=-1):
+    """ Reads .edf input signal file, saves to .h5 and return the signal as a Tensor."""
     signal_reader = EdfReader(edf_fp)
     channels = list(signal_reader.getSignalLabels())
     channel_number = channels.index(channel)
     signal = signal_reader.readSignal(channel_number, digital=True)
-    for i in range(len(signal)):
-        signal[i] += 2**15 # Offset by 15b
-    csv_dictionary = {"EEG":signal[0:clip_duration_num_samples]}
 
-    with open(csv_filename, mode='w', newline='') as file:
-        writer = csv.DictWriter(file, fieldnames=csv_dictionary.keys())
-        writer.writeheader()
-        for val in csv_dictionary["EEG"]:
-            writer.writerow({"EEG":val})
+    # Resampling
+    original_indices = np.arange(0, len(signal))
+    target_length = int(len(signal) * (sampling_freq_hz / 256))
+    target_indices = np.linspace(0, len(signal) - 1, target_length)
+    interpolator = interp1d(original_indices, signal, kind='linear', fill_value="extrapolate")
+    resample = interpolator(target_indices)
+    resample = resample.astype(int)
+
+    # Grab 1 clip or all night
+    if clip_length_s != -1: resample = resample[0:clip_length_s*sampling_freq_hz]
+    
+    for i in range(len(resample)):
+        resample[i] += 2**15 # Offset by 15b
+
+    with h5py.File(h5_filename, 'w') as file:
+        file.create_dataset('eeg', data=resample)
+
+    tensor = tf.convert_to_tensor(resample, dtype=tf.float32, name="input_1")
+    tensor = tf.expand_dims(tensor, axis=0)
+    return tensor
+
+def export_layer_outputs(model:tf.keras.Model, input_signal:tf.Tensor):
+    # Run model
+    model.build(input_shape=input_signal.shape)
+    model(input_signal, training=False)
+    intermediate_layer_model = tf.keras.Model(inputs=model.input, outputs=model.get_layer('patch_projection_dense').output)
+    for i, layer in enumerate(model.layers):
+        layer_model = tf.keras.Model(inputs=model.input, outputs=layer.output)
+        layer_output = layer_model.predict(input_signal)
+        print(layer_output)
 
 def main():
-    edf_to_csv(edf_fp="/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF/01-03-0062 PSG.edf", csv_filename="eeg_sample.csv", channel="EEG Cz-LER", clip_duration_num_samples=30*256)
+    model = tf.keras.models.load_model("/home/trobitaille/engsci-thesis/python_prototype/results/2024-01-22_14-00-01_vision/run_1/models/model.tf", custom_objects={"CustomSchedule": CustomSchedule})
+    input_signal = edf_to_h5(edf_fp="/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF/01-03-0064 PSG.edf", h5_filename="eeg.h5", channel="EEG Cz-LER", clip_length_s=30, sampling_freq_hz=128)
+    export_layer_outputs(model, input_signal)
 
 if __name__ == "__main__":
     main()

@@ -26,11 +26,10 @@ NUM_SLEEP_STAGE_HISTORY = -1
 DATA_TYPE = tf.float32
 NUM_NIGHTS_VALIDATION = 2 # Number of nights used for validation
 RANDOM_SEED = 42
-NUM_WARMUP_STEPS = 4000
 RESAMPLE_TRAINING_DATASET = False
 SHUFFLE_TRAINING_CLIPS = True
 NUM_CLIPS_PER_FILE_EDGETPU = 500 # 500 is only valid for 256Hz
-K_FOLD_OUTPUT_TO_FILE = True # If true, will write validation accuracy to a CSV for k-fold sweep validation
+K_FOLD_OUTPUT_TO_FILE = False # If true, will write validation accuracy to a CSV for k-fold sweep validation
 K_FOLD_SETS_MANUAL_PRUNE = [4]
 
 AVAILABLE_OPTIMIZERS = ["Adam", "AdamW"]
@@ -125,11 +124,11 @@ def split_whole_night_validation_set(signals, args, sleep_stages, whole_night_ma
     """
     Split the dataset into whole nights for validation
     """
-   
+
     whole_night_indices = [i for i, x in enumerate(whole_night_markers.numpy()) if x == 1]
     last_k_fold_set = (NUM_NIGHTS_VALIDATION*args.k_fold_val_set + NUM_NIGHTS_VALIDATION) >= len(whole_night_indices) # Last k-fold validation set
     start_of_1st_val_night = whole_night_indices[NUM_NIGHTS_VALIDATION*args.k_fold_val_set] # Index of the first clip in the first validation night
-    
+
     if (not last_k_fold_set):
         end_of_last_val_night = whole_night_indices[NUM_NIGHTS_VALIDATION*args.k_fold_val_set + NUM_NIGHTS_VALIDATION] # Index of the first clip of the night after the last validation night
         signals_train = np.concatenate((np.array(signals[0:start_of_1st_val_night]), signals[end_of_last_val_night:]))
@@ -298,7 +297,7 @@ def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_
         if (original_sleep_stage_count != -1): log += f"Sleep stages count in original dataset ({num_clips_original_dataset}): {original_sleep_stage_count} ({[round(num / num_clips_training, 4) for num in original_sleep_stage_count]})\n"
         if not model_specific_only: log += f"Sleep stages count in training data ({num_clips_training}): {sleep_stages_count_training} ({[round(num / num_clips_training, 4) for num in sleep_stages_count_training]})\n"
         if not model_specific_only: log += f"Sleep stages count in validation set input ({num_clips_validation}): {sleep_stages_count_val} ({[round(num / num_clips_validation, 4) for num in sleep_stages_count_val]})\n"
-        if not model_specific_only: 
+        if not model_specific_only:
             for model_type, pred_cnt in pred_cnt.items(): log += f"Sleep stages count in validation set prediction ({num_clips_validation}, {model_type}): {pred_cnt} ({[round(num / num_clips_validation, 4) for num in pred_cnt[-1]]})\n"
 
         log += f"\nClip length (s): {dataset_metadata['clip_length_s']}\n"
@@ -377,14 +376,14 @@ def parse_arguments():
         utilities.log_error_and_exit(exception=e, manual_description=f"[{(time.time()-start_time):.2f}s] Failed to parse arguments.")
 
     # Scale arguments
-    args.dropout_rate_percent /= 100 
+    args.dropout_rate_percent /= 100
 
     # Print arguments received
     for arg in vars(args):
         print(f"{arg}: {getattr(args, arg)}")
 
     # Prune bad set
-    if args.k_fold_val_set in K_FOLD_SETS_MANUAL_PRUNE: 
+    if args.k_fold_val_set in K_FOLD_SETS_MANUAL_PRUNE:
         print(f"Receive k-fold set {args.k_fold_val_set}, which is in the pruned set ({K_FOLD_SETS_MANUAL_PRUNE}). Exiting.")
         exit()
 
@@ -407,7 +406,7 @@ def train_model(args, data:dict, mlp_dense_activation:str):
                 optimizer = tf.keras.optimizers.AdamW(learning_rate=CustomSchedule(args.embedding_depth), weight_decay=0.004, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
 
         model.compile(loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False), optimizer=optimizer, metrics=["accuracy"])
-    
+
     except Exception as e: utilities.log_error_and_exit(exception=e, manual_description=f"[{(time.time()-start_time):.2f}s] Failed to compile model.")
 
     tensorboard_log_dir = "logs/fit/" + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
@@ -472,13 +471,13 @@ def manual_val(model, args, type:str, data:dict, whole_night_indices:list, out_f
     # Run model
     try:
         if (type == "tf"):
-            sleep_stages_pred = utilities.run_model(model, data=data, whole_night_indices=whole_night_indices, data_type=DATA_TYPE, num_output_filtering=args.num_out_filter, 
+            sleep_stages_pred = utilities.run_model(model, data=data, whole_night_indices=whole_night_indices, data_type=DATA_TYPE, num_output_filtering=args.num_out_filter,
                                                     filter_post_argmax=filter_post_argmax, self_reset_threshold=args.filter_self_reset_threshold, num_sleep_stage_history=NUM_SLEEP_STAGE_HISTORY)
         elif (type == "tflite") or (type == "tflite (quant)") or (type == "tflite (16bx8b full quant)"):
-            sleep_stages_pred = utilities.run_tflite_model(model, data=data, whole_night_indices=whole_night_indices, data_type=DATA_TYPE, num_output_filtering=args.num_out_filter, 
+            sleep_stages_pred = utilities.run_tflite_model(model, data=data, whole_night_indices=whole_night_indices, data_type=DATA_TYPE, num_output_filtering=args.num_out_filter,
                                                            filter_post_argmax=filter_post_argmax, self_reset_threshold=args.filter_self_reset_threshold, num_sleep_stage_history=NUM_SLEEP_STAGE_HISTORY)
         elif type == "tflite (full quant)":
-            sleep_stages_pred = utilities.run_tflite_model(model, data=data, whole_night_indices=whole_night_indices, data_type=tf.uint8, num_output_filtering=args.num_out_filter, 
+            sleep_stages_pred = utilities.run_tflite_model(model, data=data, whole_night_indices=whole_night_indices, data_type=tf.uint8, num_output_filtering=args.num_out_filter,
                                                            filter_post_argmax=filter_post_argmax, self_reset_threshold=args.filter_self_reset_threshold, num_sleep_stage_history=NUM_SLEEP_STAGE_HISTORY)
 
         # Check accuracy
@@ -510,7 +509,7 @@ def increment_ops(ops_dict:dict, in_shape, out_shape, layer_type:str, activation
     if layer_type == "Dense":
         ops_dict["mults"] += x_in * y_in * x_out
         ops_dict["adds"] += x_in * y_in * (x_out-1) + x_out * y_in
-        ops_dict["incrs"] += x_in * y_in * (x_out-1) + x_out * y_in
+        ops_dict["incrs"] += x_in * y_in * (x_out-1) + x_out
         if activation: ops_dict["acts"] += x_out * y_in
 
     elif layer_type == "LayerNorm":
@@ -537,19 +536,29 @@ def increment_ops(ops_dict:dict, in_shape, out_shape, layer_type:str, activation
         ops_dict["adds"] += y_in * (x_in - 1)
         ops_dict["incrs"] += 2 * y_in * (x_in - 1)
 
-def extract_avg_accuracies(rows:dict):
-    avg_acc = {}
-    for key in rows[0].keys(): 
-        if key != 'k-fold set': avg_acc.update({key:[]}) # Reset accuracies
+def extract_stats_accuracies(rows:dict):
+    """"
+    Returns a tuple of dictionaries containing the average and median accuracies for k-fold validation
+    """
+    acc = {}
+    for key in rows[0].keys():
+        if key != 'k-fold set': acc.update({key:[]}) # Reset accuracies
 
     for row in rows:
         if row[key] == '': break # We've hit the blank row, so stop
-        for key in avg_acc.keys(): avg_acc[key].append(float(row[key]))
+        for key in acc.keys(): acc[key].append(float(row[key]))
 
-    for key, value in avg_acc.items():
-        avg_acc[key] = sum(value) / len(value)
+    avg = {}
+    med = {}
+    for key, value in acc.items():
+        acc = np.array(value)
+        avg.update({key:np.average(acc)})
+        med.update({key:np.median(acc)})
 
-    return avg_acc
+    avg.update({'k-fold set': 'Average'})
+    med.update({'k-fold set': 'Median'})
+
+    return avg, med
 
 def export_k_fold_results(args, acc:dict):
     fp = args.k_fold_val_results_fp + ".csv"
@@ -566,7 +575,9 @@ def export_k_fold_results(args, acc:dict):
             writer.writeheader()
             writer.writerow(data_to_write)
             writer.writerow(blank_row)
-            acc.update({'k-fold set': 'Average'})
+            acc.update({'k-fold set': 'Average'}) # Sole k-fold set in results file, so average is itself
+            writer.writerow(acc)
+            acc['k-fold set'] = 'Median' # Same for median
             writer.writerow(acc)
         return
 
@@ -580,7 +591,7 @@ def export_k_fold_results(args, acc:dict):
                 # Check if row already exists, and update it if so
                 row_found = False
                 for row in rows:
-                    if row['k-fold set'] == str(args.k_fold_val_set):
+                    if row['k-fold set'] == str(args.k_fold_val_set): # Current k-fold set is already in CSV -> Just update accuracies on that line
                         row.update(data_to_write)
                         row_found = True
                         break
@@ -591,18 +602,19 @@ def export_k_fold_results(args, acc:dict):
     with open(fp, mode='w', newline='') as file:
         writer = csv.DictWriter(file, fieldnames=data_to_write.keys())
         writer.writeheader()
-        
+
         for row in rows:
-            if row["k-fold set"] == 'Average': break # We've hit the last row, don't write it
+            if row["k-fold set"] == 'Average': break # We've hit the beginning of the stats rows, stop writting
             writer.writerow(row)
-        
+
         # Writing additional blank row and average accuracies row
-        avg_accuracies = extract_avg_accuracies(rows)  # Function to calculate average accuracies
-        avg_accuracies.update({'k-fold set': 'Average'})
-        writer.writerow(avg_accuracies)
+        avg_row, med_row = extract_stats_accuracies(rows) # Function to calculate average accuracies
+        writer.writerow(avg_row)
+        writer.writerow(med_row)
 
 def save_models(model, all_models:dict, out_fp:str):
     model.save(f"{out_fp}/models/model.tf", save_format="tf")
+    model.save_weights(filepath=f"{out_fp}/models/model_weights.h5")
     print(f"[{(time.time()-start_time):.2f}s] Saved model to {out_fp}/models/model.tf")
 
     if "cedar.computecanada.ca" not in socket.gethostname(): # Only export model if not running on Cedar (aka running TF 2.8) since it doesn't support it
@@ -653,8 +665,8 @@ tf.keras.utils.get_custom_objects().update({'aptx': aptx})
 
 #--- Multi-Head Attention ---#
 class MultiHeadSelfAttention(tf.keras.layers.Layer):
-    def __init__(self, args, embedding_depth:int, num_heads:int):
-        super(MultiHeadSelfAttention, self).__init__()
+    def __init__(self, args, embedding_depth:int, num_heads:int, **kwargs):
+        super(MultiHeadSelfAttention, self).__init__( **kwargs)
 
         # Hyperparameters
         self.embedding_depth = embedding_depth
@@ -675,12 +687,13 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
         self.combine_heads = tf.keras.layers.Dense(self.embedding_depth, name="mhsa_combine_head_dense")
 
     def attention(self, query, key, value):
-        score = tf.matmul(query, key, transpose_b=True) #score = (batch_size, embedding_depth/num_heads, num_patches+1, num_patches+1)
+        score = tf.matmul(query, key, transpose_b=True) #score = (batch_size, num_heads, num_patches+1, num_patches+1)
         dim_key = tf.cast(tf.shape(key)[-1], dtype=DATA_TYPE)
         # assert (self.num_heads == 16) or (self.num_heads == 4), "num_heads not 4 or 16, as needed to simplify attention calculations."
-        scaled_score = score / tf.math.sqrt(dim_key) #scaled_score = (batch_size, embedding_depth/num_heads, num_patches+1, num_patches+1)
-        weights = tf.nn.softmax(logits=scaled_score, axis=-1) #weights = (batch_size, embedding_depth/num_heads, num_patches+1, num_patches+1)
-        output = tf.matmul(weights, value) #output = (batch_size, embedding_depth/num_heads, num_patches+1, num_heads)
+        scaled_score = score / tf.math.sqrt(dim_key) #scaled_score = (batch_size, num_heads, num_patches+1, num_patches+1)
+        weights = tf.nn.softmax(logits=scaled_score, axis=-1) #weights = (batch_size, num_heads, num_patches+1, num_patches+1)
+        output = tf.matmul(weights, value) #output = (batch_size, num_heads, num_patches+1, embedding_depth/num_heads)
+
         return output, weights
 
     def separate_heads(self, x, batch_size):
@@ -695,12 +708,12 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
         key = self.key_dense(inputs) #key = (batch_size, num_patches+1, embedding_depth)
         value = self.value_dense(inputs) #value = (batch_size, num_patches+1, embedding_depth)
 
-        query = self.separate_heads(query, batch_size) #query = (batch_size, embedding_depth/num_heads, num_patches+1, num_heads)
-        key = self.separate_heads(key, batch_size) #key = (batch_size, embedding_depth/num_heads, num_patches+1, num_heads)
-        value = self.separate_heads(value, batch_size) #value = (batch_size, embedding_depth/num_heads, num_patches+1, num_heads)
+        query = self.separate_heads(query, batch_size) #query = (batch_size, num_heads, num_patches+1, embedding_depth/num_heads)
+        key = self.separate_heads(key, batch_size) #key = (batch_size, num_heads, num_patches+1, embedding_depth/num_heads)
+        value = self.separate_heads(value, batch_size) #value = (batch_size, num_heads, num_patches+1, embedding_depth/num_heads)
 
-        attention, weights = self.attention(query, key, value) #attention = (batch_size, embedding_depth/num_heads, num_patches+1, num_heads)
-        attention = tf.transpose(attention, perm=[0,2,1,3]) #attention = (batch_size, num_patches+1, embedding_depth/num_heads, num_heads)
+        attention, weights = self.attention(query, key, value) #attention = (batch_size, num_heads, num_patches+1, embedding_depth/num_heads)
+        attention = tf.transpose(attention, perm=[0,2,1,3]) #attention = (batch_size, num_patches+1, num_heads, embedding_depth/num_heads)
         concat_attention = tf.reshape(attention, (batch_size, -1, self.embedding_depth)) #concat_attention = (batch_size, num_patches+1, embedding_depth)
         output = self.combine_heads(concat_attention) #output = (batch_size, num_patches+1, embedding_depth)
 
@@ -731,10 +744,14 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
 
         return ops
 
+    def get_config(self):
+        config = super().get_config()
+        return config
+
 #--- Encoder ---#
 class Encoder(tf.keras.layers.Layer):
-    def __init__(self, args, mlp_dense_activation):
-        super(Encoder, self).__init__()
+    def __init__(self, args, mlp_dense_activation, **kwargs):
+        super(Encoder, self).__init__(**kwargs)
 
         # Hyperparameters
         self.args = args
@@ -796,6 +813,17 @@ class Encoder(tf.keras.layers.Layer):
 
         return ops
 
+    def get_config(self):
+        config = super().get_config()
+        config.update({"layers":[
+            self.layernorm1,
+            self.mhsa,
+            self.dropout1,
+            self.layernorm2,
+            self.mlp,
+            self.dropout2,]})
+        return config
+
 #--- Vision Transformer ---#
 class VisionTransformer(tf.keras.Model):
     def __init__(self, args, mlp_dense_activation):
@@ -825,7 +853,7 @@ class VisionTransformer(tf.keras.Model):
         if self.enable_scaling: self.rescale = tf.keras.layers.experimental.preprocessing.Rescaling(1.0 / MAX_VOLTAGE)
         if self.use_class_embedding: self.class_embedding = self.add_weight("class_emb", shape=(1, 1, self.embedding_depth))
         if self.enable_positional_embedding: self.positional_embedding = self.add_weight("pos_emb", shape=(1, self.num_patches+self.use_class_embedding+(self.history_length > 0), self.embedding_depth)) #+1 for the trainable classification token, +1 for historical lookback
-        self.encoder_layers = [Encoder(args, mlp_dense_activation=self.mlp_dense_activation) for _ in range(self.num_encoder_layers)]
+        self.encoder_layers = [Encoder(args, mlp_dense_activation=self.mlp_dense_activation, name=f"Encoder_{i+1}") for i in range(self.num_encoder_layers)]
         self.mlp_head = [tf.keras.layers.LayerNormalization(epsilon=1e-6, name="mlp_head_layerNorm")]
         for i in range(self.mlp_head_num_dense):
             self.mlp_head.append(tf.keras.layers.Dense(self.mlp_dim, activation=self.mlp_dense_activation, name=f"mlp_head_dense{i+1}"))
@@ -874,7 +902,10 @@ class VisionTransformer(tf.keras.Model):
             clip = layer(inputs=clip, training=training) #clip = (batch_size, num_patches+1, embedding_depth)
 
         # Classify with first token
-        prediction = self.mlp_head(clip[:, 0]) #prediction = (batch_size, sleep_map.get_num_stages()+1)
+        # print(f"clip.shape: {clip.shape}")
+        # print(f"clip[:, 0].shape: {clip[:, 0].shape}")
+        prediction = self.mlp_head(clip[:, 0]) # Select the first row of each batch's encoder output. prediction = (batch_size, sleep_map.get_num_stages()+1)
+        # print(f"prediction.shape: {prediction.shape}")
 
         if self.historical_lookback_DNN:
             historical_lookback = tf.cast(historical_lookback, tf.uint8)
@@ -949,10 +980,10 @@ class VisionTransformer(tf.keras.Model):
 
 #--- Misc ---#
 class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
-    def __init__(self, embedding_depth, warmup_steps=NUM_WARMUP_STEPS):
+    def __init__(self, embedding_depth, warmup_steps_exponent=-1.5, warmup_steps=4000):
         super().__init__()
         self.embedding_depth = tf.cast(embedding_depth, tf.float32)
-        self.warmup_steps_exponent = -1.5
+        self.warmup_steps_exponent = warmup_steps_exponent
         self.warmup_steps = warmup_steps
 
     def __call__(self, step):
@@ -1026,7 +1057,7 @@ def main():
 
     # Write to k-fold validation file
     if K_FOLD_OUTPUT_TO_FILE:
-        export_summary(args.k_fold_val_results_fp+".txt", args, all_models["tf"], fit_history, acc, original_sleep_stage_cnt, sleep_stages_cnt_train, 
+        export_summary(args.k_fold_val_results_fp+".txt", args, all_models["tf"], fit_history, acc, original_sleep_stage_cnt, sleep_stages_cnt_train,
                        sleep_stages_cnt_val, pred_cnt, mlp_dense_act, dataset_metadata, model_specific_only=True)
         export_k_fold_results(args, acc)
         print(f"[{(time.time()-start_time):.2f}s] Wrote to k-fold results file.")

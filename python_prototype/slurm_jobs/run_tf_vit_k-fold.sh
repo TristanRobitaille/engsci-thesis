@@ -16,19 +16,19 @@ source ~/tensorflow/bin/activate
 python3 /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/main_vision_transformer.py \
 --batch_size=16 \
 --learning_rate=1e-3 \
---patch_length=256 \
+--patch_length=64 \
 --num_epochs=100 \
 --input_channel='EEG Cz-LER' \
 --num_clips=115000 \
---embedding_depth=$3 \
---num_layers=$1 \
+--embedding_depth=64 \
+--num_layers=1 \
 --num_heads=8 \
---mlp_dim=$4 \
+--mlp_dim=32 \
 --mlp_head_num_dense=1 \
 --historical_lookback_DNN_depth=32 \
 --dropout_rate_percent=30 \
 --class_weights 1 1 1 1 1 \
---input_dataset="/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/data/SS3_EDF_Tensorized_both_light_deep_combine-stg_30-0s_256Hz_notch_60Hz_15b_offset_0_3Hz-100Hz_bandpass" \
+--input_dataset="/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/data/SS3_EDF_Tensorized_both_light_deep_combine-stg_30-0s_128Hz_notch_60Hz_15b_offset_0_3Hz-100Hz_bandpass" \
 --dataset_resample_algo="ADASYN" \
 --training_set_target_count 4600 4600 4600 4600 4600 \
 --save_model \

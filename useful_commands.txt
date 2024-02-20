@@ -24,8 +24,10 @@ Execution instructions for Tensorflow model on Compute Canada node:
     -View current jobs: $ sq
     -Cancel job: $ scancel <NODEID>
     -View job stats: $ seff <JOBID>
-    -Interactive job: $ salloc --time=02:00:00 --mem-per-cpu=16G --ntasks=2 --account=def-xilinliu
-    -View usage stats $ sacct -j <JOBID>
+    -Interactive job: $ salloc --time=02:00:00 --mem-per-cpu=16G --gpus=4 --ntasks=4 --account=def-xilinliu
+    -Interactive job (GPUs): $ salloc --time=02:00:00 --nodes=1 --gpus-per-node=p100:4 --ntasks-per-node=24 --mem=16G --ntasks=4 --account=def-xilinliu
+    -View usage stats: $ sacct -j <JOBID>
+    -View group disk usage: $ diskusage_report --per_user
 
 Other useful commands
 tmux:
