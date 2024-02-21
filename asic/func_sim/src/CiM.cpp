@@ -77,6 +77,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
                 bus->push_inst(new_inst);
 
+                // TODO: Check if we need this
                 // if ((inst.op == TRANS_BROADCAST_DATA_OP) && (current_inf_step == ENC_MHSA_QK_T)) { // Since I'm here, move my own data to the correct location in intermediate_res (do I need to do that in the previous op (QVK dense) as well?)
                 //     intermediate_res[static_cast<int>(inst.extra_fields)+id] = intermediate_res[addr_reg+id];
                 // }
