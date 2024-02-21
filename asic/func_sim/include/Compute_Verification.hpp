@@ -14,7 +14,8 @@
 enum COMPUTE_VERIFICATION_STEP {
     PATCH_PROJECTION_VERIF,
     CLASS_TOKEN_VERIF,
-    POS_EMB_VERIF
+    POS_EMB_VERIF,
+    ENC_LAYERNORM1_VERIF
 };
 
 /*----- STRUCT -----*/
@@ -26,7 +27,8 @@ struct StepVerifInfo {
 static std::map<COMPUTE_VERIFICATION_STEP, StepVerifInfo> step_verif_info = {
     {PATCH_PROJECTION_VERIF,    {"reference_data/patch_projection.csv"}},
     {CLASS_TOKEN_VERIF,         {"reference_data/clip_with_class_embedding.csv"}},
-    {POS_EMB_VERIF,             {"reference_data/clip_with_class_embedding_and_pos_emb.csv"}}
+    {POS_EMB_VERIF,             {"reference_data/clip_with_class_embedding_and_pos_emb.csv"}},
+    {ENC_LAYERNORM1_VERIF,      {"reference_data/enc_layernorm1.csv"}}
 };
 
 /*----- FUNCTION -----*/

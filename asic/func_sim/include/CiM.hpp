@@ -74,7 +74,8 @@ class CiM {
         bool is_ready = true; // Signal that CiM can use to override the compute_in_progress signal and force the master to wait before sending the next instruction
         uint16_t id; // ID of the CiM
         uint16_t gen_reg_16b; // General-purpose register
-        uint16_t addr_reg; // General-purpose register used to record the address of the data sent/received on the bus
+        uint16_t tx_addr_reg; // General-purpose register used to record the address of the data sent on the bus
+        uint16_t rx_addr_reg; // General-purpose register used to record the address of the data received on the bus
         uint16_t data_len_reg; // General-purpose register used to record len of data sent/received on the bus
         uint16_t compute_process_cnt; // Counter used to track the progress of the current computation (used to simulate the delay in the computation to match the real hardware)
         uint16_t num_compute_done; // Counter used to track the number of computations done in a given inference step
