@@ -10,7 +10,7 @@ struct ext_signals ext_sigs;
 
 Bus bus;
 CiM cims[NUM_CIM];
-Master_ctrl ctrl("data/eeg.h5", "data/params_1_enc.h5");
+Master_ctrl ctrl("reference_data/eeg.h5", "reference_data/model_params.h5");
 
 int init(){
     ext_sigs.master_nrst = false;

@@ -10,6 +10,7 @@
 #include <CiM.hpp>
 #include <Master_Ctrl.hpp>
 #include <Misc.hpp>
+#include <Compute_Verification.hpp>
 
 typedef void (*FcnPtr)(struct ext_signals*);
 

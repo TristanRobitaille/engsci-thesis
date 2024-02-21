@@ -30,17 +30,16 @@ int Master_ctrl::reset(){
 
 SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]){
     /* Run the master controller FSM */
-
-    bool all_cims_compute_done = true;
     SYSTEM_STATE sys_state = RUNNING;
 
     // Act on priority external signals
     if  (ext_sigs->master_nrst == false) { state = RESET; }
 
     // Check if CiMs are idle
+    all_cims_ready = true;
     for (int i=0; i<num_necessary_idles.at(high_level_inf_step); i++){ 
-        if (high_level_inf_step == MLP_HEAD_DENSE_2_STEP) { all_cims_compute_done &= cims[i+MLP_DIM].get_is_compute_done(); }
-        else { all_cims_compute_done &= cims[i].get_is_compute_done(); }
+        if (high_level_inf_step == MLP_HEAD_DENSE_2_STEP) { all_cims_ready &= cims[i+MLP_DIM].get_is_ready(); }
+        else { all_cims_ready &= cims[i].get_is_ready(); }
     }
 
     switch (state) {
@@ -54,16 +53,17 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
         break;
 
     case PARAM_LOAD:
-        if (all_cims_compute_done) { bus->push_inst(param_to_send()); }
+        if (all_cims_ready) { bus->push_inst(param_to_send()); }
         break;
 
     case SIGNAL_LOAD:
         /* Sequentially parses the input EEG file and broadcasts it to all CiMs to emulate the ADC feed in the ASIC */
-        if ((eeg != eeg_ds.end()) && (all_cims_compute_done == true)) {
-            struct instruction inst = {/*op*/ PATCH_LOAD_BROADCAST_OP, /*target_or_sender*/ 0, /*data*/ {*eeg,0}, /*extra_field*/ 0};
+        if ((eeg != eeg_ds.end()) && (all_cims_ready == true)) {
+            float rescaled_data = (*eeg)*EEG_SCALE_FACTOR;
+            struct instruction inst = {/*op*/ PATCH_LOAD_BROADCAST_OP, /*target_or_sender*/ 0, /*data*/ {rescaled_data,0}, /*extra_field*/ 0};
             bus->push_inst(inst); // Broadcast on bus
             ++eeg;
-        } else if ((eeg == eeg_ds.end()) && (all_cims_compute_done == true)) {
+        } else if ((eeg == eeg_ds.end()) && (all_cims_ready == true)) {
             state = INFERENCE_RUNNING;
             cout << "Reached end of signal file" << endl;
         }
@@ -91,7 +91,7 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
         case MLP_HEAD_DENSE_2_STEP:
         case MLP_HEAD_SOFTMAX_TRANSPOSE_STEP:
         case SOFTMAX_AVERAGING:
-            if (bus->get_inst().op == INFERENCE_RESULT_OP && all_cims_compute_done == true) {
+            if (bus->get_inst().op == INFERENCE_RESULT_OP && all_cims_ready == true) {
                 sys_state = EVERYTHING_FINISHED;
                 break;
             } else if (high_level_inf_step != SOFTMAX_AVERAGING) {
@@ -109,7 +109,7 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, CiM cims[]
         break;
 
     case BROADCAST_MANAGEMENT:
-        if ((gen_cnt_10b.get_cnt() == 0) && (bus->get_inst().op == NOP) && (all_cims_compute_done == true)) { // All transactions sent and bus free, start a new CiM
+        if ((gen_cnt_10b.get_cnt() == 0) && (bus->get_inst().op == NOP) && (all_cims_ready == true)) { // All transactions sent and bus free, start a new CiM
             gen_cnt_8b.inc(); // CiM counter
 
             if (gen_cnt_8b.get_cnt() == gen_reg_16b_2) { // All CiMs sent all data and finished using it, can go back to running inference
@@ -267,12 +267,12 @@ int Master_ctrl::load_params_from_h5(const std::string params_filepath) {
     params.pos_emb = file.getGroup("top_level_model_weights").getDataSet("pos_emb:0").read<array<array<array<float, EMB_DEPTH>, NUM_PATCHES+1>, 1>>()[0];
 
     // Encoders
-    HighFive::Group enc = file.getGroup("encoder");
+    HighFive::Group enc = file.getGroup("Encoder_1");
     // LayerNorm
-    params.layernorm_beta[0] = enc.getGroup("vision_transformer").getGroup("encoder").getGroup("layerNorm1_encoder").getDataSet("beta:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 1
-    params.layernorm_gamma[0] = enc.getGroup("vision_transformer").getGroup("encoder").getGroup("layerNorm1_encoder").getDataSet("gamma:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 1
-    params.layernorm_beta[1] = enc.getGroup("vision_transformer").getGroup("encoder").getGroup("layerNorm2_encoder").getDataSet("beta:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 2
-    params.layernorm_gamma[1] = enc.getGroup("vision_transformer").getGroup("encoder").getGroup("layerNorm2_encoder").getDataSet("gamma:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 2
+    params.layernorm_beta[0] = enc.getGroup("vision_transformer").getGroup("Encoder_1").getGroup("layerNorm1_encoder").getDataSet("beta:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 1
+    params.layernorm_gamma[0] = enc.getGroup("vision_transformer").getGroup("Encoder_1").getGroup("layerNorm1_encoder").getDataSet("gamma:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 1
+    params.layernorm_beta[1] = enc.getGroup("vision_transformer").getGroup("Encoder_1").getGroup("layerNorm2_encoder").getDataSet("beta:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 2
+    params.layernorm_gamma[1] = enc.getGroup("vision_transformer").getGroup("Encoder_1").getGroup("layerNorm2_encoder").getDataSet("gamma:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 2
 
     // MHSA
     params.enc_mhsa_Q_kernel = enc.getGroup("mhsa_query_dense").getDataSet("kernel:0").read<EncEmbDepthMat_t>();

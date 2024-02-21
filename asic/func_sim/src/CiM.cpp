@@ -16,6 +16,7 @@ CiM::CiM(const int16_t cim_id) : id(cim_id), gen_cnt_10b(10), gen_cnt_10b_2(10),
 int CiM::reset(){
     fill(begin(params), end(params), 0); // Reset local params
     fill(begin(intermediate_res), end(intermediate_res), 0); // Reset local intermediate_res
+    is_ready = true;
     gen_cnt_10b.reset();
     gen_cnt_10b_2.reset();
     bytes_rec_cnt.reset();
@@ -153,17 +154,19 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         break;
 
     case PATCH_LOAD_CIM:
-        if ((compute_in_progress == false) && (bytes_rec_cnt.get_cnt() == PATCH_LEN)) { // Received a complete patch, perform part of Dense layer
-            MAC(0 /* patch starting addr */, 0 /* weight starting addr */, param_addr_map[SINGLE_PARAMS].addr+PATCH_PROJ_BIAS_OFF /* bias addr */, PATCH_LEN, MODEL_PARAM, LINEAR_ACTIVATION);
+        if ((compute_in_progress == false) && (bytes_rec_cnt.get_cnt() == PATCH_LEN)) { // Received my complete patch, perform part of Dense layer
+            MAC(/* patch starting addr */ 0,/* weight starting addr */ 0, /*len*/ PATCH_LEN, /* bias addr */ param_addr_map[SINGLE_PARAMS].addr+PATCH_PROJ_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION);
             gen_reg_16b = 1;
             bytes_rec_cnt.reset();
         } else if ((compute_in_progress == false) && (gen_reg_16b == 1)) { // Done computation
-            intermediate_res[gen_cnt_10b_2.get_cnt() + PATCH_LEN] = computation_result;
+            intermediate_res[gen_cnt_10b_2.get_cnt() + PATCH_LEN + 1] = computation_result; // +1 to account for classification token
             gen_reg_16b = 0;
             gen_cnt_10b_2.inc(); // Increment number of patches received
             if (gen_cnt_10b_2.get_cnt() == NUM_PATCHES) { // Received all patches, automatically start inference
+                is_ready = false;
                 cim_state = INFERENCE_RUNNING_CIM;
                 gen_cnt_10b_2.reset();
+                verify_computation(PATCH_PROJECTION_VERIF, id, intermediate_res, PATCH_LEN+1);
             }
         }
     break;
@@ -171,11 +174,12 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
     case INFERENCE_RUNNING_CIM:
         switch (current_inf_step) {
         case CLASS_TOKEN_CONCAT:
-            intermediate_res[PATCH_LEN+NUM_PATCHES] = params[param_addr_map[SINGLE_PARAMS].addr+CLASS_EMB_OFF]; // Move classification token from parameters memory to intermediate storage
+            intermediate_res[PATCH_LEN] = params[param_addr_map[SINGLE_PARAMS].addr+CLASS_EMB_OFF]; // Move classification token from parameters memory to intermediate storage
             current_inf_step = POS_EMB;
             bytes_rec_cnt.reset();
             gen_cnt_10b.reset();
             gen_reg_16b = 0;
+            verify_computation(CLASS_TOKEN_VERIF, id, intermediate_res, PATCH_LEN);
             break;
         
         case POS_EMB:
@@ -191,6 +195,8 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 current_inf_step = ENC_LAYERNORM_1_1ST_HALF_STEP;
                 if (id == 0) { cout << "CiM: Finished positional embedding" << endl; }
                 gen_cnt_10b.reset();
+                verify_computation(POS_EMB_VERIF, id, intermediate_res, 0);
+                is_ready = true;
             }
             break;
 
@@ -696,6 +702,6 @@ void CiM::MAX_INDEX(uint16_t input_addr, uint16_t len) {
     computation_result = max_index;
 }
 
-bool CiM::get_is_compute_done() {
-    return !compute_in_progress;
+bool CiM::get_is_ready() {
+    return (is_ready & !compute_in_progress);
 }
