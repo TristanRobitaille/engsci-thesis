@@ -144,7 +144,7 @@ def plot_1D_tensor(input_tensor: tf.Tensor) -> None:
     plt.title(f"min: {min(data)}, max: {max(data)}, shape: {data.shape}")
     plt.show(block=True)
 
-def random_dataset(clip_length_num_samples:int, max_min:tuple, num_clips:int=1000) -> (tf.Tensor, tf.Tensor):
+def random_dataset(clip_length_num_samples:int, max_min:tuple, num_clips:int=1000) -> tuple[tf.Tensor, tf.Tensor]:
     """
     Returns a tuple of Tensors: (input clip, sleep stage).
     The give some sort of relationship between the input and output, we generate input data from a different range based on the output.
@@ -321,7 +321,7 @@ def folder_base_path() -> str:
     elif socket.gethostname() == "MBP_Tristan":             return f"/Users/tristan/Desktop/engsci-thesis/python_prototype/"
     elif "cedar.computecanada.ca" in socket.gethostname():  return f"/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/"
 
-def shuffle(signal:tf.Tensor, sleep_stages:tf.Tensor, random_seed:int) -> (tf.Tensor, tf.Tensor):
+def shuffle(signal:tf.Tensor, sleep_stages:tf.Tensor, random_seed:int) -> tuple[tf.Tensor, tf.Tensor]:
     """
     Shuffles two input tensors in the same way s.t. corresponding pairs remain
     """
@@ -337,7 +337,7 @@ def round_up_to_nearest_tenth(input) -> float:
     rounded_up_input = rounded_input if (rounded_input > input) else (rounded_input + 0.1) # Round up to nearest tenth
     return rounded_up_input
 
-def edf_to_h5(edf_fp:str, h5_filename:str, channel:str, clip_length_s=-1, sampling_freq_hz:int=-1):
+def edf_to_h5(edf_fp:str, h5_filename:str, channel:str, clip_length_s=-1, sampling_freq_hz:int=-1) -> tf.Tensor:
     """ Reads .edf input signal file, saves to .h5 and return the signal as a Tensor."""
     signal_reader = EdfReader(edf_fp)
     channels = list(signal_reader.getSignalLabels())
@@ -354,7 +354,7 @@ def edf_to_h5(edf_fp:str, h5_filename:str, channel:str, clip_length_s=-1, sampli
 
     # Grab 1 clip or all night
     if clip_length_s != -1: resample = resample[0:clip_length_s*sampling_freq_hz]
-    
+
     for i in range(len(resample)):
         resample[i] += 2**15 # Offset by 15b
 
@@ -363,6 +363,7 @@ def edf_to_h5(edf_fp:str, h5_filename:str, channel:str, clip_length_s=-1, sampli
 
     tensor = tf.convert_to_tensor(resample, dtype=tf.float32, name="input_1")
     tensor = tf.expand_dims(tensor, axis=0)
+
     return tensor
 
 def export_layer_outputs(model:tf.keras.Model, input_signal:tf.Tensor):
@@ -376,8 +377,10 @@ def export_layer_outputs(model:tf.keras.Model, input_signal:tf.Tensor):
         print(layer_output)
 
 def main():
+    input_signal = edf_to_h5(edf_fp="/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF/01-03-0064 PSG.edf",
+                             channel="EEG Cz-LER", clip_length_s=30, sampling_freq_hz=128, h5_filename="/home/trobitaille/engsci-thesis/python_prototype/reference_data/eeg.h5")
+    
     model = tf.keras.models.load_model("/home/trobitaille/engsci-thesis/python_prototype/results/2024-01-22_14-00-01_vision/run_1/models/model.tf", custom_objects={"CustomSchedule": CustomSchedule})
-    input_signal = edf_to_h5(edf_fp="/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF/01-03-0064 PSG.edf", h5_filename="eeg.h5", channel="EEG Cz-LER", clip_length_s=30, sampling_freq_hz=128)
     export_layer_outputs(model, input_signal)
 
 if __name__ == "__main__":

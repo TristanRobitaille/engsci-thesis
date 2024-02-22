@@ -368,6 +368,7 @@ def parse_arguments():
     parser.add_argument('--note', help="Optional note to write info textfile. Defaults to None.", default="", type=str )
     parser.add_argument('--num_runs', help="Number of training runs to perform. Defaults to 1.", default=1, type=int)
     parser.add_argument('--optimizer', help=f"Optimizer to use. May be one of {AVAILABLE_OPTIMIZERS}. Defaults to Adam.", choices=AVAILABLE_OPTIMIZERS, default="Adam", type=str)
+    parser.add_argument('--reference_night_fp', help="Filepath of the reference night used for validation.", default="", type=str)
 
     # Parse arguments
     try:
@@ -902,10 +903,7 @@ class VisionTransformer(tf.keras.Model):
             clip = layer(inputs=clip, training=training) #clip = (batch_size, num_patches+1, embedding_depth)
 
         # Classify with first token
-        # print(f"clip.shape: {clip.shape}")
-        # print(f"clip[:, 0].shape: {clip[:, 0].shape}")
         prediction = self.mlp_head(clip[:, 0]) # Select the first row of each batch's encoder output. prediction = (batch_size, sleep_map.get_num_stages()+1)
-        # print(f"prediction.shape: {prediction.shape}")
 
         if self.historical_lookback_DNN:
             historical_lookback = tf.cast(historical_lookback, tf.uint8)
@@ -1061,6 +1059,11 @@ def main():
                        sleep_stages_cnt_val, pred_cnt, mlp_dense_act, dataset_metadata, model_specific_only=True)
         export_k_fold_results(args, acc)
         print(f"[{(time.time()-start_time):.2f}s] Wrote to k-fold results file.")
+
+    # Run reference night to help validate C++ functional model (make sure the parameters match the dataset)
+    if (args.reference_night_fp != ""):
+        ref_data = utilities.edf_to_h5(edf_fp=args.reference_night_fp, channel="EEG Cz-LER", clip_length_s=30, sampling_freq_hz=128, h5_filename="/home/trobitaille/engsci-thesis/python_prototype/reference_data/eeg.h5")
+        all_models["tf"](ref_data, training=False)
 
     print(f"[{(time.time()-start_time):.2f}s] Done. Good bye.")
 
