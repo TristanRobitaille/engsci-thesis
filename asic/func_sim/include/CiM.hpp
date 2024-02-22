@@ -5,6 +5,7 @@
 
 #include <Misc.hpp>
 #include <Param_Layer_Mapping.hpp>
+#include <Compute_Verification.hpp>
 
 /*----- DEFINE -----*/
 #define CIM_PARAMS_STORAGE_SIZE_KB 2112
@@ -70,9 +71,11 @@ class CiM {
         };
 
         bool compute_in_progress = false; // Used by compute element to notify CiM controller when is in progress
+        bool is_ready = true; // Signal that CiM can use to override the compute_in_progress signal and force the master to wait before sending the next instruction
         uint16_t id; // ID of the CiM
         uint16_t gen_reg_16b; // General-purpose register
-        uint16_t addr_reg; // General-purpose register used to record the address of the data sent/received on the bus
+        uint16_t tx_addr_reg; // General-purpose register used to record the address of the data sent on the bus
+        uint16_t rx_addr_reg; // General-purpose register used to record the address of the data received on the bus
         uint16_t data_len_reg; // General-purpose register used to record len of data sent/received on the bus
         uint16_t compute_process_cnt; // Counter used to track the progress of the current computation (used to simulate the delay in the computation to match the real hardware)
         uint16_t num_compute_done; // Counter used to track the number of computations done in a given inference step
@@ -92,7 +95,7 @@ class CiM {
     public:
         CiM() : id(-1), gen_cnt_10b(10), gen_cnt_10b_2(10), bytes_rec_cnt(8), bytes_sent_cnt(8) {}
         CiM(const int16_t cim_id);
-        bool get_is_compute_done();
+        bool get_is_ready();
         int reset();
         int run(struct ext_signals* ext_sigs, Bus* bus);
         void update_compute_process_cnt();

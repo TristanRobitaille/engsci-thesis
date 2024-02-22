@@ -1,3 +1,6 @@
 [submodule "asic/func_sim/HighFive"]
 	path = asic/func_sim/HighFive
 	url = git@github.com:BlueBrain/HighFive.git
+[submodule "asic/func_sim/rapidcsv"]
+	path = asic/func_sim/rapidcsv
+	url = git@github.com:d99kris/rapidcsv.git

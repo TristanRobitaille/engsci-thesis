@@ -1,4 +1,5 @@
 #include <queue>
+#include <Compute_Verification.hpp>
 
 #ifndef MISC_H
 #define MISC_H
@@ -13,6 +14,7 @@
 #define NUM_SLEEP_STAGES 5
 #define NUM_SAMPLES_OUT_AVG 3 // Number of samples in output averaging filter
 #define LAYERNORM_EPSILON 0.000001f // 1e-6
+#define EEG_SCALE_FACTOR 1/(65536.0f - 1.0f) // Normalize
 
 /*----- MACROS -----*/
 #define UPPER_8b_OF_16b(x) ((x) >> 8)

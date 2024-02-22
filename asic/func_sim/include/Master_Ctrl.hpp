@@ -3,7 +3,6 @@
 
 #include <iostream>
 #include <../include/highfive/H5File.hpp>
-#include <fmt/core.h>
 
 #include <CiM.hpp>
 #include <Misc.hpp>
@@ -138,6 +137,7 @@ class Master_ctrl {
             {INFERENCE_FINISHED,                1}
         };
 
+        bool all_cims_ready = true;
         float storage[CENTRALIZED_STORAGE_WEIGHTS_KB / sizeof(float)];
         Counter gen_cnt_8b;
         Counter gen_cnt_10b;

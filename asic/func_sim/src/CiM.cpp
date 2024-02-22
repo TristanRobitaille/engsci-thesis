@@ -16,6 +16,7 @@ CiM::CiM(const int16_t cim_id) : id(cim_id), gen_cnt_10b(10), gen_cnt_10b_2(10),
 int CiM::reset(){
     fill(begin(params), end(params), 0); // Reset local params
     fill(begin(intermediate_res), end(intermediate_res), 0); // Reset local intermediate_res
+    is_ready = true;
     gen_cnt_10b.reset();
     gen_cnt_10b_2.reset();
     bytes_rec_cnt.reset();
@@ -27,7 +28,6 @@ int CiM::reset(){
 
 int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
     /* Run the CiM FSM */
-
     // Update compute process counter
     update_compute_process_cnt();
 
@@ -48,15 +48,15 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             break;
 
         case DATA_STREAM_START_OP:
-            addr_reg = inst.data[0]; // Address
+            rx_addr_reg = inst.data[0]; // Address
             bytes_rec_cnt.reset();
             break;
 
         case DATA_STREAM_OP:
             if (inst.target_or_sender == id) {
-                params[bytes_rec_cnt.get_cnt() + addr_reg] = inst.data[0];
-                params[bytes_rec_cnt.get_cnt()+1 + addr_reg] = inst.data[1]; // Note: If the length is less than 3, we will be loading junk. That's OK since it will get overwritten
-                params[bytes_rec_cnt.get_cnt()+2 + addr_reg] = inst.extra_fields;
+                params[bytes_rec_cnt.get_cnt() + rx_addr_reg] = inst.data[0];
+                params[bytes_rec_cnt.get_cnt()+1 + rx_addr_reg] = inst.data[1]; // Note: If the length is less than 3, we will be loading junk. That's OK since it will get overwritten
+                params[bytes_rec_cnt.get_cnt()+2 + rx_addr_reg] = inst.extra_fields;
                 bytes_rec_cnt.inc(3);
             }
             break;
@@ -64,23 +64,25 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case DENSE_BROADCAST_START_OP:
         case TRANS_BROADCAST_START_OP:
             if (inst.target_or_sender == id) { // Master controller tells me to start broadcasting some data
-                int start_addr = static_cast<int> (inst.data[0]);
                 struct instruction new_inst;
 
+                tx_addr_reg = static_cast<uint16_t> (inst.data[0]);
+                rx_addr_reg = static_cast<uint16_t> (inst.extra_fields);
+
                 if (inst.op == DENSE_BROADCAST_START_OP) {
-                    new_inst = {/*op*/ DENSE_BROADCAST_DATA_OP, /*target_or_sender*/id, /*data*/{intermediate_res[start_addr], intermediate_res[start_addr+1]}, /*extra_fields*/intermediate_res[start_addr+2]};
+                    new_inst = {/*op*/ DENSE_BROADCAST_DATA_OP, /*target_or_sender*/id, /*data*/{intermediate_res[tx_addr_reg], intermediate_res[tx_addr_reg+1]}, /*extra_fields*/intermediate_res[tx_addr_reg+2]};
                 } else if (inst.op == TRANS_BROADCAST_START_OP) {
-                    new_inst = {/*op*/ TRANS_BROADCAST_DATA_OP, /*target_or_sender*/id, /*data*/{intermediate_res[start_addr], intermediate_res[start_addr+1]}, /*extra_fields*/intermediate_res[start_addr+2]};
+                    new_inst = {/*op*/ TRANS_BROADCAST_DATA_OP, /*target_or_sender*/id, /*data*/{intermediate_res[tx_addr_reg], intermediate_res[tx_addr_reg+1]}, /*extra_fields*/intermediate_res[tx_addr_reg+2]};
                 }
 
-                addr_reg = start_addr; // Save address of data to send
                 bus->push_inst(new_inst);
 
-                if ((inst.op == TRANS_BROADCAST_DATA_OP) && (current_inf_step == ENC_MHSA_QK_T)) { // Since I'm here, move my own data to the correct location in intermediate_res (do I need to do that in the previous op (QVK dense) as well?)
-                    intermediate_res[static_cast<int>(inst.extra_fields)+id] = intermediate_res[addr_reg+id];
-                }
+                // TODO: Check if we need this
+                // if ((inst.op == TRANS_BROADCAST_DATA_OP) && (current_inf_step == ENC_MHSA_QK_T)) { // Since I'm here, move my own data to the correct location in intermediate_res (do I need to do that in the previous op (QVK dense) as well?)
+                //     intermediate_res[static_cast<int>(inst.extra_fields)+id] = intermediate_res[addr_reg+id];
+                // }
             } else {
-                addr_reg = static_cast<int> (inst.extra_fields); // Save address where to store data
+                rx_addr_reg = static_cast<uint16_t> (inst.extra_fields); // Save address where to store data
             }
 
             if (current_inf_step == ENC_MHSA_MULT_V) {
@@ -105,31 +107,33 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 }
                 
                 if (bytes_sent_cnt.get_cnt() <= data_len_reg) {
-                    intermediate_res[gen_reg_16b+inst.target_or_sender] = ((bytes_sent_cnt.get_cnt() - id) == 1) ? (inst.extra_fields) : (intermediate_res[gen_reg_16b+inst.target_or_sender]);
-                    intermediate_res[gen_reg_16b+inst.target_or_sender] = ((bytes_sent_cnt.get_cnt() - id) == 2) ? (inst.data[1]) : (intermediate_res[gen_reg_16b+inst.target_or_sender]);
-                    intermediate_res[gen_reg_16b+inst.target_or_sender] = ((bytes_sent_cnt.get_cnt() - id) == 3) ? (inst.data[0]) : (intermediate_res[gen_reg_16b+inst.target_or_sender]);
+                    intermediate_res[rx_addr_reg+inst.target_or_sender] = ((bytes_sent_cnt.get_cnt() - id) == 1) ? (inst.extra_fields) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
+                    intermediate_res[rx_addr_reg+inst.target_or_sender] = ((bytes_sent_cnt.get_cnt() - id) == 2) ? (inst.data[1]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
+                    intermediate_res[rx_addr_reg+inst.target_or_sender] = ((bytes_sent_cnt.get_cnt() - id) == 3) ? (inst.data[0]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
                 } else {
-                    intermediate_res[gen_reg_16b+inst.target_or_sender] = ((data_len_reg - id) == 1) ? (inst.data[0]) : (intermediate_res[gen_reg_16b+inst.target_or_sender]);
-                    intermediate_res[gen_reg_16b+inst.target_or_sender] = ((data_len_reg - id) == 2) ? (inst.data[1]) : (intermediate_res[gen_reg_16b+inst.target_or_sender]);
-                    intermediate_res[gen_reg_16b+inst.target_or_sender] = ((data_len_reg - id) == 3) ? (inst.extra_fields) : (intermediate_res[gen_reg_16b+inst.target_or_sender]);
+                    intermediate_res[rx_addr_reg+inst.target_or_sender] = ((bytes_sent_cnt.get_cnt() - id) == 1) ? (inst.data[0]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
+                    intermediate_res[rx_addr_reg+inst.target_or_sender] = ((bytes_sent_cnt.get_cnt() - id) == 2) ? (inst.data[1]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
+                    intermediate_res[rx_addr_reg+inst.target_or_sender] = ((bytes_sent_cnt.get_cnt() - id) == 3) ? (inst.extra_fields) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
                 }
             } else if (inst.op == DENSE_BROADCAST_DATA_OP) { // Always move data (even my own) to the correct location to perform operations later
                 bytes_rec_cnt.inc(3); // Increment data that was sent on the bus
-                intermediate_res[addr_reg+bytes_sent_cnt.get_cnt()-3] = inst.data[0];
-                intermediate_res[addr_reg+bytes_sent_cnt.get_cnt()-2] = inst.data[1];
-                intermediate_res[addr_reg+bytes_sent_cnt.get_cnt()-1] = inst.extra_fields;
+                intermediate_res[rx_addr_reg+bytes_sent_cnt.get_cnt()-3] = inst.data[0];
+                intermediate_res[rx_addr_reg+bytes_sent_cnt.get_cnt()-2] = inst.data[1];
+                intermediate_res[rx_addr_reg+bytes_sent_cnt.get_cnt()-1] = inst.extra_fields;
             }
 
             // Prep new instruction to send
             if ((bytes_sent_cnt.get_cnt() < data_len_reg) && (inst.target_or_sender == id)) { // If last time was me and I have more data to send
                 struct instruction new_inst = {/*op*/ inst.op, /*target_or_sender*/id, /*data*/{0, 0}, /*extra_fields*/0};
-                if ((data_len_reg - bytes_rec_cnt.get_cnt() == 2)) { // Only two bytes left
-                    new_inst.data = {intermediate_res[addr_reg+bytes_rec_cnt.get_cnt()], intermediate_res[addr_reg+bytes_rec_cnt.get_cnt()+1]};
-                } else if ((data_len_reg - bytes_rec_cnt.get_cnt() == 1)) { // Only one byte left
-                    new_inst.data = {intermediate_res[addr_reg+bytes_rec_cnt.get_cnt()], 0};
+
+                if ((data_len_reg - bytes_sent_cnt.get_cnt() == 2)) { // Only two bytes left
+                    new_inst.data = {0, intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()]};
+                    new_inst.extra_fields = intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()+1];
+                } else if ((data_len_reg - bytes_sent_cnt.get_cnt() == 1)) { // Only one byte left
+                    new_inst.extra_fields = intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()];
                 } else {
-                    new_inst.data = {intermediate_res[addr_reg+bytes_rec_cnt.get_cnt()], intermediate_res[addr_reg+bytes_rec_cnt.get_cnt()+1]};
-                    new_inst.extra_fields = intermediate_res[addr_reg+bytes_rec_cnt.get_cnt()+2];
+                    new_inst.data = {intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()], intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()+1]};
+                    new_inst.extra_fields = intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()+2];
                 }
                 bus->push_inst(new_inst);
             }
@@ -153,17 +157,19 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         break;
 
     case PATCH_LOAD_CIM:
-        if ((compute_in_progress == false) && (bytes_rec_cnt.get_cnt() == PATCH_LEN)) { // Received a complete patch, perform part of Dense layer
-            MAC(0 /* patch starting addr */, 0 /* weight starting addr */, param_addr_map[SINGLE_PARAMS].addr+PATCH_PROJ_BIAS_OFF /* bias addr */, PATCH_LEN, MODEL_PARAM, LINEAR_ACTIVATION);
+        if ((compute_in_progress == false) && (bytes_rec_cnt.get_cnt() == PATCH_LEN)) { // Received my complete patch, perform part of Dense layer
+            MAC(/* patch starting addr */ 0,/* weight starting addr */ 0, /*len*/ PATCH_LEN, /* bias addr */ param_addr_map[SINGLE_PARAMS].addr+PATCH_PROJ_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION);
             gen_reg_16b = 1;
             bytes_rec_cnt.reset();
         } else if ((compute_in_progress == false) && (gen_reg_16b == 1)) { // Done computation
-            intermediate_res[gen_cnt_10b_2.get_cnt() + PATCH_LEN] = computation_result;
+            intermediate_res[gen_cnt_10b_2.get_cnt() + PATCH_LEN + 1] = computation_result; // +1 to account for classification token
             gen_reg_16b = 0;
             gen_cnt_10b_2.inc(); // Increment number of patches received
             if (gen_cnt_10b_2.get_cnt() == NUM_PATCHES) { // Received all patches, automatically start inference
+                is_ready = false;
                 cim_state = INFERENCE_RUNNING_CIM;
                 gen_cnt_10b_2.reset();
+                verify_computation(PATCH_PROJECTION_VERIF, id, intermediate_res, PATCH_LEN+1);
             }
         }
     break;
@@ -171,11 +177,12 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
     case INFERENCE_RUNNING_CIM:
         switch (current_inf_step) {
         case CLASS_TOKEN_CONCAT:
-            intermediate_res[PATCH_LEN+NUM_PATCHES] = params[param_addr_map[SINGLE_PARAMS].addr+CLASS_EMB_OFF]; // Move classification token from parameters memory to intermediate storage
+            intermediate_res[PATCH_LEN] = params[param_addr_map[SINGLE_PARAMS].addr+CLASS_EMB_OFF]; // Move classification token from parameters memory to intermediate storage
             current_inf_step = POS_EMB;
             bytes_rec_cnt.reset();
             gen_cnt_10b.reset();
             gen_reg_16b = 0;
+            verify_computation(CLASS_TOKEN_VERIF, id, intermediate_res, PATCH_LEN);
             break;
         
         case POS_EMB:
@@ -191,6 +198,11 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 current_inf_step = ENC_LAYERNORM_1_1ST_HALF_STEP;
                 if (id == 0) { cout << "CiM: Finished positional embedding" << endl; }
                 gen_cnt_10b.reset();
+                verify_computation(POS_EMB_VERIF, id, intermediate_res, 0);
+                is_ready = true;
+                if (id == 60) {
+                    cout << "CiM: Ready for inference" << endl;
+                }
             }
             break;
 
@@ -200,7 +212,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             if (bytes_rec_cnt.get_cnt() == EMB_DEPTH) { // No more data to receive, start LayerNorm
                 if (compute_in_progress == false) {
                     gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
-                    LAYERNORM_1ST_HALF(0);
+                    LAYERNORM_1ST_HALF(NUM_PATCHES+1);
                     bytes_rec_cnt.reset();
                 }
             }
@@ -225,22 +237,26 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) {
                         gamma = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_GAMMA_OFF];
                         beta = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_BETA_OFF];
+                        LAYERNORM_2ND_HALF(NUM_PATCHES+1+EMB_DEPTH, gamma, beta);
                     } else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) {
                         gamma = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_GAMMA_OFF];
                         beta = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_BETA_OFF];
+                        LAYERNORM_2ND_HALF(0, gamma, beta);
                     } else if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) {
                         gamma = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_GAMMA_OFF];
                         beta = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_BETA_OFF];
+                        LAYERNORM_2ND_HALF(0, gamma, beta);
                     }
                     gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
-                    LAYERNORM_2ND_HALF(0, gamma, beta);
                     bytes_rec_cnt.reset();
                 }
             }
 
             if (inst.op == PISTOL_START_OP) {
-                if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) { current_inf_step = POST_LAYERNORM_TRANSPOSE_STEP; }
-                else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) { current_inf_step = MLP_DENSE_1_STEP; }
+                if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) { 
+                    current_inf_step = POST_LAYERNORM_TRANSPOSE_STEP;
+                    verify_computation(ENC_LAYERNORM1_VERIF, id, intermediate_res, NUM_PATCHES+1+EMB_DEPTH);
+                } else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) { current_inf_step = MLP_DENSE_1_STEP; }
                 else if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) { current_inf_step = MLP_HEAD_DENSE_1_STEP; }
                 gen_reg_16b = 0;
                 if (id == 0) { cout << "CiM: Finished LayerNorm (2nd half)" << endl; }
@@ -621,30 +637,32 @@ void CiM::LAYERNORM_1ST_HALF(uint16_t input_addr) {
     if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start LAYERNORM_1ST_HALF!"); }
     compute_in_progress = true; // Using this compute_in_progress signal as it will be used in the CiM (in ASIC, this compute is multi-cycle, so leaving this here for visibility)
 
-    float result = 0.0f;
-    float result2 = 0.0f;
+    float mean = 0.0f;
+    float variance = 0.0f;
 
-    // Summation along feature axis
-    for (uint16_t i = 0; i < EMB_DEPTH; ++i) {
-        result += intermediate_res[input_addr+i];
+    // Mean
+    for (uint16_t i = 0; i < EMB_DEPTH; i++) { 
+        mean += intermediate_res[input_addr+i]; 
+    }
+    mean /= EMB_DEPTH;
+    verify_result(MEAN, mean, intermediate_res, input_addr, EMB_DEPTH, id);
+
+    // Variance
+    float temp = 0.0f;
+    for (uint16_t i = 0; i < EMB_DEPTH; i++) {
+        temp = intermediate_res[input_addr+i] - mean; // Subtract
+        temp *= temp; // Square
+        variance += temp; // Sum
     }
 
-    result /= EMB_DEPTH; // Mean
-
-    // Subtract and square mean
-    for (uint16_t i = 0; i < EMB_DEPTH; ++i) {
-        intermediate_res[input_addr+i] -= result; // Subtract
-        intermediate_res[input_addr+i] *= intermediate_res[input_addr+i]; // Square
-        result2 += intermediate_res[input_addr+i]; // Sum
-    }
-
-    result2 /= EMB_DEPTH; // Mean
-    result2 += LAYERNORM_EPSILON; // Add epsilon
-    result2 = sqrt(result2); // <-- Standard deviation
+    variance /= EMB_DEPTH;
+    verify_result(VARIANCE, variance, intermediate_res, input_addr, EMB_DEPTH, id);
+    variance += LAYERNORM_EPSILON; // Add epsilon
+    variance = sqrt(variance); // Standard deviation
 
     // Partial normalization (excludes gamma and beta, which are applied in LAYERNORM_FINAL_NORM() since they need to be applied column-wise)
-    for (uint16_t i = 0; i < EMB_DEPTH; ++i) {
-        intermediate_res[input_addr+i] = intermediate_res[input_addr+i] / result2;
+    for (uint16_t i = 0; i < EMB_DEPTH; i++) {
+        intermediate_res[input_addr+i] = (intermediate_res[input_addr+i] - mean) / variance;
     }
 }
 
@@ -654,7 +672,7 @@ void CiM::LAYERNORM_2ND_HALF(uint16_t input_addr, float gamma, float beta) {
     compute_in_progress = true;
 
     // Normalize
-    for (uint16_t i = 0; i < EMB_DEPTH; ++i) {
+    for (uint16_t i = 0; i < NUM_PATCHES+1; i++) {
         intermediate_res[input_addr+i] = gamma * intermediate_res[input_addr+i] + beta;
     }
 }
@@ -696,6 +714,6 @@ void CiM::MAX_INDEX(uint16_t input_addr, uint16_t len) {
     computation_result = max_index;
 }
 
-bool CiM::get_is_compute_done() {
-    return !compute_in_progress;
+bool CiM::get_is_ready() {
+    return (is_ready & !compute_in_progress);
 }
