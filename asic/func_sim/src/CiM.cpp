@@ -126,7 +126,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             if ((bytes_sent_cnt.get_cnt() < data_len_reg) && (inst.target_or_sender == id)) { // If last time was me and I have more data to send
                 struct instruction new_inst = {/*op*/ inst.op, /*target_or_sender*/id, /*data*/{0, 0}, /*extra_fields*/0};
 
-                if ((data_len_reg - bytes_rec_cnt.get_cnt() == 2)) { // Only two bytes left
+                if ((data_len_reg - bytes_sent_cnt.get_cnt() == 2)) { // Only two bytes left
                     new_inst.data = {0, intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()]};
                     new_inst.extra_fields = intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()+1];
                 } else if ((data_len_reg - bytes_sent_cnt.get_cnt() == 1)) { // Only one byte left
@@ -200,6 +200,9 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 gen_cnt_10b.reset();
                 verify_computation(POS_EMB_VERIF, id, intermediate_res, 0);
                 is_ready = true;
+                if (id == 60) {
+                    cout << "CiM: Ready for inference" << endl;
+                }
             }
             break;
 
@@ -209,7 +212,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             if (bytes_rec_cnt.get_cnt() == EMB_DEPTH) { // No more data to receive, start LayerNorm
                 if (compute_in_progress == false) {
                     gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
-                    LAYERNORM_1ST_HALF(0);
+                    LAYERNORM_1ST_HALF(NUM_PATCHES+1);
                     bytes_rec_cnt.reset();
                 }
             }
@@ -234,15 +237,17 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) {
                         gamma = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_GAMMA_OFF];
                         beta = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_BETA_OFF];
+                        LAYERNORM_2ND_HALF(NUM_PATCHES+1+EMB_DEPTH, gamma, beta);
                     } else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) {
                         gamma = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_GAMMA_OFF];
                         beta = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_BETA_OFF];
+                        LAYERNORM_2ND_HALF(0, gamma, beta);
                     } else if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) {
                         gamma = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_GAMMA_OFF];
                         beta = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_BETA_OFF];
+                        LAYERNORM_2ND_HALF(0, gamma, beta);
                     }
                     gen_reg_16b = 1; // Just a signal to avoid coming here every time FSM runs
-                    LAYERNORM_2ND_HALF(0, gamma, beta);
                     bytes_rec_cnt.reset();
                 }
             }
@@ -250,7 +255,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             if (inst.op == PISTOL_START_OP) {
                 if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) { 
                     current_inf_step = POST_LAYERNORM_TRANSPOSE_STEP;
-                    verify_computation(ENC_LAYERNORM1_VERIF, id, intermediate_res, 0);
+                    verify_computation(ENC_LAYERNORM1_VERIF, id, intermediate_res, NUM_PATCHES+1+EMB_DEPTH);
                 } else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) { current_inf_step = MLP_DENSE_1_STEP; }
                 else if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) { current_inf_step = MLP_HEAD_DENSE_1_STEP; }
                 gen_reg_16b = 0;
@@ -632,30 +637,32 @@ void CiM::LAYERNORM_1ST_HALF(uint16_t input_addr) {
     if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start LAYERNORM_1ST_HALF!"); }
     compute_in_progress = true; // Using this compute_in_progress signal as it will be used in the CiM (in ASIC, this compute is multi-cycle, so leaving this here for visibility)
 
-    float result = 0.0f;
-    float result2 = 0.0f;
+    float mean = 0.0f;
+    float variance = 0.0f;
 
-    // Summation along feature axis
-    for (uint16_t i = 0; i < EMB_DEPTH; ++i) {
-        result += intermediate_res[input_addr+i];
+    // Mean
+    for (uint16_t i = 0; i < EMB_DEPTH; i++) { 
+        mean += intermediate_res[input_addr+i]; 
+    }
+    mean /= EMB_DEPTH;
+    verify_result(MEAN, mean, intermediate_res, input_addr, EMB_DEPTH, id);
+
+    // Variance
+    float temp = 0.0f;
+    for (uint16_t i = 0; i < EMB_DEPTH; i++) {
+        temp = intermediate_res[input_addr+i] - mean; // Subtract
+        temp *= temp; // Square
+        variance += temp; // Sum
     }
 
-    result /= EMB_DEPTH; // Mean
-
-    // Subtract and square mean
-    for (uint16_t i = 0; i < EMB_DEPTH; ++i) {
-        intermediate_res[input_addr+i] -= result; // Subtract
-        intermediate_res[input_addr+i] *= intermediate_res[input_addr+i]; // Square
-        result2 += intermediate_res[input_addr+i]; // Sum
-    }
-
-    result2 /= EMB_DEPTH; // Mean
-    result2 += LAYERNORM_EPSILON; // Add epsilon
-    result2 = sqrt(result2); // <-- Standard deviation
+    variance /= EMB_DEPTH;
+    verify_result(VARIANCE, variance, intermediate_res, input_addr, EMB_DEPTH, id);
+    variance += LAYERNORM_EPSILON; // Add epsilon
+    variance = sqrt(variance); // Standard deviation
 
     // Partial normalization (excludes gamma and beta, which are applied in LAYERNORM_FINAL_NORM() since they need to be applied column-wise)
-    for (uint16_t i = 0; i < EMB_DEPTH; ++i) {
-        intermediate_res[input_addr+i] = intermediate_res[input_addr+i] / result2;
+    for (uint16_t i = 0; i < EMB_DEPTH; i++) {
+        intermediate_res[input_addr+i] = (intermediate_res[input_addr+i] - mean) / variance;
     }
 }
 
@@ -665,7 +672,7 @@ void CiM::LAYERNORM_2ND_HALF(uint16_t input_addr, float gamma, float beta) {
     compute_in_progress = true;
 
     // Normalize
-    for (uint16_t i = 0; i < EMB_DEPTH; ++i) {
+    for (uint16_t i = 0; i < NUM_PATCHES+1; i++) {
         intermediate_res[input_addr+i] = gamma * intermediate_res[input_addr+i] + beta;
     }
 }
