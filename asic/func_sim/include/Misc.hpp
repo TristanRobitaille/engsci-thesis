@@ -1,5 +1,4 @@
 #include <queue>
-#include <Compute_Verification.hpp>
 
 #ifndef MISC_H
 #define MISC_H
@@ -63,21 +62,24 @@ class Counter {
     private:
         uint16_t width;
         int val;
+        int val_unbounded;
         int max_val_seen; // Keep track of the maximum value seen by the counter to determine the number of bits needed to represent the counter
     public:
         Counter(int width) : width(width), val(0), max_val_seen(0) {}
         int inc(int increment=1) {
-            val = val + increment;
+            val += increment;
+            val_unbounded += increment;
+            if (val_unbounded > max_val_seen) { max_val_seen = val_unbounded; }
             if (val >= (1 << width)) {
                 std::cout << "Counter overflow (width: " << width << ")!" << std::endl;
                 val &= (1 << width) - 1; // Wrap within width using bitwise AND
             }
-            if (val > max_val_seen) { max_val_seen = val; }
             return val;
         }
 
         int dec(int decrement=1) {
-            val = val - decrement;
+            val -= decrement;
+            val_unbounded -= decrement;
             if (val < 0) {
                 std::cout << "Counter underflow (width: " << width << "!\n" << std::endl;
                 val = (1 << width) + val; // Wrap around
@@ -87,11 +89,13 @@ class Counter {
 
         int set_val(int new_val) {
             val = new_val;
+            val_unbounded = new_val;
             return val;
         }
 
         int reset() {
             val = 0;
+            val_unbounded = 0;
             return 0;
         }
 

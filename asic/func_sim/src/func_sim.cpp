@@ -9,7 +9,7 @@ map<int, FcnPtr> event_schedule;
 struct ext_signals ext_sigs;
 
 Bus bus;
-CiM cims[NUM_CIM];
+std::vector<CiM> cims;
 Master_ctrl ctrl("reference_data/eeg.h5", "reference_data/model_params.h5");
 
 int init(){
@@ -25,7 +25,9 @@ int init(){
     event_schedule[50002] = epoch_start_reset;
 
     // Construct CiMs
-    for (int16_t i = 0; i < NUM_CIM; ++i) { cims[i] = CiM(i); }
+    for (int16_t i = 0; i < NUM_CIM; ++i) {
+        cims.emplace_back(i);
+    }
     return 0;
 }
 
