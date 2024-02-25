@@ -59,6 +59,7 @@ python_prototype/__pycache__/*
 python_prototype/error_logs/*
 python_prototype/*.zip
 python_prototype/slurm_jobs/logs
+python_prototype/reference_data/*
 
 ### ASIC
 asic/__pycache__/*
