@@ -12,7 +12,7 @@
 #define CIM_PARAMS_STORAGE_SIZE_KB 2112
 #define CIM_INT_RES_SIZE_KB 3340
 #define CIM_PREV_SOFTMAX_SIZE_KB (NUM_SLEEP_STAGES * (NUM_SAMPLES_OUT_AVG-1) * sizeof(float))
-#define COMPUTE_CNT_THRESHOLD 10 // Used to simulate the delay in the computation to match the real hardware
+#define COMPUTE_CNT_THRESHOLD 5 // Used to simulate the delay in the computation to match the real hardware
 
 #define HAS_MY_DATA(x) ((id >= (x-3)) && (id < (x))) // Determines whether the current broadcast transaction contains data I need
 #define IS_MY_MATRIX(x) ((id >= (x)*NUM_HEADS) && (id < (x+1)*NUM_HEADS)) // Returns whether a given count corresponds to my matrix (for the *V matmul in encoder's MHSA)

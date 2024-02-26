@@ -52,9 +52,12 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             break;
 
         case PATCH_LOAD_BROADCAST_OP:
-            intermediate_res[bytes_rec_cnt.get_cnt()] = inst.data[0];
-            bytes_rec_cnt.inc();
-            update_state(PATCH_LOAD_CIM);
+            if (compute_in_progress == false) {
+                intermediate_res[bytes_rec_cnt.get_cnt()] = inst.data[0];
+                DIV(bytes_rec_cnt.get_cnt(), EEG_SCALE_FACTOR, IMMEDIATE_VAL);
+                is_ready = false;
+                gen_reg_16b = 0;
+            }
             break;
 
         case DATA_STREAM_START_OP:
@@ -163,11 +166,17 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         break;
 
     case PATCH_LOAD_CIM:
-        if ((compute_in_progress == false) && (bytes_rec_cnt.get_cnt() == PATCH_LEN)) { // Received my complete patch, perform part of Dense layer
-            MAC(/* patch starting addr */ 0,/* weight starting addr */ 0, /*len*/ PATCH_LEN, /* bias addr */ param_addr_map[SINGLE_PARAMS].addr+PATCH_PROJ_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION);
+        if ((compute_in_progress == false) && (gen_reg_16b == 0)) { // Finished normalization divide
+            intermediate_res[bytes_rec_cnt.get_cnt()] = computation_result;
+            bytes_rec_cnt.inc();
             gen_reg_16b = 1;
+            is_ready = true;
+        }
+        if ((compute_in_progress == false) && (bytes_rec_cnt.get_cnt() == PATCH_LEN) && (gen_reg_16b == 1)) { // Received my complete patch, perform part of Dense layer
+            MAC(/* patch starting addr */ 0,/* weight starting addr */ 0, /*len*/ PATCH_LEN, /* bias addr */ param_addr_map[SINGLE_PARAMS].addr+PATCH_PROJ_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION);
+            gen_reg_16b = 2;
             bytes_rec_cnt.reset();
-        } else if ((compute_in_progress == false) && (gen_reg_16b == 1)) { // Done computation
+        } else if ((compute_in_progress == false) && (gen_reg_16b == 2)) { // Done computation
             intermediate_res[gen_cnt_10b_2.get_cnt() + mem_map.at(PATCH_MEM)] = computation_result; // +1 to account for classification token
             gen_reg_16b = 0;
             gen_cnt_10b_2.inc(); // Increment number of patches received

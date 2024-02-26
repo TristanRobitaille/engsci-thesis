@@ -57,14 +57,16 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
 
     case SIGNAL_LOAD:
         /* Sequentially parses the input EEG file and broadcasts it to all CiMs to emulate the ADC feed in the ASIC */
-        if ((eeg != eeg_ds.end()) && (all_cims_ready == true)) {
-            float rescaled_data = (*eeg)*EEG_SCALE_FACTOR;
-            struct instruction inst = {/*op*/ PATCH_LOAD_BROADCAST_OP, /*target_or_sender*/ 0, /*data*/ {rescaled_data,0}, /*extra_field*/ 0};
-            bus->push_inst(inst); // Broadcast on bus
-            ++eeg;
-        } else if ((eeg == eeg_ds.end()) && (all_cims_ready == true)) {
-            state = INFERENCE_RUNNING;
-            cout << "Reached end of signal file" << endl;
+        if (all_cims_ready == true) {
+            if ((eeg != eeg_ds.end()) && (all_cims_ready == true)) {
+                float data = *eeg;
+                struct instruction inst = {/*op*/ PATCH_LOAD_BROADCAST_OP, /*target_or_sender*/ 0, /*data*/ {data,0}, /*extra_field*/ 0};
+                bus->push_inst(inst); // Broadcast on bus
+                ++eeg;
+            } else if ((eeg == eeg_ds.end()) && (all_cims_ready == true)) {
+                state = INFERENCE_RUNNING;
+                cout << "Reached end of signal file" << endl;
+            }
         }
         break;
 
