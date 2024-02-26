@@ -1,7 +1,7 @@
-#include <queue>
-
 #ifndef MISC_H
 #define MISC_H
+
+#include <queue>
 
 /*----- DEFINE -----*/
 #define NUM_CIM 64
@@ -12,12 +12,9 @@
 #define NUM_HEADS 8
 #define NUM_SLEEP_STAGES 5
 #define NUM_SAMPLES_OUT_AVG 3 // Number of samples in output averaging filter
-#define LAYERNORM_EPSILON 0.000001f // 1e-6
 #define EEG_SCALE_FACTOR 65535 // Normalize from 16b
 
 /*----- MACROS -----*/
-#define UPPER_8b_OF_16b(x) ((x) >> 8)
-#define LOWER_8b_OF_16b(x) ((x) & 0x00FF)
 #define NUM_TRANS(x) ceil((x)/3.0f) // Returns the number of transactions each CiM will send (3 elements per transaction)
 
 /*----- ENUM -----*/

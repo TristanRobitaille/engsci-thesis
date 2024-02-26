@@ -244,20 +244,12 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case ENC_LAYERNORM_3_2ND_HALF_STEP:
             if (((bytes_rec_cnt.get_cnt() == 1) && (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP)) || (bytes_rec_cnt.get_cnt() == NUM_PATCHES+1)) { // No more data to receive, start LayerNorm
                 if (compute_in_progress == false) {
-                    float gamma = 0.0f;
-                    float beta = 0.0f;
                     if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) {
-                        gamma = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_GAMMA_OFF];
-                        beta = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_BETA_OFF];
-                        LAYERNORM_2ND_HALF(mem_map.at(ENC_LN1_2ND_HALF_MEM), gamma, beta);
+                        LAYERNORM_2ND_HALF(mem_map.at(ENC_LN1_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_BETA_OFF);
                     } else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) {
-                        gamma = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_GAMMA_OFF];
-                        beta = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_BETA_OFF];
-                        LAYERNORM_2ND_HALF(mem_map.at(ENC_LN2_2ND_HALF_MEM), gamma, beta);
+                        LAYERNORM_2ND_HALF(mem_map.at(ENC_LN2_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_BETA_OFF);
                     } else if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) {
-                        gamma = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_GAMMA_OFF];
-                        beta = params[param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_BETA_OFF];
-                        LAYERNORM_2ND_HALF(mem_map.at(MLP_HEAD_LN_2ND_HALF_MEM), gamma, beta);
+                        LAYERNORM_2ND_HALF(mem_map.at(MLP_HEAD_LN_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_BETA_OFF);
                     }
                     bytes_rec_cnt.reset();
                 }
@@ -640,67 +632,57 @@ void CiM::update_compute_process_cnt() {
 void CiM::MAC(uint16_t in1_start_addr, uint16_t in2_start_addr, uint16_t len, uint16_t bias_addr, INPUT_TYPE param_type, ACTIVATION activation) {
     /* Dot-product between two vectors. */
 
-    float mac_result = 0.0f;
-    float input2 = 0.0f;
-    float bias = 0.0f;
-    if (activation != NO_ACTIVATION) { bias = params[bias_addr]; }
+    compute_temp = 0.0f; // Accumulator
+    compute_temp_2 = params[bias_addr]; // Bias
 
     if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start MAC!"); }
     compute_in_progress = true;
     // MAC
     for (uint16_t i = 0; i < len; i++) {
-        // Grab second input
-        if (param_type == INTERMEDIATE_RES) { input2 = intermediate_res[in2_start_addr+i]; }
-        else if (param_type == MODEL_PARAM) { input2 = params[in2_start_addr+i]; }
+        if (param_type == INTERMEDIATE_RES) { compute_temp += intermediate_res[in2_start_addr+i] * intermediate_res[in1_start_addr+i]; }
+        else if (param_type == MODEL_PARAM) { compute_temp += params[in2_start_addr+i] * intermediate_res[in1_start_addr+i]; }
         else {
             cout << "Received unknown parameter type " << param_type << endl;
             exit(-1);
         }
-
-        // Compute MAC
-        mac_result += input2 * intermediate_res[in1_start_addr+i];
     }
 
     // Activation
     switch (activation) {
     case LINEAR_ACTIVATION:
-        mac_result += bias;
+        compute_temp += compute_temp_2;
         break;
     case SWISH_ACTIVATION:
-        mac_result = (mac_result + bias) * (1.0f / (1.0f + exp(-(mac_result + bias))));
+        compute_temp = (compute_temp + compute_temp_2) * (1.0f / (1.0f + exp(-(compute_temp + compute_temp_2))));
         break;
     case NO_ACTIVATION:
     default:
         break;
     }
-    computation_result = mac_result;
+    computation_result = compute_temp;
 }
 
 void CiM::DIV(uint16_t num_addr, uint16_t in2, INPUT_TYPE in2_type) {
     /* Return division of two inputs. */
-    float result = 0.0f;
     if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start DIV!"); }
     compute_in_progress = true;
 
     if (in2_type == MODEL_PARAM) { // Second input is a model parameter
-        result = intermediate_res[num_addr] / params[in2];
+        computation_result = intermediate_res[num_addr] / params[in2];
     } else if (in2_type == IMMEDIATE_VAL) { // Second input is an immediate value
-        result = intermediate_res[num_addr] / in2;
+        computation_result = intermediate_res[num_addr] / in2;
     } else {
         cout << "Received unknown parameter type " << in2_type << endl;
     }
-    computation_result = result;
 }
 
 void CiM::ADD(uint16_t in1_addr, uint16_t in2_addr, INPUT_TYPE param_type) {
     /* Return sum of two inputs. */
-    float results = 0.0f;
     if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start ADD!"); }
     compute_in_progress = true;
 
-    if (param_type == INTERMEDIATE_RES) { results = intermediate_res[in1_addr] + intermediate_res[in2_addr]; }
-    else if (param_type == MODEL_PARAM) { results = intermediate_res[in1_addr] + params[in2_addr]; }
-    computation_result = results;
+    if (param_type == INTERMEDIATE_RES) { computation_result = intermediate_res[in1_addr] + intermediate_res[in2_addr]; }
+    else if (param_type == MODEL_PARAM) { computation_result = intermediate_res[in1_addr] + params[in2_addr]; }
 }
 
 void CiM::LAYERNORM_1ST_HALF(uint16_t input_addr) {
@@ -708,79 +690,79 @@ void CiM::LAYERNORM_1ST_HALF(uint16_t input_addr) {
     if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start LAYERNORM_1ST_HALF!"); }
     compute_in_progress = true; // Using this compute_in_progress signal as it will be used in the CiM (in ASIC, this compute is multi-cycle, so leaving this here for visibility)
 
-    float mean = 0.0f;
-    float variance = 0.0f;
+    compute_temp = 0.0f; // Mean
+    compute_temp_2 = 0.0f; // Variance
 
     // Mean
-    for (uint16_t i = 0; i < EMB_DEPTH; i++) { mean += intermediate_res[input_addr+i]; } 
-    mean /= EMB_DEPTH;
-    verify_result(MEAN, mean, intermediate_res, input_addr, EMB_DEPTH, id);
+    for (uint16_t i = 0; i < EMB_DEPTH; i++) { compute_temp += intermediate_res[input_addr+i]; } 
+    compute_temp /= EMB_DEPTH;
+    verify_result(MEAN, compute_temp, intermediate_res, input_addr, EMB_DEPTH, id);
 
     // Variance
     float temp = 0.0f;
     for (uint16_t i = 0; i < EMB_DEPTH; i++) {
-        temp = intermediate_res[input_addr+i] - mean; // Subtract
+        temp = intermediate_res[input_addr+i] - compute_temp; // Subtract
         temp *= temp; // Square
-        variance += temp; // Sum
+        compute_temp_2 += temp; // Sum
     }
 
-    variance /= EMB_DEPTH;
-    verify_result(VARIANCE, variance, intermediate_res, input_addr, EMB_DEPTH, id);
-    variance += LAYERNORM_EPSILON; // Add epsilon
-    variance = sqrt(variance); // Standard deviation
+    compute_temp_2 /= EMB_DEPTH;
+    verify_result(VARIANCE, compute_temp_2, intermediate_res, input_addr, EMB_DEPTH, id);
+    compute_temp_2 = sqrt(compute_temp_2); // Standard deviation
 
     // Partial normalization (excludes gamma and beta, which are applied in LAYERNORM_FINAL_NORM() since they need to be applied column-wise)
     for (uint16_t i = 0; i < EMB_DEPTH; i++) {
-        intermediate_res[input_addr+i] = (intermediate_res[input_addr+i] - mean) / variance;
+        intermediate_res[input_addr+i] = (intermediate_res[input_addr+i] - compute_temp) / compute_temp_2;
     }
 }
 
-void CiM::LAYERNORM_2ND_HALF(uint16_t input_addr, float gamma, float beta) {
+void CiM::LAYERNORM_2ND_HALF(uint16_t input_addr, uint16_t gamma_addr, uint16_t beta_addr) {
     /* 2nd half of Layer normalization of input. This applies gamma and beta on each column. */
     if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start LAYERNORM_2ND_HALF!"); }
     compute_in_progress = true;
 
+    compute_temp = params[gamma_addr]; // Gamma
+    compute_temp_2 = params[beta_addr]; // Beta
     // Normalize
     for (uint16_t i = 0; i < NUM_PATCHES+1; i++) {
-        intermediate_res[input_addr+i] = gamma * intermediate_res[input_addr+i] + beta;
+        intermediate_res[input_addr+i] = compute_temp * intermediate_res[input_addr+i] + compute_temp_2;
     }
 }
 
 void CiM::SOFTMAX(uint16_t input_addr, uint16_t len) {
     /* Softmax of input (performed in-place). Input is in intermediate storage location. Note: All Softmax are done over a row of len length. */
 
-    float exp_sum = 0.0f;
+    compute_temp = 0.0f; // Accumulator
     if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start SOFTMAX!"); }
     compute_in_progress = true;
 
     // Exponentiate all elements and sum
     for (uint16_t i = 0; i < len; ++i) {
         intermediate_res[input_addr+i] = exp(intermediate_res[input_addr+i]);
-        exp_sum += intermediate_res[input_addr+i];
+        compute_temp += intermediate_res[input_addr+i];
     }
 
     // Normalize
     for (uint16_t i = 0; i < len; ++i) {
-        intermediate_res[input_addr+i] = intermediate_res[input_addr+i] / exp_sum;
+        intermediate_res[input_addr+i] = intermediate_res[input_addr+i] / compute_temp;
     }
 }
 
 void CiM::ARGMAX(uint16_t input_addr, uint16_t len) {
     /* Index of maximum element of input. Input is in intermediate storage location. Note: All Max are done over a row of len length. */
 
-    float max_index = 0.0f;
-    float max_val = 0.0f;
+    computation_result = 0.0f; // Index of maximum element
+    compute_temp = 0.0f; // Value of maximum element
     if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start MAX!"); }
     compute_in_progress = true;
 
     // Find max
     for (uint16_t i = 0; i < len; ++i) {
-        if (intermediate_res[input_addr+i] > max_val) {
-            max_index = i;
-            max_val = intermediate_res[input_addr+i];
+        if (intermediate_res[input_addr+i] > compute_temp) {
+            computation_result = i;
+            compute_temp = intermediate_res[input_addr+i];
         }
     }
-    computation_result = max_index;
 }
 
 bool CiM::get_is_ready() {

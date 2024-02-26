@@ -1,10 +1,10 @@
+#ifndef COMPUTE_VERIFICATION_H
+#define COMPUTE_VERIFICATION_H
+
 #include <map>
 #include <armadillo>
 #include <../rapidcsv/src/rapidcsv.h>
 #include <CiM.hpp>
-
-#ifndef COMPUTE_VERIFICATION_H
-#define COMPUTE_VERIFICATION_H
 
 /*----- DEFINE -----*/
 #define ENABLE_COMPUTATION_VERIFICATION true
