@@ -49,8 +49,6 @@ typedef std::array<std::array<float, EMB_DEPTH>, MLP_DIM> EncMlpDimxEmbDepthMat_
 typedef std::array<std::array<float, NUM_SLEEP_STAGES>, MLP_DIM> NumSleepStagesxMlpDimMat_t;
 typedef std::array<float, NUM_SLEEP_STAGES> NumSleepStagesVect_t;
 
-typedef std::variant<EmbDepthVect_t, PatchProjKernel_t, PosEmb_t, EncEmbDepthMat_t, EncEmbDepthVect3_t, EmbDepthxMlpDimMat_t, MlpDimVect_t, EncMlpDimxEmbDepthMat_t, NumSleepStagesxMlpDimMat_t, NumSleepStagesVect_t> ParamType;
-
 /*----- STRUCT -----*/
 struct ParamInfo {
     uint16_t addr;

@@ -4,7 +4,7 @@
 using namespace std;
 
 /*----- DECLARATION -----*/
-Master_ctrl::Master_ctrl(const string eeg_filepath, const string params_filepath) : gen_cnt_8b(8), gen_cnt_10b(10) {
+Master_Ctrl::Master_Ctrl(const string eeg_filepath, const string params_filepath) : gen_cnt_8b(8), gen_cnt_10b(10) {
     state = RESET;
 
     // EEG data file
@@ -16,7 +16,7 @@ Master_ctrl::Master_ctrl(const string eeg_filepath, const string params_filepath
     load_params_from_h5(params_filepath);
 }
 
-int Master_ctrl::reset(){
+int Master_Ctrl::reset(){
     gen_cnt_8b.reset();
     gen_cnt_10b.reset();
     gen_reg_16b = 0;
@@ -27,7 +27,7 @@ int Master_ctrl::reset(){
     return 0;
 }
 
-SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vector<CiM> cims){
+SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vector<CiM> cims){
     /* Run the master controller FSM */
     SYSTEM_STATE sys_state = RUNNING;
 
@@ -166,7 +166,7 @@ SYSTEM_STATE Master_ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
     return sys_state;
 }
 
-int Master_ctrl::start_signal_load(Bus* bus){
+int Master_Ctrl::start_signal_load(Bus* bus){
     state = SIGNAL_LOAD;
     gen_cnt_8b.reset();
     gen_cnt_10b.reset();
@@ -176,7 +176,7 @@ int Master_ctrl::start_signal_load(Bus* bus){
     return 0;
 }
 
-struct instruction Master_ctrl::param_to_send(){
+struct instruction Master_Ctrl::param_to_send(){
     /* Parses the parameter file and returns the instruction that master needs to send to CiM */
     struct instruction inst;
 
@@ -267,7 +267,7 @@ struct instruction Master_ctrl::param_to_send(){
     return inst;
 }
 
-int Master_ctrl::load_params_from_h5(const std::string params_filepath) {
+int Master_Ctrl::load_params_from_h5(const std::string params_filepath) {
     // Load parameters from .h5 file and store into struct for easier and faster access
 
     HighFive::File file(params_filepath, HighFive::File::ReadOnly);
@@ -315,7 +315,7 @@ int Master_ctrl::load_params_from_h5(const std::string params_filepath) {
     return 0;
 }
 
-void Master_ctrl::update_inst_with_params(PARAM_NAME param_name, struct instruction* inst) {
+void Master_Ctrl::update_inst_with_params(PARAM_NAME param_name, struct instruction* inst) {
     /* Returns the parameters loaded from the .h5 file corresponding to the passed name 
     *  Note: gen_cnt_8b() holds number of bytes sent to the current CiM for the current param
     *        gen_cnt_10b() holds the current CiM we are sending data to for the current param
@@ -370,7 +370,7 @@ void Master_ctrl::update_inst_with_params(PARAM_NAME param_name, struct instruct
     }
 }
 
-int Master_ctrl::prepare_for_broadcast(broadcast_op_info op_info, Bus* bus) {
+int Master_Ctrl::prepare_for_broadcast(broadcast_op_info op_info, Bus* bus) {
     /* Prepares the master controller for a broadcast operation */
     struct instruction inst = {op_info.op, /*target_or_sender*/ 0, {op_info.tx_addr, op_info.len}, op_info.rx_addr};
     state = BROADCAST_MANAGEMENT;

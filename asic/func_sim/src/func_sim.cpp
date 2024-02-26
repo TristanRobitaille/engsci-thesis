@@ -10,7 +10,7 @@ struct ext_signals ext_sigs;
 
 Bus bus;
 std::vector<CiM> cims;
-Master_ctrl ctrl("reference_data/eeg.h5", "reference_data/model_params.h5");
+Master_Ctrl ctrl("reference_data/eeg.h5", "reference_data/model_params.h5");
 
 int init(){
     ext_sigs.master_nrst = false;
@@ -34,9 +34,7 @@ int init(){
 /*----- MAIN -----*/
 int main(){
     cout << ">----- STARTING SIMULATION -----<" << endl;
-
     init();
-
     while (1) {
         if (event_schedule.count(epoch_cnt) > 0) { event_schedule[epoch_cnt](&ext_sigs); } // Update external signals if needed
         for (auto& cim: cims) { cim.run(&ext_sigs, &bus); } // Run CiMs
@@ -44,7 +42,9 @@ int main(){
         bus.run(); // Run bus
         epoch_cnt++;
     }
-
     cout << ">----- SIMULATION FINISHED -----<" << endl;
+
+    // Stats
+    print_intermediate_value_stats();
     return 0;
 }

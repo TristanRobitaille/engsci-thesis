@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <../include/highfive/H5File.hpp>
+#include <armadillo>
 
 #include <CiM.hpp>
 #include <Misc.hpp>
@@ -11,7 +12,7 @@
 /*----- CLASS -----*/
 class Counter;
 
-class Master_ctrl {
+class Master_Ctrl {
     private:
         enum STATE {
             IDLE,
@@ -172,7 +173,7 @@ class Master_ctrl {
         void update_inst_with_params(PARAM_NAME param_name, struct instruction* inst);
 
     public:
-        Master_ctrl(const std::string eeg_filepath, const std::string params_filepath);
+        Master_Ctrl(const std::string eeg_filepath, const std::string params_filepath);
         int reset();
         SYSTEM_STATE run(struct ext_signals* ext_sigs, Bus* bus, std::vector<CiM> cims);
         int start_signal_load(Bus* bus);

@@ -1,4 +1,3 @@
-import csv
 import h5py
 import glob
 import socket
@@ -15,6 +14,11 @@ from scipy.interpolate import interp1d
 """
 Some utility function
 """
+
+#--- GLOBALS ---#
+global_min = np.inf
+global_max = -np.inf
+global_closest_to_zero = np.inf
 
 #--- CLASSES ---#
 class ArgumentParserWithError(argparse.ArgumentParser):
@@ -376,12 +380,24 @@ def export_layer_outputs(model:tf.keras.Model, input_signal:tf.Tensor):
         layer_output = layer_model.predict(input_signal)
         print(layer_output)
 
+def visit_h5_datasets(name, node):
+    global global_min, global_max, global_closest_to_zero
+    if isinstance(node, h5py.Dataset):
+        data = node[:]
+        local_min = np.min(data)
+        local_max = np.max(data)
+        if local_min < global_min: global_min = local_min
+        if local_max > global_max: global_max = local_max
+        if np.min(abs(data)) < global_closest_to_zero: global_closest_to_zero = np.min(abs(data))
+
+def print_stats_from_h5(h5_fp:str) -> None:
+    global global_min, global_max
+    with h5py.File(h5_fp, 'r') as f:
+        f.visititems(visit_h5_datasets)
+    print(f'Global Min = {global_min:.5f}, Global Max = {global_max:.5f}, Closest to zero (abs.) = {global_closest_to_zero:.8f}')
+
 def main():
-    input_signal = edf_to_h5(edf_fp="/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF/01-03-0064 PSG.edf",
-                             channel="EEG Cz-LER", clip_length_s=30, sampling_freq_hz=128, h5_filename="/home/trobitaille/engsci-thesis/python_prototype/reference_data/eeg.h5")
-    
-    model = tf.keras.models.load_model("/home/trobitaille/engsci-thesis/python_prototype/results/2024-01-22_14-00-01_vision/run_1/models/model.tf", custom_objects={"CustomSchedule": CustomSchedule})
-    export_layer_outputs(model, input_signal)
+    print_stats_from_h5("/Users/tristan/Desktop/model_params.h5")
 
 if __name__ == "__main__":
     main()
