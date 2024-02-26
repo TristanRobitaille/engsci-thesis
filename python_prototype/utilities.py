@@ -16,9 +16,12 @@ Some utility function
 """
 
 #--- GLOBALS ---#
+PRUNE_THRESHOLD = 1e-2 # To reduce ASIC power consumption, we prune weights below this threshold and avoid computation if one of the input is 0
 global_min = np.inf
 global_max = -np.inf
 global_closest_to_zero = np.inf
+global_total_params = 0
+global_prunable_params = 0
 
 #--- CLASSES ---#
 class ArgumentParserWithError(argparse.ArgumentParser):
@@ -381,20 +384,21 @@ def export_layer_outputs(model:tf.keras.Model, input_signal:tf.Tensor):
         print(layer_output)
 
 def visit_h5_datasets(name, node):
-    global global_min, global_max, global_closest_to_zero
+    global global_min, global_max, global_closest_to_zero, global_total_params, global_prunable_params
     if isinstance(node, h5py.Dataset):
         data = node[:]
-        local_min = np.min(data)
-        local_max = np.max(data)
-        if local_min < global_min: global_min = local_min
-        if local_max > global_max: global_max = local_max
+        if np.min(data) < global_min: global_min = np.min(data)
+        if np.max(data) > global_max: global_max = np.max(data)
         if np.min(abs(data)) < global_closest_to_zero: global_closest_to_zero = np.min(abs(data))
+        global_total_params += data.size
+        global_prunable_params += np.sum(abs(data) < PRUNE_THRESHOLD)
 
 def print_stats_from_h5(h5_fp:str) -> None:
     global global_min, global_max
     with h5py.File(h5_fp, 'r') as f:
         f.visititems(visit_h5_datasets)
     print(f'Global Min = {global_min:.5f}, Global Max = {global_max:.5f}, Closest to zero (abs.) = {global_closest_to_zero:.8f}')
+    print(f'Total prunable params (abs. < {PRUNE_THRESHOLD}) = {global_prunable_params/global_total_params*100:.2f}%')
 
 def main():
     print_stats_from_h5("/Users/tristan/Desktop/model_params.h5")
