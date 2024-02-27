@@ -2,17 +2,22 @@
 #define MISC_H
 
 #include <queue>
+#include <../fpm/include/fpm/fixed.hpp>
+#include <../fpm/include/fpm/math.hpp>
 
 /*----- DEFINE -----*/
-#define NUM_CIM 64
-#define PATCH_LEN 64 // Patch length (in number of samples)
-#define NUM_PATCHES 60
-#define EMB_DEPTH 64
-#define MLP_DIM 32
-#define NUM_HEADS 8
-#define NUM_SLEEP_STAGES 5
-#define NUM_SAMPLES_OUT_AVG 3 // Number of samples in output averaging filter
-#define EEG_SCALE_FACTOR 65535 // Normalize from 16b
+#define NUM_CIM                 64
+#define PATCH_LEN               64
+#define NUM_PATCHES             60
+#define EMB_DEPTH               64
+#define MLP_DIM                 32
+#define NUM_HEADS               8
+#define NUM_SLEEP_STAGES        5
+#define NUM_SAMPLES_OUT_AVG     3 // Number of samples in output averaging filter
+#define EEG_SCALE_FACTOR        65535 // Normalize from 16b
+
+/*----- TYPEDEF -----*/
+using fix_pt = fpm::fixed</*base type*/ std::int32_t, /*intermediate type*/ std::int64_t, /*# fractional bits*/ 14>; // 18.14 fixed point
 
 /*----- MACROS -----*/
 #define NUM_TRANS(x) ceil((x)/3.0f) // Returns the number of transactions each CiM will send (3 elements per transaction)

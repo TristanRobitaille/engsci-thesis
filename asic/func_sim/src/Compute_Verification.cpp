@@ -6,15 +6,19 @@ using namespace std;
 /*----- GLOBAL -----*/
 float min_val = 0.0f;
 float max_val = 0.0f;
+float highest_abs_error = 0.0f;
+float highest_rel_error = 0.0f;
 
 /*----- DECLARATION -----*/
 bool are_equal(float a, float b, uint16_t index, uint8_t id) {
     float diff = abs(a - b);
     min_val = (b < min_val) ? b : min_val;
     max_val = (b > max_val) ? b : max_val;
+    highest_abs_error = (diff > highest_abs_error) ? diff : highest_abs_error;
 
     if ((diff > REL_TOLERANCE*abs(b)) && (diff > ABS_TOLERANCE)) {
-        std::cout << "Mismatch for CiM #" << (uint16_t) id << " at index " << index << ": Expected: " << a << ", got " << b << " (error: " << 100*(a-b)/a << "%)" << std::endl;
+        highest_rel_error = (100*(a-b)/b > highest_rel_error) ? 100*(a-b)/b : highest_rel_error; // Instead if statement to avoid extremely high relative errors when the abolute error is very small
+        std::cout << "Mismatch for CiM #" << (uint16_t) id << " at index " << index << ": Expected: " << a << ", got " << b << " (error: " << 100*(a-b)/b << "%)" << std::endl;
         return false;
     }
     return true;
@@ -98,4 +102,6 @@ void print_intermediate_value_stats() {
     if (ENABLE_COMPUTATION_VERIFICATION == false) { return; }
     std::cout << "Min. intermediate value: " << min_val << std::endl;
     std::cout << "Max. intermediate value: " << max_val << std::endl;
+    std::cout << "Highest valid absolute error: " << highest_abs_error << std::endl;
+    std::cout << "Highest valid relative error: " << highest_rel_error << "%" << std::endl;
 }

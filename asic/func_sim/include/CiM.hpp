@@ -30,7 +30,8 @@ class CiM {
         enum INPUT_TYPE { // Type of input for a given computation
             MODEL_PARAM,
             INTERMEDIATE_RES,
-            IMMEDIATE_VAL
+            IMMEDIATE_VAL,
+            ADC_INPUT
         };
 
         enum STATE {
@@ -155,8 +156,6 @@ class CiM {
         uint16_t rx_addr_reg; // Record the address of the data received on the bus
         uint16_t sender_id; // Record the id of an instruction's sender at a start of broadcast
         uint16_t data_len_reg; // General-purpose register used to record len of data sent/received on the bus
-        float compute_temp; // Temporary register used to store intermediate results during computation
-        float compute_temp_2; // Temporary register used to store intermediate results during computation
         uint16_t _compute_process_cnt; // [Not in ASIC] Counter used to track the progress of the current computation (used to simulate the delay in the computation to match the real hardware)
         uint16_t _num_compute_done; // [Not in ASIC] Counter used to track the number of computations done in a given inference step
         float computation_result; // Used to store the result of the computation
@@ -173,7 +172,7 @@ class CiM {
         Counter bytes_sent_cnt; // Tracks the # of bytes sent to the bus
 
         void update_compute_process_cnt();
-        void ADD(uint16_t in1_addr, uint16_t in2_addr, INPUT_TYPE param_type);
+        void ADD(uint16_t in1_addr, uint16_t in2_addr, INPUT_TYPE in2_type);
         void DIV(uint16_t num_addr, uint16_t in2, INPUT_TYPE in2_type);
         void LAYERNORM_1ST_HALF(uint16_t input_addr);
         void LAYERNORM_2ND_HALF(uint16_t input_addr, uint16_t gamma_addr, uint16_t beta_addr);
