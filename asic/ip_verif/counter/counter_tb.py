@@ -5,7 +5,7 @@ from utilities import *
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, FallingEdge
+from cocotb.triggers import RisingEdge
 
 #----- HELPERS -----#
 async def inc_pulse(dut):
