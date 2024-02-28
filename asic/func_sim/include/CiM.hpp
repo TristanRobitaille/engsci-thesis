@@ -158,6 +158,9 @@ class CiM {
         uint16_t data_len_reg; // General-purpose register used to record len of data sent/received on the bus
         uint16_t _compute_process_cnt; // [Not in ASIC] Counter used to track the progress of the current computation (used to simulate the delay in the computation to match the real hardware)
         uint16_t _num_compute_done; // [Not in ASIC] Counter used to track the number of computations done in a given inference step
+        large_fp_t compute_temp_fp; // Used to store intermediate results of the computation
+        large_fp_t compute_temp_fp_2; // Used to store intermediate results of the computation
+        large_fp_t compute_temp_fp_3; // Used to store intermediate results of the computation
         float computation_result; // Used to store the result of the computation
         float params[CIM_PARAMS_STORAGE_SIZE_KB / sizeof(float)];
         float intermediate_res[CIM_INT_RES_SIZE_KB / sizeof(float)];

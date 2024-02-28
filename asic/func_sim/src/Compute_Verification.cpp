@@ -8,6 +8,10 @@ float min_val = 0.0f;
 float max_val = 0.0f;
 float highest_abs_error = 0.0f;
 float highest_rel_error = 0.0f;
+vector<float> abs_errors;
+vector<float> rel_errors;
+uint32_t data_cnt = 0;
+uint32_t data_over_threshold_cnt = 0;
 
 /*----- DECLARATION -----*/
 bool are_equal(float a, float b, uint16_t index, uint8_t id) {
@@ -15,12 +19,17 @@ bool are_equal(float a, float b, uint16_t index, uint8_t id) {
     min_val = (b < min_val) ? b : min_val;
     max_val = (b > max_val) ? b : max_val;
     highest_abs_error = (diff > highest_abs_error) ? diff : highest_abs_error;
+    abs_errors.push_back(diff);
 
     if ((diff > REL_TOLERANCE*abs(b)) && (diff > ABS_TOLERANCE)) {
         highest_rel_error = (100*(a-b)/b > highest_rel_error) ? 100*(a-b)/b : highest_rel_error; // Instead if statement to avoid extremely high relative errors when the abolute error is very small
+        rel_errors.push_back(100*(a-b)/b);
         std::cout << "Mismatch for CiM #" << (uint16_t) id << " at index " << index << ": Expected: " << a << ", got " << b << " (error: " << 100*(a-b)/b << "%)" << std::endl;
+        data_over_threshold_cnt++;
         return false;
     }
+
+    data_cnt++;
     return true;
 }
 
@@ -100,8 +109,13 @@ void verify_softmax_storage(float* intermediate_res, float* prev_softmax_storage
 
 void print_intermediate_value_stats() {
     if (ENABLE_COMPUTATION_VERIFICATION == false) { return; }
+    arma::fvec arma_abs_errors(abs_errors.data(), abs_errors.size());
+    arma::fvec arma_rel_errors(rel_errors.data(), rel_errors.size());
+
     std::cout << "Min. intermediate value: " << min_val << std::endl;
     std::cout << "Max. intermediate value: " << max_val << std::endl;
-    std::cout << "Highest valid absolute error: " << highest_abs_error << std::endl;
-    std::cout << "Highest valid relative error: " << highest_rel_error << "%" << std::endl;
+    std::cout << "Highest valid absolute error: " << highest_abs_error << ". Avg: " << arma::mean(arma_abs_errors) << ". Std. dev.: " << arma::stddev(arma_abs_errors) << std::endl;
+    if (rel_errors.size() == 0) { std::cout << "Highest valid relative error: " << highest_rel_error << ". Avg: " << 0 << ". Std. dev.: " << 0 << std::endl; }
+    else { std::cout << "Highest valid relative error: " << highest_rel_error << ". Avg: " << arma::mean(arma_rel_errors) << ". Std. dev.: " << arma::stddev(arma_rel_errors) << std::endl; }
+    std::cout << data_over_threshold_cnt << "/" << data_cnt << " over threshold (" << (100.0f*data_over_threshold_cnt/data_cnt) << "%)" << std::endl;
 }
