@@ -1,33 +1,16 @@
-# Simple tests for an counter module
+# Simple tests for the fixed-point adder module
 import sys
 sys.path.append("..")
+import random
 from utilities import *
 
 import cocotb
-from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, FallingEdge
-
-import random
-from FixedPoint import FXfamily
-
-num_Q = FXfamily(NUM_FRACT_BITS, NUM_INT_BITS)
-
-#----- HELPERS -----#
-def BinToDec(dec:float):
-    z2 = num_Q(dec)
-    z2_str = z2.toBinaryString(logBase=1).replace(".","")
-    return int(z2_str, base=2)
-
-async def start_routine(dut):
-    cocotb.start_soon(Clock(dut.clk, 1, units="ns").start())
-    await RisingEdge(dut.clk)
-    await reset(dut)
-    dut.refresh.value = 1
 
 #----- TESTS -----#
 @cocotb.test()
 async def basic_reset(dut):
-    await start_routine(dut)
+    await start_routine_basic_arithmetic(dut)
     input1 = 0.5
     input2 = 10.25
     dut.input_q_1.value = BinToDec(input1)
@@ -46,25 +29,26 @@ async def basic_reset(dut):
     for _ in range(2): await RisingEdge(dut.clk)
     expected = num_Q(input1)+num_Q(input2)
     expected_str = expected.toBinaryString(logBase=1).replace(".","")
-    assert dut.output_q.value == int(expected_str, base=2), "Expected: %d, received: %d" % (int(expected_str, base=2), dut.output_q.value)
+    assert dut.output_q.value == int(expected_str, base=2), f"Expected: {int(expected_str, base=2)}, received: {int(dut.output_q.value, base=2)} (in1: {input1}, in2: {input2})"
 
 @cocotb.test()
 async def basic_count(dut):
-    await start_routine(dut)
+    await start_routine_basic_arithmetic(dut)
 
     for _ in range(100):
-        input1 = random.uniform(0, MAX_INT)
-        input2 = random.uniform(0, MAX_INT)
+        input1 = random.uniform(-MAX_INT_ADD, MAX_INT_ADD)
+        input2 = random.uniform(-MAX_INT_ADD, MAX_INT_ADD)
+        print(f"input1: {input1}, input2: {input2}")
         expected = num_Q(input1)+num_Q(input2)
         expected_str = expected.toBinaryString(logBase=1).replace(".","")
         dut.input_q_1.value = BinToDec(input1)
         dut.input_q_2.value = BinToDec(input2)
         for _ in range(2): await RisingEdge(dut.clk)
-        assert dut.output_q.value == int(expected_str, base=2), "Expected: %d, received: %d" % (int(expected_str, base=2), dut.output_q.value)
+        assert dut.output_q.value == int(expected_str, base=2), f"Expected: {int(expected_str, base=2)}, received: {dut.output_q.value} (in1: {input1}, in2: {input2})"
 
 @cocotb.test()
 async def overflow(dut):
-    await start_routine(dut)
+    await start_routine_basic_arithmetic(dut)
 
     input_q_1 = [2**(NUM_INT_BITS-1)-1]
     input_q_2 = [2**(NUM_INT_BITS-1)-1]
