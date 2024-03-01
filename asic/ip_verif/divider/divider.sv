@@ -17,10 +17,7 @@ module divider #(
     input logic start,
 
     // Data in 2's complement format
-    output logic overflow,
-    output logic busy,
-    output logic done,
-    output logic dbz, // Divide by zero
+    output logic busy, done, dbz, overflow
     input logic signed [N-1:0] dividend,
     input logic signed [N-1:0] divisor,
     output logic signed [N-1:0] output_q
