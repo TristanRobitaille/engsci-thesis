@@ -38,7 +38,6 @@ async def basic_count(dut):
     for _ in range(100):
         input1 = random.uniform(-MAX_INT_ADD, MAX_INT_ADD)
         input2 = random.uniform(-MAX_INT_ADD, MAX_INT_ADD)
-        print(f"input1: {input1}, input2: {input2}")
         expected = num_Q(input1)+num_Q(input2)
         expected_str = expected.toBinaryString(logBase=1).replace(".","")
         dut.input_q_1.value = BinToDec(input1)

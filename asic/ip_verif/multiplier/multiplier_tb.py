@@ -2,8 +2,8 @@
 import sys
 sys.path.append("..")
 import random
-from FixedPoint import FXnum
 from utilities import *
+from FixedPoint import FXnum
 
 import cocotb
 from cocotb.triggers import RisingEdge, FallingEdge
