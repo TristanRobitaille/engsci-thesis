@@ -1,4 +1,4 @@
-# Simple tests for an counter module
+# Simple tests for the fixed-point square root module
 import sys
 sys.path.append("..")
 import random

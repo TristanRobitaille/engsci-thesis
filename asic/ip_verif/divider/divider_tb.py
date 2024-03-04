@@ -1,4 +1,4 @@
-# Simple tests for an counter module
+# Simple tests for the fixed-point divider module
 import sys
 sys.path.append("..")
 import random
@@ -8,20 +8,13 @@ from FixedPoint import FXnum
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
-
-#----- HELPERS -----#
-async def start_pulse(dut):
-    dut.start.value = 1
-    await RisingEdge(dut.clk)
-    dut.start.value = 0
-    await RisingEdge(dut.clk)
-    
+   
 @cocotb.test()
 async def int_count(dut):
     cocotb.start_soon(Clock(dut.clk, 1, units="ns").start())
     await reset(dut)
 
-    for _ in range(10):
+    for _ in range(1000):
         await RisingEdge(dut.clk)
         dividend = random.uniform(-200, -200)
         divisor = random.uniform(-2000, -2000)

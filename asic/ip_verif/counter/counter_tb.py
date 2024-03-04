@@ -1,4 +1,4 @@
-# Simple tests for an counter module
+# Simple tests for the fixed-point counter module
 import sys
 sys.path.append("..")
 from utilities import *

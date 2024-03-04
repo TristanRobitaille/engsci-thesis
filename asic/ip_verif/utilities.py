@@ -19,6 +19,12 @@ async def reset(dut):
     dut.rst_n.value = 1
     await RisingEdge(dut.clk)
 
+async def start_pulse(dut):
+    dut.start.value = 1
+    await RisingEdge(dut.clk)
+    dut.start.value = 0
+    await RisingEdge(dut.clk)
+
 def BinToDec(dec:float):
     z2 = num_Q(dec)
     z2_str = z2.toBinaryString(logBase=1, twosComp=True).replace(".","")

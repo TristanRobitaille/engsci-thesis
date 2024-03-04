@@ -174,6 +174,12 @@ class CiM {
         Counter bytes_rec_cnt; // Tracks the # of bytes received from the bus that are relevant to me
         Counter bytes_sent_cnt; // Tracks the # of bytes sent to the bus
 
+        // Metrics
+        uint32_t _neg_exp_cnt; // Track # of exponentials that have a negative argument
+        uint32_t _total_exp_cnt; // Track the # of exponentials performed
+        large_fp_t _max_exp_input_arg; // Track the maximum input argument to the exponential
+        large_fp_t _min_exp_input_arg; // Track the minimum input argument to the exponential
+
         void update_compute_process_cnt();
         void ADD(uint16_t in1_addr, uint16_t in2_addr, INPUT_TYPE in2_type);
         void DIV(uint16_t num_addr, uint16_t in2, INPUT_TYPE in2_type);

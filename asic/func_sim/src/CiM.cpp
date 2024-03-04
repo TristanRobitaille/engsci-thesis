@@ -512,7 +512,11 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 gen_cnt_10b.reset();
                 gen_cnt_10b_2.reset();
                 verify_softmax_storage(intermediate_res, prev_softmax_storage);
-                if (id == 0) { cout << "CiM:  Inference complete. Inferred sleep stage: " << computation_result << endl; }
+                if (id == 0) {
+                    cout << "CiM #0: Inference complete. Inferred sleep stage: " << computation_result << endl;
+                    cout << "CiM #0: Number of exponent operations with negative argument = " << _neg_exp_cnt << "/" << _total_exp_cnt << " (" << 100*_neg_exp_cnt/_total_exp_cnt  << "%)" << endl;
+                    cout << "CiM #0: Min./Max. inputs to exponential = " << static_cast<float>(_min_exp_input_arg) << " and " << static_cast<float>(_max_exp_input_arg) << endl;
+                }
             }
         break;
 
@@ -653,6 +657,10 @@ void CiM::MAC(uint16_t in1_start_addr, uint16_t in2_start_addr, uint16_t len, ui
         compute_temp_fp += compute_temp_fp_2;
         break;
     case SWISH_ACTIVATION:
+        if ((-compute_temp_fp - compute_temp_fp_2) < large_fp_t { 0 }) { _neg_exp_cnt++; }
+        _total_exp_cnt++;
+        if ((-compute_temp_fp - compute_temp_fp_2) < _min_exp_input_arg) { _min_exp_input_arg = -compute_temp_fp - compute_temp_fp_2; }
+        if ((-compute_temp_fp - compute_temp_fp_2) > _max_exp_input_arg) { _max_exp_input_arg = -compute_temp_fp - compute_temp_fp_2; }
         compute_temp_fp = (compute_temp_fp + compute_temp_fp_2) * (large_fp_t { 1 } / (large_fp_t { 1 } + exp(-(compute_temp_fp + compute_temp_fp_2))));
         break;
     case NO_ACTIVATION:
@@ -753,6 +761,10 @@ void CiM::SOFTMAX(uint16_t input_addr, uint16_t len) {
 
     // Exponentiate all elements and sum
     for (uint16_t i = 0; i < len; ++i) {
+        if (large_fp_t { intermediate_res[input_addr+i] } < large_fp_t { 0 }) { _neg_exp_cnt++; }
+        if (large_fp_t { intermediate_res[input_addr+i] } < _min_exp_input_arg) { _min_exp_input_arg = large_fp_t { intermediate_res[input_addr+i] }; }
+        if (large_fp_t { intermediate_res[input_addr+i] } > _max_exp_input_arg) { _max_exp_input_arg = large_fp_t { intermediate_res[input_addr+i] }; }
+        _total_exp_cnt++;
         intermediate_res[input_addr+i] = static_cast<float> ( fix_pt_t {exp(large_fp_t { intermediate_res[input_addr+i] })});
         compute_temp_fp += large_fp_t { intermediate_res[input_addr+i] };
     }
