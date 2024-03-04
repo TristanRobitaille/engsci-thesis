@@ -188,6 +188,8 @@ class CiM {
         void MAC(uint16_t in1_start_addr, uint16_t in2_start_addr, uint16_t len, uint16_t bias_addr, INPUT_TYPE param_type, ACTIVATION activation);
         void SOFTMAX(uint16_t input_addr, uint16_t len);
         void ARGMAX(uint16_t input_addr, uint16_t len);
+        large_fp_t exp_approx(large_fp_t input);
+        large_fp_t floor_fpm(large_fp_t input);
         void update_state(STATE new_state);
 
     public:

@@ -794,6 +794,29 @@ void CiM::ARGMAX(uint16_t input_addr, uint16_t len) {
     computation_result = static_cast<float> (fix_pt_t { compute_temp_fp_3 });
 }
 
+large_fp_t CiM::exp_approx(large_fp_t input) {
+    /* Approximation of exp(x) as used in the ASIC
+       Uses the identy exp(x) = 2^(x/ln(2)), float/int exponent splitting and Taylor approximation of the fractional part. 
+    */
+
+    // if (input == large_fp_t{0}) { return large_fp_t{1}; } // exp(0) = 1
+
+    large_fp_t ln_2 = log(large_fp_t{2});
+    large_fp_t input_mapped = input/ln_2;
+    large_fp_t input_mapped_fract = input/ln_2 - floor_fpm(input/ln_2);
+
+    // Taylor approximation of the fractional part
+    large_fp_t exp_approx_fract = 1 + ln_2*input_mapped_fract + pow(ln_2,large_fp_t{2})/large_fp_t{2}*pow(input_mapped_fract, large_fp_t{2}) + pow(ln_2,large_fp_t{3})/large_fp_t{6}*pow(input_mapped_fract, large_fp_t{3});
+
+    // Integer part
+    return pow(large_fp_t{2}, floor_fpm(input_mapped)) * exp_approx_fract;
+}
+
+large_fp_t CiM::floor_fpm(large_fp_t input) {
+    /* Performs floor() on fpm input */
+    return large_fp_t { floor(static_cast<float>(input)) };
+}
+
 bool CiM::get_is_ready() {
     return (is_ready & !compute_in_progress);
 }
