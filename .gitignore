@@ -75,6 +75,7 @@ asic/results/*
 asic/command.log
 
 ### ASIC functional simulation
+asic/~$*
 asic/func_sim/*.cmake
 asic/func_sim/*/*.cmake
 asic/func_sim/*/Makefile
@@ -85,7 +86,8 @@ asic/func_sim/include/CMakeFiles/
 asic/func_sim/include/doc/
 asic/func_sim/include/src/
 asic/func_sim/Makefile
-asic/~$*
+asic/mem/528_by_16/*
+asic/mem/848_by_16/*
 
 ### Documentation
 doc/CMC_VLSI_User_Manual_2023.pdf
