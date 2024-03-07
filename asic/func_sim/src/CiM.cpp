@@ -18,7 +18,7 @@ CiM::CiM(const int16_t cim_id) : id(cim_id), gen_cnt_10b(10), gen_cnt_10b_2(10),
             std::string filename = "reference_data/dummy_softmax_" + std::to_string(i) + ".csv";
             rapidcsv::Document csv(filename, rapidcsv::LabelParams(-1, -1));
             std::vector<float> dummy_softmax = csv.GetRow<float>(0);
-            for (int j = 0; j < NUM_SLEEP_STAGES; j++) { prev_softmax_storage[i*NUM_SLEEP_STAGES + j] = (dummy_softmax[j] / NUM_SAMPLES_OUT_AVG); }
+            for (int j = 0; j < NUM_SLEEP_STAGES; j++) { intermediate_res[mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + i*NUM_SLEEP_STAGES + j] = (dummy_softmax[j] / NUM_SAMPLES_OUT_AVG); }
         }
     }
 }
@@ -469,10 +469,10 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 - gen_cnt_10b_2 holds the epoch
             */
             if ((compute_in_progress == false) && (gen_cnt_10b_2.get_cnt() < (NUM_SAMPLES_OUT_AVG-1)) && (gen_cnt_10b.get_cnt() <= NUM_SLEEP_STAGES)) {
-                uint16_t addr_prev_softmax = mem_map.at(PREV_SOFTMAX_STORAGE) + gen_cnt_10b.get_cnt() + gen_cnt_10b_2.get_cnt()*NUM_SLEEP_STAGES;
+                uint16_t addr_prev_softmax = mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + gen_cnt_10b.get_cnt() + gen_cnt_10b_2.get_cnt()*NUM_SLEEP_STAGES;
                 uint16_t addr_softmax_divide_sum = mem_map.at(SOFTMAX_AVG_SUM_MEM) + gen_cnt_10b.get_cnt();
 
-                intermediate_res[gen_cnt_10b.get_cnt()] = prev_softmax_storage[addr_prev_softmax]; // Move previous softmax result to intermediate storage
+                intermediate_res[gen_cnt_10b.get_cnt()] = intermediate_res[addr_prev_softmax]; // Move previous softmax result to intermediate storage
                 if (gen_reg_16b == 1) { intermediate_res[mem_map.at(SOFTMAX_AVG_SUM_MEM)+gen_cnt_10b.get_cnt()-1] = computation_result; } // Save previous sum result
                 ADD(gen_cnt_10b.get_cnt(), addr_softmax_divide_sum, INTERMEDIATE_RES); // Sum with previous result
 
@@ -497,9 +497,9 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
         case RETIRE_SOFTMAX_STEP:
             if ((gen_cnt_10b.get_cnt() < NUM_SLEEP_STAGES) && (gen_cnt_10b_2.get_cnt() < (NUM_SAMPLES_OUT_AVG-2))) {
-                prev_softmax_storage[gen_cnt_10b.get_cnt() + NUM_SLEEP_STAGES*(gen_cnt_10b_2.get_cnt()+1)] = prev_softmax_storage[gen_cnt_10b.get_cnt() + NUM_SLEEP_STAGES*gen_cnt_10b_2.get_cnt()];
+                intermediate_res[mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + gen_cnt_10b.get_cnt() + NUM_SLEEP_STAGES*(gen_cnt_10b_2.get_cnt()+1)] = intermediate_res[mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + gen_cnt_10b.get_cnt() + NUM_SLEEP_STAGES*gen_cnt_10b_2.get_cnt()];
 
-                if (gen_cnt_10b_2.get_cnt() == 0) {prev_softmax_storage[gen_cnt_10b.get_cnt()] = intermediate_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + gen_cnt_10b.get_cnt()];}
+                if (gen_cnt_10b_2.get_cnt() == 0) {intermediate_res[mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + gen_cnt_10b.get_cnt()] = intermediate_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + gen_cnt_10b.get_cnt()];}
 
                 gen_cnt_10b.inc();
                 if (gen_cnt_10b.get_cnt() == NUM_SLEEP_STAGES) {
@@ -511,7 +511,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 is_ready = true;
                 gen_cnt_10b.reset();
                 gen_cnt_10b_2.reset();
-                verify_softmax_storage(intermediate_res, prev_softmax_storage);
+                verify_softmax_storage(intermediate_res, mem_map.at(PREV_SOFTMAX_OUTPUT_MEM));
                 if (id == 0) {
                     cout << "CiM #0: Inference complete. Inferred sleep stage: " << computation_result << endl;
                     cout << "CiM #0: Number of exponent operations with negative argument = " << _neg_exp_cnt << "/" << _total_exp_cnt << " (" << 100*_neg_exp_cnt/_total_exp_cnt  << "%)" << endl;

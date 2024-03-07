@@ -58,16 +58,16 @@ struct ParamInfo {
 
 /*----- STATIC -----*/
 static std::map<PARAM_NAME, ParamInfo> param_addr_map = {
-    {PATCH_PROJ_KERNEL_PARAMS,                      {0,     /*len*/ PATCH_LEN,      /*num rec*/ NUM_CIM}},
-    {SINGLE_PARAMS,                                 {64*8,  /*len*/ 16,             /*num rec*/ NUM_CIM}},
-    {POS_EMB_PARAMS,                                {64*1,  /*len*/ NUM_PATCHES+1,  /*num rec*/ NUM_CIM}},
-    {ENC_Q_DENSE_PARAMS,                            {128,   /*len*/ EMB_DEPTH,      /*num rec*/ NUM_CIM}},
-    {ENC_K_DENSE_PARAMS,                            {192,   /*len*/ EMB_DEPTH,      /*num rec*/ NUM_CIM}},
-    {ENC_V_DENSE_PARAMS,                            {256,   /*len*/ EMB_DEPTH,      /*num rec*/ NUM_CIM}},
-    {ENC_COMB_HEAD_PARAMS,                          {320,   /*len*/ EMB_DEPTH,      /*num rec*/ NUM_CIM}},
-    {ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS,    {384,   /*len*/ EMB_DEPTH,      /*num rec*/ NUM_CIM}}, // CiMs 0-31 have enc_mlp_dense_1, CiMs 32-63 have enc_head_mlp_dense_1
-    {ENC_MLP_DENSE_2_PARAMS,                        {448,   /*len*/ MLP_DIM,        /*num rec*/ EMB_DEPTH}},
-    {MLP_HEAD_DENSE_2_PARAMS,                       {480,   /*len*/ MLP_DIM,        /*num rec*/ NUM_SLEEP_STAGES}}
+    {PATCH_PROJ_KERNEL_PARAMS,                      {0,     /*len*/ PATCH_LEN,          /*num rec*/ NUM_CIM}},
+    {SINGLE_PARAMS,                                 {64*8,  /*len*/ 16,                 /*num rec*/ NUM_CIM}},
+    {POS_EMB_PARAMS,                                {64*1,  /*len*/ NUM_PATCHES+1,      /*num rec*/ NUM_CIM}},
+    {ENC_Q_DENSE_PARAMS,                            {128,   /*len*/ EMB_DEPTH,          /*num rec*/ NUM_CIM}},
+    {ENC_K_DENSE_PARAMS,                            {192,   /*len*/ EMB_DEPTH,          /*num rec*/ NUM_CIM}},
+    {ENC_V_DENSE_PARAMS,                            {256,   /*len*/ EMB_DEPTH,          /*num rec*/ NUM_CIM}},
+    {ENC_COMB_HEAD_PARAMS,                          {320,   /*len*/ EMB_DEPTH,          /*num rec*/ NUM_CIM}},
+    {ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS,    {384,   /*len*/ EMB_DEPTH,          /*num rec*/ NUM_CIM}}, // CiMs 0-31 have enc_mlp_dense_1, CiMs 32-63 have enc_head_mlp_dense_1
+    {ENC_MLP_DENSE_2_PARAMS,                        {448,   /*len*/ MLP_DIM,            /*num rec*/ EMB_DEPTH}},
+    {MLP_HEAD_DENSE_2_PARAMS,                       {480,   /*len*/ MLP_DIM,            /*num rec*/ NUM_SLEEP_STAGES}},
 };
 
 #endif // PARAM_LAYER_MAPPING_H

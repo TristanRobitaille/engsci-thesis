@@ -51,6 +51,7 @@ ASIC (run from /asic):
     -[Design Vision] Launch: source launch_dv.sh
     -[Design Vision] Check design (when DV already running): check_design
     -[Design Vision] Synthesis: uplevel #0 source /autofs/fs1.ece/fs1.eecg.xliugrp/robita46/engsci-thesis/asic/TSMC65_digital_flow/FEOL/rm_dc_scripts/dc.tcl
+    -[ModelSim, need to run outside bash] source /CMC/tools/CSHRCs/Mentor.Modelsim10.7c && vsim
     
 ASIC functional model (run from /asic/func_sim):
     -[C++ functional model] Generate Makefile: cmake CMakeLists.txt

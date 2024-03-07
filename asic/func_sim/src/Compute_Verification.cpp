@@ -88,7 +88,7 @@ void verify_result(RESULT_TYPE type, float result, float* input_data, uint16_t s
     are_equal(reference_result, result, -1, id);
 }
 
-void verify_softmax_storage(float* intermediate_res, float* prev_softmax_storage) {
+void verify_softmax_storage(float* intermediate_res, uint16_t prev_softmax_base_addr) {
     if (ENABLE_COMPUTATION_VERIFICATION == false) { return; }
 
     for (int i = 0; i < (NUM_SAMPLES_OUT_AVG-2); i++) {
@@ -97,12 +97,12 @@ void verify_softmax_storage(float* intermediate_res, float* prev_softmax_storage
             std::string filename = step_verif_info[POST_SOFTMAX_AVG_VERIF].csv_fp + std::to_string(i) + ".csv";
             rapidcsv::Document csv(filename, rapidcsv::LabelParams(-1, -1));
             std::vector<float> dummy_softmax = csv.GetRow<float>(0);
-            are_equal(dummy_softmax[j] / NUM_SAMPLES_OUT_AVG, prev_softmax_storage[j+(i+1)*NUM_SLEEP_STAGES], j, 0);
+            are_equal(dummy_softmax[j] / NUM_SAMPLES_OUT_AVG, intermediate_res[prev_softmax_base_addr + j+(i+1)*NUM_SLEEP_STAGES], j, 0);
             
             // Check that the current sleep epoch's softmax got moved to the previous sleep epochs softmax storage
             rapidcsv::Document csv_current(step_verif_info[MLP_HEAD_SOFTMAX_VERIF].csv_fp, rapidcsv::LabelParams(-1, -1));
             std::vector<float> ref_softmax = csv_current.GetColumn<float>(0);
-            are_equal(ref_softmax[j] / NUM_SAMPLES_OUT_AVG, prev_softmax_storage[j], j, 0);
+            are_equal(ref_softmax[j] / NUM_SAMPLES_OUT_AVG, intermediate_res[prev_softmax_base_addr + j], j, 0);
         }
     }
 }

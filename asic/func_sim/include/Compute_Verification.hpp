@@ -71,7 +71,7 @@ static std::map<COMPUTE_VERIFICATION_STEP, StepVerifInfo> step_verif_info = {
 bool are_equal(float a, float b, uint16_t index, uint8_t id);
 void verify_computation(COMPUTE_VERIFICATION_STEP cim_state, uint8_t id, float* data, uint16_t starting_addr);
 void verify_result(RESULT_TYPE type, float result, float* input_data, uint16_t starting_addr, uint16_t len, uint8_t id);
-void verify_softmax_storage(float* intermediate_res, float* prev_softmax_storage);
+void verify_softmax_storage(float* intermediate_res, uint16_t prev_softmax_base_addr);
 void print_intermediate_value_stats();
 
 #endif //COMPUTE_VERIFICATION_H

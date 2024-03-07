@@ -9,9 +9,8 @@
 #include <Compute_Verification.hpp>
 
 /*----- DEFINE -----*/
-#define CIM_PARAMS_STORAGE_SIZE_KB 2112
-#define CIM_INT_RES_SIZE_KB 3340
-#define CIM_PREV_SOFTMAX_SIZE_KB (NUM_SLEEP_STAGES * (NUM_SAMPLES_OUT_AVG-1) * sizeof(float))
+#define CIM_PARAMS_STORAGE_SIZE_NUM_ELEM 528
+#define CIM_INT_RES_SIZE_NUM_ELEM 848 // We need 835, but it needs to be divisible by 16. We can choose size of 848 and the additional sleep stages in here
 #define COMPUTE_CNT_THRESHOLD 5 // Used to simulate the delay in the computation to match the real hardware
 
 #define HAS_MY_DATA(x) ((id >= (x-3)) && (id < (x))) // Determines whether the current broadcast transaction contains data I need
@@ -109,8 +108,8 @@ class CiM {
             MLP_HEAD_DENSE_2_IN_MEM,
             MLP_HEAD_DENSE_2_OUT_MEM,
             MLP_HEAD_SOFTMAX_IN_MEM,
-            PREV_SOFTMAX_STORAGE,
-            SOFTMAX_AVG_SUM_MEM
+            SOFTMAX_AVG_SUM_MEM,
+            PREV_SOFTMAX_OUTPUT_MEM
         };
 
         const std::map<DATA, uint16_t> mem_map = {
@@ -144,7 +143,7 @@ class CiM {
             {MLP_HEAD_DENSE_2_IN_MEM,   EMB_DEPTH},
             {MLP_HEAD_DENSE_2_OUT_MEM,  2*EMB_DEPTH},
             {MLP_HEAD_SOFTMAX_IN_MEM,   MLP_DIM},
-            {PREV_SOFTMAX_STORAGE,      0}, // Note this is in prev_softmax_storage, and only for CiM #0
+            {PREV_SOFTMAX_OUTPUT_MEM,   836}, // Only relevant for CiM #0
             {SOFTMAX_AVG_SUM_MEM,       2*EMB_DEPTH}
         };
 
@@ -162,9 +161,8 @@ class CiM {
         large_fp_t compute_temp_fp_2; // Used to store intermediate results of the computation
         large_fp_t compute_temp_fp_3; // Used to store intermediate results of the computation
         float computation_result; // Used to store the result of the computation
-        float params[CIM_PARAMS_STORAGE_SIZE_KB / sizeof(float)];
-        float intermediate_res[CIM_INT_RES_SIZE_KB / sizeof(float)];
-        float prev_softmax_storage[CIM_PREV_SOFTMAX_SIZE_KB / sizeof(float)]; // In ASIC, this should only be synthesized for CiM #0
+        float params[CIM_PARAMS_STORAGE_SIZE_NUM_ELEM];
+        float intermediate_res[CIM_INT_RES_SIZE_NUM_ELEM];
 
         STATE cim_state;
         INFERENCE_STEP current_inf_step = CLASS_TOKEN_CONCAT_STEP;
