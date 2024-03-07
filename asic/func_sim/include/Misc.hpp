@@ -1,25 +1,32 @@
-#include <queue>
-
 #ifndef MISC_H
 #define MISC_H
 
+#include <queue>
+#include <../fpm/include/fpm/fixed.hpp>
+#include <../fpm/include/fpm/math.hpp>
+
 /*----- DEFINE -----*/
-#define NUM_CIM 64
-#define PATCH_LEN 64 // Patch length (in number of samples)
-#define NUM_PATCHES 60
-#define EMB_DEPTH 64
-#define MLP_DIM 32
-#define NUM_HEADS 8
-#define NUM_SLEEP_STAGES 5
-#define LAYERNORM_EPSILON 0.000001f // 1e-6
+#define NUM_CIM                 64
+#define PATCH_LEN               64
+#define NUM_PATCHES             60
+#define EMB_DEPTH               64
+#define MLP_DIM                 32
+#define NUM_HEADS               8
+#define NUM_SLEEP_STAGES        5
+#define NUM_SAMPLES_OUT_AVG     3 // Number of samples in output averaging filter
+#define EEG_SCALE_FACTOR        65535 // Normalize from 16b
+
+/*----- TYPEDEF -----*/
+// Both should the same number of fractional bits, the large_fp_t is merely to store intermediate results in computation
+using fix_pt_t = fpm::fixed</*base type*/ std::int32_t, /*intermediate type*/ std::int64_t, /*# fractional bits*/ 12>; // 20.12 fixed point
+using large_fp_t = fpm::fixed</*base type*/ std::int32_t, /*intermediate type*/ std::int64_t, /*# fractional bits*/ 12>; // 20.12 fixed point
 
 /*----- MACROS -----*/
-#define UPPER_8b_OF_16b(x) ((x) >> 8)
-#define LOWER_8b_OF_16b(x) ((x) & 0x00FF)
 #define NUM_TRANS(x) ceil((x)/3.0f) // Returns the number of transactions each CiM will send (3 elements per transaction)
 
 /*----- ENUM -----*/
 enum OP {
+    PATCH_LOAD_BROADCAST_START_OP, // Broadcast the start of a new patch to all CiM
     PATCH_LOAD_BROADCAST_OP, // Broadcast current patch to all CiM, which perform vector-matrix multiplication after each patch
     DENSE_BROADCAST_START_OP, // Tell the target CiM that it needs to broadcast its data starting at a given addr and length. Non-target CiM will then listen to the broadcast and perform MAC once the full vector is received.
     DENSE_BROADCAST_DATA_OP, // Sent from a CiM. Contains 3 bytes of data
@@ -28,6 +35,7 @@ enum OP {
     TRANS_BROADCAST_START_OP, // Tell the target CiM that it needs to broadcast its data starting at a given addr and length. Non-target CiM will then listen to the broadcast and grab the data they need.
     TRANS_BROADCAST_DATA_OP, // Sent from a CiM. Contains 3 bytes of data
     PISTOL_START_OP, // Used to instruct CiMs to move to their next step in the inference pipeline
+    INFERENCE_RESULT_OP, // Sent from CiM #0 to master. Contains inference result.
     NOP // Represents the no tranmission
 };
 
@@ -58,21 +66,24 @@ class Counter {
     private:
         uint16_t width;
         int val;
+        int val_unbounded;
         int max_val_seen; // Keep track of the maximum value seen by the counter to determine the number of bits needed to represent the counter
     public:
         Counter(int width) : width(width), val(0), max_val_seen(0) {}
         int inc(int increment=1) {
-            val = val + increment;
+            val += increment;
+            val_unbounded += increment;
+            if (val_unbounded > max_val_seen) { max_val_seen = val_unbounded; }
             if (val >= (1 << width)) {
                 std::cout << "Counter overflow (width: " << width << ")!" << std::endl;
                 val &= (1 << width) - 1; // Wrap within width using bitwise AND
             }
-            if (val > max_val_seen) { max_val_seen = val; }
             return val;
         }
 
         int dec(int decrement=1) {
-            val = val - decrement;
+            val -= decrement;
+            val_unbounded -= decrement;
             if (val < 0) {
                 std::cout << "Counter underflow (width: " << width << "!\n" << std::endl;
                 val = (1 << width) + val; // Wrap around
@@ -82,11 +93,13 @@ class Counter {
 
         int set_val(int new_val) {
             val = new_val;
+            val_unbounded = new_val;
             return val;
         }
 
         int reset() {
             val = 0;
+            val_unbounded = 0;
             return 0;
         }
 

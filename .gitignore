@@ -59,6 +59,7 @@ python_prototype/__pycache__/*
 python_prototype/error_logs/*
 python_prototype/*.zip
 python_prototype/slurm_jobs/logs
+python_prototype/reference_data/*
 
 ### ASIC
 asic/__pycache__/*
@@ -88,6 +89,13 @@ asic/func_sim/include/src/
 asic/func_sim/Makefile
 asic/mem/528_by_16/*
 asic/mem/848_by_16/*
+
+### ASIC IP verif
+asic/ip_verif/__pycache__
+asic/ip_verif/*/__pycache__
+asic/ip_verif/*/sim_build
+asic/ip_verif/*/dump.vcd
+asic/ip_verif/*/results.xml
 
 ### Documentation
 doc/CMC_VLSI_User_Manual_2023.pdf
