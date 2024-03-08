@@ -17,7 +17,7 @@ module divider #(
     input logic start,
 
     // Data in 2's complement format
-    output logic busy, done, dbz, overflow
+    output logic busy, done, dbz, overflow,
     input logic signed [N-1:0] dividend,
     input logic signed [N-1:0] divisor,
     output logic signed [N-1:0] output_q
@@ -41,7 +41,7 @@ module divider #(
         divisor_abs = (divisor[N-1]) ? -divisor[N-2:0] : divisor[N-2:0]; // Take abs value
     end
 
-    enum {IDLE, CALC, SIGN} state;
+    enum [1:0] {IDLE, CALC, SIGN} state;
     always_ff @ (posedge clk or negedge rst_n) begin : divider_FSM
         if (!rst_n) begin
             state       <= IDLE;

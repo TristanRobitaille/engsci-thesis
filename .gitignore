@@ -68,7 +68,7 @@ asic/dump.vcd
 asic/results.xml
 asic/top
 asic/tutorial/*
-asic/TSMC65_digital_flow/*
+asic/TSMC65_Digital_Flow/*
 asic/WORK/*
 asic/alib-52/*
 asic/reports/*
