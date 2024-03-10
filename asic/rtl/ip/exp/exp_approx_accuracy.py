@@ -4,7 +4,7 @@ Measure the accuracy of the exponential approximation: e^x = 2^(x/ln(2))
 import sys
 sys.path.append("..")
 import math
-from utilities import *
+from asic.rtl.utilities import *
 from FixedPoint import FXnum
 
 NUM_POINTS = 1000

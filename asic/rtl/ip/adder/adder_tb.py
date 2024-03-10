@@ -2,7 +2,7 @@
 import sys
 sys.path.append("..")
 import random
-from utilities import *
+from asic.rtl.utilities import *
 
 import cocotb
 from cocotb.triggers import RisingEdge, FallingEdge

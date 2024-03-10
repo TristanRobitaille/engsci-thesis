@@ -1,9 +1,9 @@
-`include "ip_verif/adder/adder.sv"
-`include "ip_verif/counter/counter.sv"
-`include "ip_verif/divider/divider.sv"
-`include "ip_verif/exp/exp.sv"
-`include "ip_verif/multiplier/multiplier.sv"
-`include "ip_verif/sqrt/sqrt.sv"
+`include "ip/adder/adder.sv"
+`include "ip/counter/counter.sv"
+`include "ip/divider/divider.sv"
+`include "ip/multiplier/multiplier.sv"
+`include "ip/exp/exp.sv"
+`include "ip/sqrt/sqrt.sv"
 
 module top # (
     parameter N = 22, // 22b total
@@ -40,15 +40,15 @@ module top # (
     output logic [9:0] cnt_0, cnt_1, cnt_2
 );
 
-    adder add_0_inst (.clk(clk), .rst_n(rst_n), .refresh(refresh_add), .overflow(overflow), .input_q_1(input_q_1), .input_q_2(input_q_2), .output_q(output_q));
-    divider divider_0_inst (.clk(clk), .rst_n(rst_n), .start(start_div), .busy(busy_div), .done(done_div), .dbz(dbz_div), .overflow(overflow_div), .dividend(dividend), .divisor(divisor), .output_q(div_out_q));
-    multiplier multiplier_0 (.clk(clk), .rst_n(rst_n), .refresh(refresh_mult), .input_q_1(mult_input_q_1), .input_q_2(mult_input_q_2), .output_q(mult_out_q), .overflow(overflow_mult));
-    sqrt sqrt_0(.clk(clk), .rst_n(rst_n), .start(start_sqrt), .rad_q(rad_q), .busy(busy), .done(done), .neg_rad(neg_rad), .root_q(root_q));
+    adder #(N=N) add_0_inst (.clk(clk), .rst_n(rst_n), .refresh(refresh_add), .overflow(overflow), .input_q_1(input_q_1), .input_q_2(input_q_2), .output_q(output_q));
+    divider #(N=N, Q=Q) divider_0_inst (.clk(clk), .rst_n(rst_n), .start(start_div), .busy(busy_div), .done(done_div), .dbz(dbz_div), .overflow(overflow_div), .dividend(dividend), .divisor(divisor), .output_q(div_out_q));
+    multiplier #(N=N, Q=Q) multiplier_0 (.clk(clk), .rst_n(rst_n), .refresh(refresh_mult), .input_q_1(mult_input_q_1), .input_q_2(mult_input_q_2), .output_q(mult_out_q), .overflow(overflow_mult));
+    sqrt #(N=N, Q=Q) sqrt_0(.clk(clk), .rst_n(rst_n), .start(start_sqrt), .rad_q(rad_q), .busy(busy), .done(done), .neg_rad(neg_rad), .root_q(root_q));
     
     // exp exp_0_inst (.clk(clk), .rst_n(rst_n), .start(), .);
 
-    counter cnt_0_inst (.clk(clk), .rst_n(rst_n), .inc(inc_0), .cnt(cnt_0));
-    counter cnt_1_inst (.clk(clk), .rst_n(rst_n), .inc(inc_1), .cnt(cnt_1));
-    counter cnt_2_inst (.clk(clk), .rst_n(rst_n), .inc(inc_2), .cnt(cnt_2));
+    counter #(WIDTH=10, MODE=0) cnt_0_inst (.clk(clk), .rst_n(rst_n), .inc(inc_0), .cnt(cnt_0));
+    counter #(WIDTH=10, MODE=0) cnt_1_inst (.clk(clk), .rst_n(rst_n), .inc(inc_1), .cnt(cnt_1));
+    counter #(WIDTH=10, MODE=0) cnt_2_inst (.clk(clk), .rst_n(rst_n), .inc(inc_2), .cnt(cnt_2));
 
 endmodule

@@ -90,12 +90,17 @@ asic/func_sim/Makefile
 asic/mem/528_by_16/*
 asic/mem/848_by_16/*
 
-### ASIC IP verif
-asic/ip_verif/__pycache__
-asic/ip_verif/*/__pycache__
-asic/ip_verif/*/sim_build
-asic/ip_verif/*/dump.vcd
-asic/ip_verif/*/results.xml
+### ASIC RTL
+asic/rtl/__pycache__
+asic/rtl/ip/__pycache__
+asic/rtl/ip/*/__pycache__
+asic/rtl/ip/*/sim_build
+asic/rtl/ip/*/dump.vcd
+asic/rtl/ip/*/results.xml
+asic/rtl/master/__pycache__
+asic/rtl/master/sim_build
+asic/rtl/master/dump.vcd
+asic/rtl/master/results.xml
 
 ### Documentation
 doc/CMC_VLSI_User_Manual_2023.pdf

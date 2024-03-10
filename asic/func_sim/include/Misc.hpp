@@ -18,8 +18,8 @@
 
 /*----- TYPEDEF -----*/
 // Both should the same number of fractional bits, the large_fp_t is merely to store intermediate results in computation
-using fix_pt_t = fpm::fixed</*base type*/ std::int32_t, /*intermediate type*/ std::int64_t, /*# fractional bits*/ 12>; // 20.12 fixed point
-using large_fp_t = fpm::fixed</*base type*/ std::int32_t, /*intermediate type*/ std::int64_t, /*# fractional bits*/ 12>; // 20.12 fixed point
+using fix_pt_t = fpm::fixed</*base type*/ std::int32_t, /*intermediate type*/ std::int64_t, /*# fractional bits*/ 20>; // 20.12 fixed point
+using large_fp_t = fpm::fixed</*base type*/ std::int32_t, /*intermediate type*/ std::int64_t, /*# fractional bits*/ 20>; // 20.12 fixed point
 
 /*----- MACROS -----*/
 #define NUM_TRANS(x) ceil((x)/3.0f) // Returns the number of transactions each CiM will send (3 elements per transaction)

@@ -153,8 +153,8 @@ class Master_Ctrl {
         };
 
         bool all_cims_ready = true;
-        Counter gen_cnt_8b;
-        Counter gen_cnt_10b;
+        Counter gen_cnt_7b;
+        Counter gen_cnt_7b_2;
         uint16_t gen_reg_16b = 0;
         uint16_t gen_reg_16b_2 = 0;
         uint16_t gen_reg_16b_3 = 0;

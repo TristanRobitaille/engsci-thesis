@@ -799,8 +799,6 @@ large_fp_t CiM::exp_approx(large_fp_t input) {
        Uses the identy exp(x) = 2^(x/ln(2)), float/int exponent splitting and Taylor approximation of the fractional part. 
     */
 
-    // if (input == large_fp_t{0}) { return large_fp_t{1}; } // exp(0) = 1
-
     large_fp_t ln_2 = log(large_fp_t{2});
     large_fp_t input_mapped = input/ln_2;
     large_fp_t input_mapped_fract = input/ln_2 - floor_fpm(input/ln_2);
