@@ -113,7 +113,8 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
             break;
 
         default:
-            sys_state = EVERYTHING_FINISHED;
+            cout << "ERROR: Invalid high-level inference step!" << endl;
+            exit(-1);
             break;
         }
         break;
@@ -158,7 +159,6 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
         reset();
         break;
 
-    case INVALID:
     default:
         throw invalid_argument("Master controller in an invalid state!");
         break;

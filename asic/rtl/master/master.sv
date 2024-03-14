@@ -70,9 +70,11 @@ module master (
             gen_reg_16b <= 'd0;
             gen_reg_16b_2 <= 'd0;
             gen_reg_16b_3 <= 'd0;
+            gen_cnt_2b_rst_n <= RST;
             gen_cnt_7b_rst_n <= RST;
             gen_cnt_7b_2_rst_n <= RST;
             state <= MASTER_STATE_IDLE;
+            high_level_inf_step <= PRE_LAYERNORM_1_TRANS_STEP;
         end else begin
             unique case (state)
                 MASTER_STATE_IDLE: begin
@@ -165,8 +167,48 @@ module master (
                     state <= (new_sleep_epoch) ? MASTER_STATE_SIGNAL_LOAD : MASTER_STATE_IDLE;
                 end
 
+                MASTER_STATE_INFERENCE_RUNNING: begin
+                    unique case (high_level_inf_step)
+                        PRE_LAYERNORM_1_TRANS_STEP,
+                        INTRA_LAYERNORM_1_TRANS_STEP,
+                        POST_LAYERNORM_1_TRANS_STEP,
+                        ENC_MHSA_DENSE_STEP,
+                        ENC_MHSA_Q_TRANS_STEP,
+                        ENC_MHSA_K_TRANS_STEP,
+                        ENC_MHSA_QK_T_STEP,
+                        ENC_MHSA_PRE_SOFTMAX_TRANS_STEP,
+                        ENC_MHSA_V_MULT_STEP,
+                        ENC_MHSA_POST_V_TRANS_STEP,
+                        ENC_MHSA_POST_V_DENSE_STEP,
+                        PRE_LAYERNORM_2_TRANS_STEP,
+                        INTRA_LAYERNORM_2_TRANS_STEP,
+                        ENC_PRE_MLP_TRANSPOSE_STEP,
+                        ENC_MLP_DENSE_1_STEP,
+                        ENC_MLP_DENSE_2_TRANSPOSE_STEP,
+                        ENC_MLP_DENSE_2_AND_SUM_STEP,
+                        PRE_LAYERNORM_3_TRANS_STEP,
+                        INTRA_LAYERNORM_3_TRANS_STEP,
+                        PRE_MLP_HEAD_DENSE_TRANS_STEP,
+                        MLP_HEAD_DENSE_1_STEP,
+                        PRE_MLP_HEAD_DENSE_2_TRANS_STEP,
+                        MLP_HEAD_DENSE_2_STEP,
+                        MLP_HEAD_SOFTMAX_TRANS_STEP,
+                        SOFTMAX_AVERAGING: begin
+                        end
+
+                        ENC_MHSA_SOFTMAX_STEP: begin
+                        end
+
+                        default:
+                            $fatal("Invalid master high_level_inf_step!");
+                    endcase
+                end
+
+                MASTER_STATE_BROADCAST_MANAGEMENT: begin
+                end
+
                 default:
-                    state <= MASTER_STATE_IDLE;
+                    $fatal("Invalid master state!");
             endcase
         end
     end
@@ -175,6 +217,11 @@ module master (
     always_ff @ (posedge clk) begin : ext_mem_read_pulse_gen
         ext_mem_data_read_pulse <= (ext_mem_addr != ext_mem_addr_prev);
         ext_mem_addr_prev <= ext_mem_addr;
+    end
+
+    // Basic asserts
+    always_comb begin : basic_asserts
+        assert (~(new_sleep_epoch && start_param_load)) else $fatal("new_sleep_epoch and start_param_load cannot be high at the same time!");
     end
 
 endmodule

@@ -22,7 +22,6 @@ class Master_Ctrl {
             BROADCAST_MANAGEMENT,
             WAITING_FOR_CIM_COMPLETION,
             RESET,
-            INVALID = -1
         };
 
         enum HIGH_LEVEL_INFERENCE_STEP {
