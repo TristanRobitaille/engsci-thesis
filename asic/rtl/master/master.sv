@@ -14,6 +14,10 @@ module master (
     // Bus
     inout bus_t bus,
 
+    // EEG
+    input wire new_eeg_sample,
+    input wire [EEG_SAMPLE_DEPTH-1:0] eeg_sample,
+
     // Signals to fake external memory containing the weights
     input wire ext_mem_data_valid,
     input logic signed [N_STORAGE-1:0] ext_mem_data,
@@ -36,9 +40,9 @@ module master (
     logic [$clog2(NUM_CIMS)-1:0] bus_target_or_sender_write;
     always_comb begin : bus_drive_comb
         bus.op = (bus_drive) ? bus_op_write : 'Z;
-        bus.data_0 = (bus_drive) ? bus_data_write[0] : 'Z;
-        bus.data_1 = (bus_drive) ? bus_data_write[1] : 'Z;
-        bus.data_2 = (bus_drive) ? bus_data_write[2] : 'Z;
+        bus.data[0] = (bus_drive) ? bus_data_write[0] : 'Z;
+        bus.data[1] = (bus_drive) ? bus_data_write[1] : 'Z;
+        bus.data[2] = (bus_drive) ? bus_data_write[2] : 'Z;
         bus.target_or_sender = (bus_drive) ? bus_target_or_sender_write : 'Z;
     end
 
@@ -79,8 +83,19 @@ module master (
                         gen_cnt_7b_2_rst_n <= RST;
                         bus_drive <= 1'b1;
                         new_cim <= 1'b1;
-                    end else if (new_sleep_epoch)
+                    end else if (new_sleep_epoch) begin
                         state <= MASTER_STATE_SIGNAL_LOAD;
+                        bus_drive <= 1'b1;
+                        // Clean up bus and counters
+                        bus_data_write[0] <= 'd0;
+                        bus_data_write[1] <= 'd0;
+                        bus_data_write[2] <= 'd0;
+                        bus_target_or_sender_write <= 'd0;
+                        gen_cnt_2b_rst_n <= RST;
+                        gen_cnt_7b_rst_n <= RST;
+                        gen_cnt_7b_2_rst_n <= RST;
+                        bus_op_write <= PATCH_LOAD_BROADCAST_START_OP;
+                    end
                     gen_reg_16b <= 'd0;
                     gen_reg_16b_2 <= 'd0;
                     gen_reg_16b_3 <= 'd0;
@@ -106,10 +121,7 @@ module master (
                                 -gen_cnt_7b_cnt is the element number for the current CiM
                                 -gen_cnt_7b_2_cnt is the current CiM number
                             */
-                            // Counters
                             loading_params <= 'd1;
-                            gen_cnt_2b_inc <= {1'd0, ext_mem_data_valid};
-                            gen_cnt_2b_rst_n <= (ext_mem_data_valid && (gen_cnt_2b_cnt == 'd2)) ? RST : RUN;
                             gen_cnt_7b_inc <= {6'd0, ext_mem_data_valid};
                             gen_cnt_7b_rst_n <= (gen_cnt_7b_cnt == param_addr_map[params_curr_layer].len) ? RST : RUN;
                             gen_cnt_7b_2_inc <= {6'd0, (gen_cnt_7b_cnt == param_addr_map[params_curr_layer].len)};
@@ -120,8 +132,6 @@ module master (
                         end
 
                         SINGLE_PARAMS: begin
-                            gen_cnt_2b_inc <= {1'd0, ext_mem_data_valid};
-                            gen_cnt_2b_rst_n <= (ext_mem_data_valid && (gen_cnt_2b_cnt == 'd2)) ? RST : RUN;
                             gen_cnt_7b_inc <= {6'd0, ext_mem_data_valid && (gen_cnt_2b_cnt == 'd2) && ext_mem_data_valid};
                             gen_cnt_7b_rst_n <= (gen_cnt_7b_cnt == 'd6) ? RST : RUN;
                             gen_cnt_7b_2_inc <= {6'd0, (gen_cnt_7b_cnt == 'd6)};
@@ -130,15 +140,16 @@ module master (
 
                         PARAM_LOAD_FINISHED: begin
                             loading_params <= 1'd0;
+                            bus_drive <= 1'b0;
                             state <= MASTER_STATE_IDLE;
-                            gen_cnt_2b_rst_n <= RST;
-                            gen_cnt_7b_rst_n <= RST;
-                            gen_cnt_7b_2_rst_n <= RST;
                         end
 
                         default:
                             $fatal("Invalid params_curr_layer");
                     endcase
+                    gen_cnt_2b_inc <= {1'd0, ext_mem_data_valid};
+                    gen_cnt_2b_rst_n <= (ext_mem_data_valid && (gen_cnt_2b_cnt == 'd2)) ? RST : RUN;
+
                     // Bus instruction
                     new_cim <= (gen_cnt_7b_2_cnt == param_addr_map[params_curr_layer].num_rec);
                     bus_target_or_sender_write <= gen_cnt_7b_2_cnt[5:0];
@@ -149,6 +160,9 @@ module master (
                 end
 
                 MASTER_STATE_SIGNAL_LOAD: begin
+                    bus_op_write <= (new_eeg_sample) ? PATCH_LOAD_BROADCAST_OP : NOP;
+                    bus_data_write[0] <= { {(N_STORAGE-Q){1'd0}}, eeg_sample[EEG_SAMPLE_DEPTH-1 -: Q] }; // Select the upper Q bits as a way to normalize (divide by 15b) and convert to fixed-point
+                    state <= (new_sleep_epoch) ? MASTER_STATE_SIGNAL_LOAD : MASTER_STATE_IDLE;
                 end
 
                 default:

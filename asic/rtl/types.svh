@@ -6,8 +6,8 @@
     parameter   N_STORAGE = 16, // 16b total (for storage)
                 // verilator lint_off UNUSEDPARAM
                 N_COMP = 22, // 22b total (for temporary results of computation)
-                Q = 10; // 10b fractional
                 // verilator lint_on UNUSEDPARAM
+                Q = 10; // 10b fractional
 
     // Bus parameters
     parameter   BUS_OP_WIDTH = 4; // Have 11 ops
@@ -26,6 +26,8 @@
                 TEMP_RES_STORAGE_SIZE_CIM = 848;
                 // verilator lint_on UNUSEDPARAM
 
+    parameter   EEG_SAMPLE_DEPTH = 16;
+
 /*----- TYPES -----*/
 typedef enum reg [BUS_OP_WIDTH-1:0] {
     PATCH_LOAD_BROADCAST_START_OP,
@@ -43,9 +45,7 @@ typedef enum reg [BUS_OP_WIDTH-1:0] {
 
 typedef struct packed {
     reg [BUS_OP_WIDTH-1:0] op;
-    reg signed [N_STORAGE-1:0] data_0;
-    reg signed [N_STORAGE-1:0] data_1;
-    reg signed [N_STORAGE-1:0] data_2;
+    reg signed [2:0][N_STORAGE-1:0] data;
     reg [$clog2(NUM_CIMS)-1:0] target_or_sender;
 } bus_t;
 
