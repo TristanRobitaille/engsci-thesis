@@ -1,8 +1,8 @@
 # Simple tests for the fixed-point multiplier module
 import sys
-sys.path.append("..")
+sys.path.append("../../")
 import random
-from asic.rtl.utilities import *
+from utilities import *
 from FixedPoint import FXnum
 
 import cocotb
@@ -11,7 +11,7 @@ from cocotb.triggers import RisingEdge, FallingEdge
 #----- HELPERS -----#
 async def output_check(dut, in1:float, in2:float, expected=None):
     if expected is None:
-        expected = FXnum(in1, num_Q)*FXnum(in2, num_Q)
+        expected = FXnum(in1, num_Q_comp)*FXnum(in2, num_Q_comp)
     expected_str = expected.toBinaryString(logBase=1).replace(".","")
 
     dut.input_q_1.value = BinToDec(in1)
@@ -37,7 +37,7 @@ async def basic_reset(dut):
     await FallingEdge(dut.clk)
     dut.refresh.value = 0
     for _ in range(1): await RisingEdge(dut.clk)
-    await output_check(dut, 2.5, 13.25, num_Q(input1)*num_Q(input2))
+    await output_check(dut, 2.5, 13.25, num_Q_comp(input1)*num_Q_comp(input2))
 
 @cocotb.test()
 async def basic_mult(dut):

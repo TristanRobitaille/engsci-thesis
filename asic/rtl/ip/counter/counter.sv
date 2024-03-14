@@ -9,21 +9,21 @@ module counter # (
 ) (
   input logic clk,
   input logic rst_n,
-  input logic inc,
+  input logic [WIDTH-1:0] inc,
   output logic [WIDTH-1:0] cnt
 );
 
-    logic inc_prev;
+    logic [WIDTH-1:0] inc_prev;
 
-    always_ff @ (posedge clk or negedge rst_n) begin : main_cnt_block
+    always_ff @ (posedge clk) begin : main_cnt_block
         if (!rst_n) begin
             cnt <= 0;
         end else begin
             if (MODE == 0) begin // Posedge-triggered
-                cnt <= (inc & ~inc_prev) ? (cnt + 'd1) : cnt;
+                cnt <= (inc != inc_prev) ? (cnt + inc) : cnt;
                 inc_prev <= inc;
             end else if (MODE == 1) begin // Level-triggered
-                cnt <= (inc) ? (cnt + 'd1) : cnt;
+                cnt <= cnt + inc;
             end
         end
     end

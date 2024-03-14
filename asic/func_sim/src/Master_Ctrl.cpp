@@ -243,7 +243,7 @@ struct instruction Master_Ctrl::param_to_send(){
             } else if (gen_cnt_7b.get_cnt() == 4) {
                 // Note: CiM's 0-31 receive bias for the encoder's MLP and CiM's 32-63 receive bias for the MLP head
                 if (gen_cnt_7b_2.get_cnt() < MLP_DIM) { inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.layernorm_gamma[1][gen_cnt_7b_2.get_cnt()], params.layernorm_beta[1][gen_cnt_7b_2.get_cnt()]}, /*extra_fields*/ params.enc_mlp_dense_1_bias[gen_cnt_7b_2.get_cnt()]}; }
-                else {                                 inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.layernorm_gamma[1][gen_cnt_7b_2.get_cnt()], params.layernorm_beta[1][gen_cnt_7b_2.get_cnt()]}, /*extra_fields*/ params.mlp_head_dense_1_bias[gen_cnt_7b_2.get_cnt()-MLP_DIM]}; }
+                else {                                  inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.layernorm_gamma[1][gen_cnt_7b_2.get_cnt()], params.layernorm_beta[1][gen_cnt_7b_2.get_cnt()]}, /*extra_fields*/ params.mlp_head_dense_1_bias[gen_cnt_7b_2.get_cnt()-MLP_DIM]}; }
                 gen_cnt_7b.inc();
             } else if (gen_cnt_7b.get_cnt() == 5) {
                 inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.enc_mlp_dense_2_bias[gen_cnt_7b_2.get_cnt()], params.layernorm_gamma[2][gen_cnt_7b_2.get_cnt()]}, /*extra_fields*/ params.layernorm_beta[2][gen_cnt_7b_2.get_cnt()]};
@@ -350,7 +350,7 @@ void Master_Ctrl::update_inst_with_params(PARAM_NAME param_name, struct instruct
         inst->extra_fields = (num_left <= 2) ? (0) : params.enc_mhsa_combine_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()];
         break;
     case ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS:
-        if (gen_cnt_7b_2.get_cnt() < MLP_DIM) { // Encoder's MLP (onyl CiMs 0-31 receive bias for the encoder's MLP and CiM's 32-63 receive bias for the MLP head)
+        if (gen_cnt_7b_2.get_cnt() < MLP_DIM) { // Encoder's MLP (only CiMs 0-31 receive bias for the encoder's MLP and CiM's 32-63 receive bias for the MLP head)
             inst->data = {params.enc_mlp_dense_1_kernel[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()], (num_left == 1) ? (0) : (params.enc_mlp_dense_1_kernel[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()])};
             inst->extra_fields = (num_left <= 2) ? (0) : params.enc_mlp_dense_1_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()];
         } else { // MLP head (only 1 layer)

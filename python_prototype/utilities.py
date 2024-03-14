@@ -16,7 +16,7 @@ Some utility function
 """
 
 #--- GLOBALS ---#
-PRUNE_THRESHOLD = 1e-2 # To reduce ASIC power consumption, we prune weights below this threshold and avoid computation if one of the input is 0
+PRUNE_THRESHOLD = 1e-4 # To reduce ASIC power consumption, we prune weights below this threshold and avoid computation if one of the input is 0
 global_min = np.inf
 global_max = -np.inf
 global_closest_to_zero = np.inf
@@ -401,7 +401,7 @@ def print_stats_from_h5(h5_fp:str) -> None:
     print(f'Total prunable params (abs. < {PRUNE_THRESHOLD}) = {global_prunable_params/global_total_params*100:.2f}%')
 
 def main():
-    print_stats_from_h5("/Users/tristan/Desktop/model_params.h5")
+    print_stats_from_h5("/Users/tristan/Desktop/engsci-thesis/asic/func_sim/reference_data/model_params.h5")
 
 if __name__ == "__main__":
     main()

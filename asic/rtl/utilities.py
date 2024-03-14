@@ -5,12 +5,15 @@ from cocotb.triggers import RisingEdge
 from FixedPoint import FXfamily
 
 #----- CONSTANTS -----#
-NUM_INT_BITS = 12
+NUM_INT_BITS_STORAGE = 6
+NUM_INT_BITS_COMP = 12
 NUM_FRACT_BITS = 10
-MAX_INT_ADD = 2**(NUM_INT_BITS-1)/2 - 1
-MAX_INT_MULT = 2**(NUM_INT_BITS//2-1) - 1
+MAX_INT_ADD = 2**(NUM_INT_BITS_COMP-1)/2 - 1
+MAX_INT_MULT = 2**(NUM_INT_BITS_COMP//2-1) - 1
+NUM_HEADS = 8
 
-num_Q = FXfamily(NUM_FRACT_BITS, NUM_INT_BITS)
+num_Q_storage = FXfamily(NUM_FRACT_BITS, NUM_INT_BITS_STORAGE)
+num_Q_comp = FXfamily(NUM_FRACT_BITS, NUM_INT_BITS_COMP)
 
 #----- HELPERS -----#
 async def reset(dut):
@@ -25,8 +28,8 @@ async def start_pulse(dut):
     dut.start.value = 0
     await RisingEdge(dut.clk)
 
-def BinToDec(dec:float):
-    z2 = num_Q(dec)
+def BinToDec(dec:float, num_type:FXfamily):
+    z2 = num_type(dec)
     z2_str = z2.toBinaryString(logBase=1, twosComp=True).replace(".","")
     return int(z2_str, base=2)
 

@@ -7,5 +7,4 @@ VERILOG_SOURCES = exp_wrapper_tb.sv
 TOPLEVEL = exp_wrapper_tb
 MODULE = exp_tb
 
-# include cocotb's make rules to take care of the simulator setup
 include $(shell cocotb-config --makefiles)/Makefile.sim

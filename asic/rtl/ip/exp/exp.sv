@@ -42,7 +42,7 @@ assign Taylor_mult_3    = 22'b0_0000111001; // ln(2)^3/3! = 0.24022650696
 enum [2:0] {IDLE, UPDATE_SUM, MULT, TAYLOR_TERM_1, TAYLOR_TERM_2, TAYLOR_TERM_3, FINISH} state, next_state;
 enum [1:0] {ITERATION_1_SUBSTATE, ITERATION_2_SUBSTATE, ITERATION_3_SUBSTATE, ITERATION_4_SUBSTATE} sub_state, sub_state_sum;
 
-always_ff @ (posedge clk or negedge rst_n) begin : exp_FSM
+always_ff @ (posedge clk) begin : exp_FSM
     if (!rst_n) begin
         busy <= 0;
         done <= 0;

@@ -101,6 +101,8 @@ asic/rtl/master/__pycache__
 asic/rtl/master/sim_build
 asic/rtl/master/dump.vcd
 asic/rtl/master/results.xml
+asic/rtl/master/~*
+asic/rtl/master/*.gtkw
 
 ### Documentation
 doc/CMC_VLSI_User_Manual_2023.pdf

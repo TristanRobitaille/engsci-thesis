@@ -1,6 +1,6 @@
 # AI accelerator ASIC for sleep stage classification
 
-Part of my Engineering Science (ECE option) at the University of Toronto. Supervised by Prof. Xilin Liu of UofT X-Lab.\
+Part of my Engineering Science (ECE option) degree at the University of Toronto. Supervised by Prof. Xilin Liu of UofT X-Lab.\
 Project description: https://tristan.cbcr.me/?type=a#edge_AI
 
 ## Dependencies
@@ -21,4 +21,4 @@ I recommend using the `LaTeX Workshop` extension in VSCode.
 In this repository, you will find most files for this thesis.\
 In `/python_prototype`, you'll find all files for the vision transformer model, written using TensorFlow. There all also files for signal extract and data processing from raw polysomnography datasets. Finally, it contains shell scripts to train on the Compute Canada cluster and some utilities files.\
 In `/latex`, you'll find all deliverables for this course (ESC499).\
-In `/asic`, you'll find a C++ functional model of the ASIC accelerator and most files for its synthesis (Verilog, testbench, etc.). Some files are excluded as they may contain information under NDA. It also includes RTL and basic testbenches for IPs used (under `/asic/ip_verif`).
+In `/asic`, you'll find a C++ functional model of the ASIC accelerator and most files for its synthesis (SystemVerilog, testbenches, etc.). Some files are excluded as they may contain information under NDA.

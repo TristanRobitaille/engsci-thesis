@@ -19,7 +19,7 @@ module multiplier #(
 );
 
     logic signed [2*N-1:0] temp_result;
-    always_ff @(posedge clk or negedge rst_n) begin : multiplier_logic
+    always_ff @ (posedge clk) begin : multiplier_logic
         if (!rst_n) begin
             temp_result <= '0;
         end else if (refresh) begin

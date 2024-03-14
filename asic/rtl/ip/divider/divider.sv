@@ -42,7 +42,7 @@ module divider #(
     end
 
     enum [1:0] {IDLE, CALC, SIGN} state;
-    always_ff @ (posedge clk or negedge rst_n) begin : divider_FSM
+    always_ff @ (posedge clk) begin : divider_FSM
         if (!rst_n) begin
             state       <= IDLE;
             output_q    <= '0;

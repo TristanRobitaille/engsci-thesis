@@ -44,7 +44,7 @@ module sqrt # (
     localparam CNT_THRESHOLD = (Q+N) >> 1;
     logic [$clog2(N)-1:0] count;
 
-    always_ff @(posedge clk or negedge rst_n) begin : sqrt_FSM
+    always_ff @ (posedge clk) begin : sqrt_FSM
         if (!rst_n) begin
             busy <= 0;
             done <= 0;

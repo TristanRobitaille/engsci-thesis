@@ -17,7 +17,7 @@ module adder #(
     output wire overflow
 );
 
-    always_ff @(posedge clk or negedge rst_n) begin : adder_logic
+    always_ff @(posedge clk) begin : adder_logic
         if (!rst_n) begin
             output_q <= '0;
         end else if (refresh) begin

@@ -1,8 +1,8 @@
 # Simple tests for the fixed-point divider module
 import sys
-sys.path.append("..")
+sys.path.append("../../")
 import random
-from asic.rtl.utilities import *
+from utilities import *
 from FixedPoint import FXnum
 
 import cocotb
