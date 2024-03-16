@@ -4,7 +4,7 @@
 using namespace std;
 
 /*----- DECLARATION -----*/
-Master_Ctrl::Master_Ctrl(const string eeg_filepath, const string params_filepath) : gen_cnt_7b(7), gen_cnt_7b_2(7) {
+Master_Ctrl::Master_Ctrl(const string eeg_filepath, const string params_filepath) : gen_cnt_7b(7), gen_cnt_7b_2(7), gen_cnt_7b_3(7) {
     state = RESET;
 
     // EEG data file
@@ -19,9 +19,8 @@ Master_Ctrl::Master_Ctrl(const string eeg_filepath, const string params_filepath
 int Master_Ctrl::reset(){
     gen_cnt_7b.reset();
     gen_cnt_7b_2.reset();
-    gen_reg_16b = 0;
-    gen_reg_16b_2 = 0;
-    gen_reg_16b_3 = 0;
+    gen_cnt_7b_3.reset();
+    gen_bit = false;
     high_level_inf_step = PRE_LAYERNORM_1_TRANS_STEP;
     state = IDLE;
     return 0;
@@ -100,10 +99,11 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
                 sys_state = EVERYTHING_FINISHED;
                 break;
             } else if (high_level_inf_step != SOFTMAX_AVERAGING) {
-                if (high_level_inf_step == ENC_MHSA_QK_T_STEP) { cout << "Master: Performing encoder's MHSA QK_T. Starting matrix #" << gen_reg_16b_3 << " in the Z-stack (out of " << NUM_HEADS << ")" << endl; }
-                else if (high_level_inf_step == ENC_MHSA_PRE_SOFTMAX_TRANS_STEP) { cout << "Master: Performing encoder's MHSA pre-softmax tranpose. Starting matrix #" << gen_reg_16b_3 << " in the Z-stack (out of " << NUM_HEADS << ")" << endl; }
-                else if (high_level_inf_step == ENC_MHSA_V_MULT_STEP) { cout << "Master: Performing encoder's MHSA V_MULT. Starting matrix #" << gen_reg_16b_3 << " in the Z-stack (out of " << NUM_HEADS << ")" << endl; }
+                if (high_level_inf_step == ENC_MHSA_QK_T_STEP) { cout << "Master: Performing encoder's MHSA QK_T. Starting matrix #" << gen_cnt_7b_3.get_cnt() << " in the Z-stack (out of " << NUM_HEADS << ")" << endl; }
+                else if (high_level_inf_step == ENC_MHSA_PRE_SOFTMAX_TRANS_STEP) { cout << "Master: Performing encoder's MHSA pre-softmax tranpose. Starting matrix #" << gen_cnt_7b_3.get_cnt() << " in the Z-stack (out of " << NUM_HEADS << ")" << endl; }
+                else if (high_level_inf_step == ENC_MHSA_V_MULT_STEP) { cout << "Master: Performing encoder's MHSA V_MULT. Starting matrix #" << gen_cnt_7b_3.get_cnt() << " in the Z-stack (out of " << NUM_HEADS << ")" << endl; }
                 else { cout << "Master: Starting high-level step #" << high_level_inf_step << endl; }
+                gen_cnt_7b.reset();
                 prepare_for_broadcast(broadcast_ops.at(high_level_inf_step), bus);
             }
             break;
@@ -120,37 +120,22 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
         break;
 
     case BROADCAST_MANAGEMENT:
-        if ((gen_cnt_7b_2.get_cnt() == 0) && (bus->get_inst().op == NOP) && (all_cims_ready == true)) { // All transactions sent and bus free, start a new CiM
+        if ((bus->get_inst().op == NOP) && (all_cims_ready == true)) { // All transactions sent and bus free, start a new CiM
             gen_cnt_7b.inc(); // CiM counter
 
-            if (gen_cnt_7b.get_cnt() == gen_reg_16b_2) { // All CiMs sent all data and finished using it, can go back to running inference
-                if ((high_level_inf_step != ENC_MHSA_QK_T_STEP && high_level_inf_step != ENC_MHSA_V_MULT_STEP && high_level_inf_step != ENC_MHSA_PRE_SOFTMAX_TRANS_STEP) || (gen_reg_16b_3 == NUM_HEADS)) { // These two steps require going through the Z-stack of the Q and K matrices so only increment the step counter when we're done with the Z-stack
+            if (gen_cnt_7b.get_cnt() == broadcast_ops.at(high_level_inf_step).num_cims) { // All CiMs sent all data and finished using it, can go back to running inference
+                if ((high_level_inf_step != ENC_MHSA_QK_T_STEP && high_level_inf_step != ENC_MHSA_V_MULT_STEP && high_level_inf_step != ENC_MHSA_PRE_SOFTMAX_TRANS_STEP) || (gen_cnt_7b_3.get_cnt() == (NUM_HEADS-1))) { // These three steps require going through the Z-stack of the Q and K matrices so only increment the step counter when we're done with the Z-stack
                     struct instruction inst = {/*op*/ PISTOL_START_OP, /*target_or_sender*/ 0, /*data*/ {0,0}, /*extra_fields*/ 0}; // Tell CiMs that they can go to the next step
                     bus->push_inst(inst);
                     high_level_inf_step = static_cast<HIGH_LEVEL_INFERENCE_STEP> (high_level_inf_step+1);
-                    gen_reg_16b_3 = 0;
+                    gen_cnt_7b_3.reset();
+                } else {
+                    gen_cnt_7b_3.inc();
                 }
                 state = INFERENCE_RUNNING;
             } else { // Trigger new CiM to send data
-                struct broadcast_op_info op_info = broadcast_ops.at(high_level_inf_step);
-                struct instruction inst;
-                if (high_level_inf_step == PRE_MLP_HEAD_DENSE_2_TRANS_STEP) {
-                    inst = {op_info.op, /*target_or_sender*/ gen_cnt_7b.get_cnt()+MLP_DIM, {op_info.tx_addr, op_info.len}, op_info.rx_addr}; // CiMs 32-63 have the data that we want to broadcast
-                } else if (high_level_inf_step == ENC_MHSA_QK_T_STEP) {
-                    inst = {op_info.op, /*target_or_sender*/ gen_cnt_7b.get_cnt(), {op_info.tx_addr + (gen_reg_16b_3-1)*NUM_HEADS, op_info.len}, op_info.rx_addr};
-                } else if (high_level_inf_step == ENC_MHSA_PRE_SOFTMAX_TRANS_STEP) {
-                    inst = {op_info.op, /*target_or_sender*/ gen_cnt_7b.get_cnt(), {op_info.tx_addr + (gen_reg_16b_3-1)*(NUM_PATCHES+1), op_info.len}, op_info.rx_addr + (gen_reg_16b_3-1)*(NUM_PATCHES+1)};
-                } else if (high_level_inf_step == ENC_MHSA_V_MULT_STEP) {
-                    inst = {op_info.op, /*target_or_sender*/ gen_cnt_7b.get_cnt(), {op_info.tx_addr + (gen_reg_16b_3-1)*(NUM_PATCHES+1), op_info.len}, op_info.rx_addr};
-                } else {
-                    inst = {op_info.op, /*target_or_sender*/ gen_cnt_7b.get_cnt(), {op_info.tx_addr, op_info.len}, op_info.rx_addr};
-                }
-                bus->push_inst(inst);
-                gen_cnt_7b_2.set_val(NUM_TRANS(op_info.len)); // Transaction counter
+                prepare_for_broadcast(broadcast_ops.at(high_level_inf_step), bus);
             }
-        }
-        if (bus->get_inst().op == TRANS_BROADCAST_DATA_OP || bus->get_inst().op == DENSE_BROADCAST_DATA_OP){
-            gen_cnt_7b_2.dec();
         }
         break;
 
@@ -179,10 +164,10 @@ int Master_Ctrl::start_signal_load(Bus* bus){
 
 struct instruction Master_Ctrl::param_to_send(){
     /* Parses the parameter file and returns the instruction that master needs to send to CiM */
-    struct instruction inst;
+    struct instruction inst = {NOP, 0, {0,0}, 0};
 
     /* 
-    * Note: gen_reg_16b holds whether we've sent the first CiM of a layer
+    * Note: gen_bit holds whether we've sent the first CiM of a layer
     *       gen_cnt_7b() holds number of bytes sent to the current CiM for the current param
     *       gen_cnt_7b_2() holds the current CiM we are sending data to for the current param
     */
@@ -198,13 +183,13 @@ struct instruction Master_Ctrl::param_to_send(){
     case ENC_MLP_DENSE_2_PARAMS:
     case ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS:
     case MLP_HEAD_DENSE_2_PARAMS:
-        if (((gen_reg_16b == false) || (gen_cnt_7b.get_cnt() >= param_addr_map[params_curr_layer].len)) && (gen_cnt_7b_2.get_cnt() < param_addr_map[params_curr_layer].num_rec)) { // Starting a new CiM (if not done all layers)
+        if (((gen_bit == false) || (gen_cnt_7b.get_cnt() >= param_addr_map[params_curr_layer].len)) && (gen_cnt_7b_2.get_cnt() < param_addr_map[params_curr_layer].num_rec)) { // Starting a new CiM (if not done all layers)
             uint16_t addr = param_addr_map[params_curr_layer].addr;
             uint16_t length = param_addr_map[params_curr_layer].len;
             array<float, 2> data = {static_cast<float>(addr), static_cast<float>(length)};
 
             inst = {DATA_STREAM_START_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data={start_addr, length_elem}*/ data, /*extra_fields*/ 0};
-            gen_reg_16b = true;
+            gen_bit = true;
             gen_cnt_7b.reset();
         } else if (gen_cnt_7b.get_cnt() < param_addr_map[params_curr_layer].len) { // Sending data to a CiM
             inst.op = DATA_STREAM_OP;
@@ -216,7 +201,7 @@ struct instruction Master_Ctrl::param_to_send(){
             gen_cnt_7b_2.reset(); // Holds number of CiMs we've sent data to for the current param
             gen_cnt_7b.reset(); // Holds number of bytes we've sent to the current CiM for the current param
             params_curr_layer = static_cast<PARAM_NAME> (params_curr_layer+1);
-            gen_reg_16b = false;
+            gen_bit = false;
         } else { // Shouldn't get here
             cout << "ERROR: Got into invalid state while sending parameters! Exiting." << endl;
             exit(-1);
@@ -373,25 +358,18 @@ void Master_Ctrl::update_inst_with_params(PARAM_NAME param_name, struct instruct
 
 int Master_Ctrl::prepare_for_broadcast(broadcast_op_info op_info, Bus* bus) {
     /* Prepares the master controller for a broadcast operation */
-    struct instruction inst = {op_info.op, /*target_or_sender*/ 0, {op_info.tx_addr, op_info.len}, op_info.rx_addr};
+    struct instruction inst = {op_info.op, /*target_or_sender*/ gen_cnt_7b.get_cnt(), {op_info.tx_addr, op_info.len}, op_info.rx_addr};
     state = BROADCAST_MANAGEMENT;
-    gen_reg_16b = NUM_TRANS(op_info.len); // Holds the number of transactions each CiM will send (3 elements per transaction)
-    gen_reg_16b_2 = op_info.num_cims; // Number of CiMs that will need to send data
-    gen_cnt_7b.reset(); // Count CiMs
-    gen_cnt_7b_2.set_val(gen_reg_16b); // Count transactions (add 3 such that we will wait 1 cycle after CiM sent its last transaction to avoid shorting the bus)
-
+    
     if (high_level_inf_step == ENC_MHSA_QK_T_STEP) { // Need to modify instruction based on where we are in the Z-stack of the Q and K matrices
-        inst.data[0] = op_info.tx_addr + gen_reg_16b_3*NUM_HEADS; // tx addr
-        gen_reg_16b_3++;
+        inst.data[0] = op_info.tx_addr + gen_cnt_7b_3.get_cnt()*NUM_HEADS;
     } else if (high_level_inf_step == ENC_MHSA_V_MULT_STEP) {
-        inst.data[0] = op_info.tx_addr + gen_reg_16b_3*(NUM_PATCHES+1); // tx addr
-        gen_reg_16b_3++;
+        inst.data[0] = op_info.tx_addr + gen_cnt_7b_3.get_cnt()*(NUM_PATCHES+1);
     } else if (high_level_inf_step == ENC_MHSA_PRE_SOFTMAX_TRANS_STEP) {
-        inst.data[0] = op_info.tx_addr + gen_reg_16b_3*(NUM_PATCHES+1); // tx addr
-        inst.extra_fields = op_info.rx_addr + gen_reg_16b_3*(NUM_PATCHES+1); // rx addr
-        gen_reg_16b_3++;
+        inst.data[0] = op_info.tx_addr + gen_cnt_7b_3.get_cnt()*(NUM_PATCHES+1);
+        inst.extra_fields = op_info.rx_addr + gen_cnt_7b_3.get_cnt()*(NUM_PATCHES+1);
     } else if (high_level_inf_step == PRE_MLP_HEAD_DENSE_2_TRANS_STEP) {
-        inst.target_or_sender = MLP_DIM; // tx addr (CiMs 32-63 have the data that we want to broadcast)
+        inst.target_or_sender = MLP_DIM + gen_cnt_7b.get_cnt();
     }
 
     bus->push_inst(inst);

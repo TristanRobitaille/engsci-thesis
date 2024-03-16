@@ -10,7 +10,7 @@
                 Q = 10; // 10b fractional
 
     // Bus parameters
-    parameter   BUS_OP_WIDTH = 4; // Have 11 ops
+    parameter   BUS_OP_WIDTH = 4;
 
     // Other
     parameter   NUM_CIMS            = 64,
@@ -18,14 +18,13 @@
                 PATCH_LEN           = 64,
                 EMB_DEPTH           = 64,
                 MLP_DIM             = 32,
-                NUM_SLEEP_STAGES    = 5;
+                NUM_SLEEP_STAGES    = 5,
+                NUM_HEADS           = 8;
 
     parameter   NUM_PARAMS  = 31589;
     parameter   PARAMS_STORAGE_SIZE_CIM = 528,
-                // verilator lint_off UNUSEDPARAM
                 TEMP_RES_STORAGE_SIZE_CIM = 848;
-                // verilator lint_on UNUSEDPARAM
-
+ 
     parameter   EEG_SAMPLE_DEPTH = 16;
 
 /*----- TYPES -----*/
@@ -40,14 +39,9 @@ typedef enum reg [BUS_OP_WIDTH-1:0] {
     TRANS_BROADCAST_DATA_OP,
     PISTOL_START_OP,
     INFERENCE_RESULT_OP,
-    NOP
+    NOP,
+    OP_NUM // Number of ops
 } bus_op_t;
-
-typedef struct packed {
-    reg [BUS_OP_WIDTH-1:0] op;
-    reg signed [2:0][N_STORAGE-1:0] data;
-    reg [$clog2(NUM_CIMS)-1:0] target_or_sender;
-} bus_t;
 
 /*----- ENUM -----*/
 typedef enum logic {

@@ -80,7 +80,7 @@ class Master_Ctrl {
             EmbDepthVect_t enc_mhsa_K_bias;
             EmbDepthVect_t enc_mhsa_V_bias;
             EmbDepthVect_t enc_mhsa_combine_bias;
-            EncEmbDepthMat_t enc_mhsa_combine_kernel;;
+            EncEmbDepthMat_t enc_mhsa_combine_kernel;
             EmbDepthxMlpDimMat_t enc_mlp_dense_1_kernel;
             MlpDimVect_t enc_mlp_dense_1_bias;
             EncMlpDimxEmbDepthMat_t enc_mlp_dense_2_kernel;
@@ -154,9 +154,8 @@ class Master_Ctrl {
         bool all_cims_ready = true;
         Counter gen_cnt_7b;
         Counter gen_cnt_7b_2;
-        uint16_t gen_reg_16b = 0;
-        uint16_t gen_reg_16b_2 = 0;
-        uint16_t gen_reg_16b_3 = 0;
+        Counter gen_cnt_7b_3;
+        bool gen_bit = false;
         STATE state;
         HIGH_LEVEL_INFERENCE_STEP high_level_inf_step = PRE_LAYERNORM_1_TRANS_STEP;
 

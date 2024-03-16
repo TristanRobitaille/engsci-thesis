@@ -101,4 +101,38 @@ function automatic void update_inst(ref logic signed [2:0][N_STORAGE-1:0] bus_da
         bus_data_write[2] <= (ext_mem_data_valid && (gen_cnt_2b_cnt == 'd2)) ? ext_mem_data : bus_data_write[2];
     end
 endfunction
+
+function automatic void prepare_for_broadcast(input HIGH_LEVEL_INFERENCE_STEP_T high_level_inf_step, input logic [6:0] gen_cnt_7b_cnt, input logic [6:0] gen_cnt_7b_2_cnt, input BroadcastOpInfo_t broadcast_info, ref logic[3:0] bus_op_write, ref logic signed [2:0][N_STORAGE-1:0] bus_data_write, ref logic [$clog2(NUM_CIMS)-1:0] bus_target_or_sender_write);
+    bus_op_write <= broadcast_info.op;
+    bus_data_write[1] <= {{(N_STORAGE-$clog2(NUM_CIMS+1)){1'd0}}, broadcast_info.len};
+
+    unique case (high_level_inf_step)
+        ENC_MHSA_QK_T_STEP: begin
+            bus_data_write[0] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].tx_addr + 10'($rtoi($ceil(gen_cnt_7b_2_cnt*NUM_HEADS)))};
+            bus_data_write[2] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].rx_addr};
+            bus_target_or_sender_write <= gen_cnt_7b_cnt[5:0];
+        end
+        ENC_MHSA_V_MULT_STEP: begin
+            bus_data_write[0] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].tx_addr + 10'($rtoi($ceil(gen_cnt_7b_2_cnt*(NUM_PATCHES+1))))};
+            bus_data_write[2] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].rx_addr};
+            bus_target_or_sender_write <= gen_cnt_7b_cnt[5:0];
+        end
+        ENC_MHSA_PRE_SOFTMAX_TRANS_STEP: begin
+            bus_data_write[0] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].tx_addr + 10'($rtoi($ceil(gen_cnt_7b_2_cnt*(NUM_PATCHES+1))))};
+            bus_data_write[2] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].rx_addr + 10'($rtoi($ceil(gen_cnt_7b_2_cnt*(NUM_PATCHES+1))))};
+            bus_target_or_sender_write <= gen_cnt_7b_cnt[5:0];
+        end
+        PRE_MLP_HEAD_DENSE_2_TRANS_STEP: begin
+            bus_data_write[0] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].tx_addr};
+            bus_data_write[2] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].rx_addr};
+            bus_target_or_sender_write <= MLP_DIM + gen_cnt_7b_cnt[5:0];
+        end
+        default: begin
+            bus_data_write[0] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].tx_addr};
+            bus_data_write[2] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].rx_addr};
+            bus_target_or_sender_write <= gen_cnt_7b_cnt[5:0];
+        end
+    endcase
+    
+endfunction
 `endif

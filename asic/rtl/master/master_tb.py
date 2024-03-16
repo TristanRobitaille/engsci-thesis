@@ -7,8 +7,8 @@ from utilities import *
 from FixedPoint import FXnum
 
 import cocotb
+import cocotb.triggers
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge
 
 #----- EXTERNAL MEMORY -----#
 params = h5py.File("../../func_sim/reference_data/model_params.h5", "r")
@@ -158,13 +158,55 @@ async def load_params(dut):
     assert len(addr_needed_but_not_requested) == 0, "Some addresses that are needed have not been requested!"
 
     # Interlude
-    for _ in range(10000): await RisingEdge(dut.clk)
+    for _ in range(INTERLUDE_CLOCK_CYCLES): await RisingEdge(dut.clk)
 
     # Start loading EEG data
     print(f"Although we should send a new EEG sample at every {int(1000000*ASIC_FREQUENCY_MHZ/SAMPLING_FREQ_HZ)} clock cycles, we will shorten that to {EEG_SAMPLING_PERIOD_CLOCK_CYCLE} clock cycles.")
     dut.new_sleep_epoch.value = 1
-    for i in range(CLIP_LENGTH_S*SAMPLING_FREQ_HZ):
+    for _ in range(CLIP_LENGTH_S*SAMPLING_FREQ_HZ):
         await send_eeg_from_adc(dut)
         for _ in range(EEG_SAMPLING_PERIOD_CLOCK_CYCLE-3): await RisingEdge(dut.clk) # Sampling delay of EEG data
-    await RisingEdge(dut.clk)
+
+    # Interlude
+    for _ in range(INTERLUDE_CLOCK_CYCLES): await RisingEdge(dut.clk)
     dut.new_sleep_epoch.value = 0
+    
+    for inf_step in range(len(inf_steps)):
+        if (inf_step == 8): # Skip ENC_MHSA_SOFTMAX_STEP
+            dut.all_cims_ready.value = 1
+            await RisingEdge(dut.clk)
+            dut.all_cims_ready.value = 0
+            continue
+        for num_run in range(inf_steps[inf_step].num_runs):
+            for num_cim in range(inf_steps[inf_step].num_cim):
+                # Let master run through inference steps by emulating the CiMs
+                cnt = 0
+                while (dut.bus_op_write.value != (inf_steps[inf_step].op.value-1)): # Wait for the master to start the broadcast
+                    await RisingEdge(dut.clk)
+                    cnt += 1
+                    if (cnt == 100): raise ValueError(f"Master didn't start the broadcast (bus_op_write != {inf_steps[inf_step].op.value-1}) at inf_step {inf_step}!")
+
+                assert (dut.bus_target_or_sender_write.value == (inf_steps[inf_step].start_cim + num_cim)), f"Master didn't start the broadcast for the correct CiM ({dut.bus_target_or_sender_write.value} != {num_cim}) at inf_step {inf_step}!"
+
+                for _ in range(math.ceil(inf_steps[inf_step].len//3)):
+                    await RisingEdge(dut.clk)
+                    dut.bus_op_read.value = inf_steps[inf_step].op.value
+                # Perform math...
+                dut.bus_op_read.value = BusOp.NOP.value
+                await cocotb.triggers.ClockCycles(dut.clk, 10)
+
+                # Done with math
+                if (num_cim == inf_steps[inf_step].num_cim-1): await cocotb.triggers.ClockCycles(dut.clk, 200)
+                dut.all_cims_ready.value = 1
+                await RisingEdge(dut.clk)
+                dut.all_cims_ready.value = 0
+
+            while (dut.bus_op_write.value != BusOp.PISTOL_START_OP.value): # Wait for pistol start
+                await RisingEdge(dut.clk)
+                cnt += 1
+                if (cnt == 100): raise ValueError(f"Master didn't send pistol start after inf_step {inf_step}!")
+
+        print(f"Done with inference step {inf_step}")
+
+    # Interlude
+    for _ in range(INTERLUDE_CLOCK_CYCLES): await RisingEdge(dut.clk)

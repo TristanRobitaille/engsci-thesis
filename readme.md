@@ -8,6 +8,10 @@ Project description: https://tristan.cbcr.me/?type=a#edge_AI
 Install Python dependencies with: `pip3 install -r python_prototype/requirements.txt`.\
 Install EdgeTPU runtime and PyCoral by following this [guide](https://coral.ai/docs/accelerator/get-started/).
 
+#### ASIC Function Simulation
+To generate the Makefile, `CMake` is required. Install it with `brew install cmake`. \
+To compile the simulation, `gcc`, `hdf5`, `boost` and `armadillo` are required. Install them with `brew install gcc hdf5 boost armadillo`.
+
 #### RTL
 Install `verilator` for Verilog compilation (requires MacOS Homebrew): `brew install verilator`.\
 Install `gtkwave` to view HDL simulation waveforms (requires MacOS Homebrew): `brew install --cask gtkwave`.\

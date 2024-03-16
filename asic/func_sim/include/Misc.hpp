@@ -81,22 +81,6 @@ class Counter {
             return val;
         }
 
-        int dec(int decrement=1) {
-            val -= decrement;
-            val_unbounded -= decrement;
-            if (val < 0) {
-                std::cout << "Counter underflow (width: " << width << "!\n" << std::endl;
-                val = (1 << width) + val; // Wrap around
-            }
-            return val;
-        }
-
-        int set_val(int new_val) {
-            val = new_val;
-            val_unbounded = new_val;
-            return val;
-        }
-
         int reset() {
             val = 0;
             val_unbounded = 0;
@@ -117,7 +101,10 @@ class Bus {
     public:
         struct instruction get_inst() { return inst; };
         int push_inst(struct instruction inst) {
-            if (inst.target_or_sender > NUM_CIM) throw std::runtime_error("Invalid target or sender (out of range)");
+            if (inst.target_or_sender > NUM_CIM) {
+                std::cout << "Invalid target or sender (" << inst.target_or_sender << "; out of range). Exiting." << std::endl;
+                exit(-1);
+            }
             q.push(inst);
             return 0;
         };

@@ -7,7 +7,8 @@
         MASTER_STATE_PARAM_LOAD,
         MASTER_STATE_SIGNAL_LOAD,
         MASTER_STATE_INFERENCE_RUNNING,
-        MASTER_STATE_BROADCAST_MANAGEMENT
+        MASTER_STATE_BROADCAST_MANAGEMENT,
+        MASTER_STATE_DONE_INFERENCE
     } MASTER_STATE_T;
 
     typedef enum logic [4:0] {
@@ -37,7 +38,8 @@
         MLP_HEAD_DENSE_2_STEP,
         MLP_HEAD_SOFTMAX_TRANS_STEP,
         SOFTMAX_AVERAGING,
-        INFERENCE_FINISHED
+        INFERENCE_FINISHED,
+        HIGH_LEVEL_INFERENCE_STEP_NUM
     } HIGH_LEVEL_INFERENCE_STEP_T;
 
     typedef enum logic [3:0] {
@@ -51,7 +53,8 @@
         ENC_MLP_DENSE_2_KERNEL_PARAMS,
         MLP_HEAD_DENSE_2_KERNEL_PARAMS,
         SINGLE_PARAMS,
-        PARAM_LOAD_FINISHED
+        PARAM_LOAD_FINISHED,
+        PARAMS_NUM
     } PARAM_NAME_T;
 
     typedef enum logic [3:0] {
@@ -64,7 +67,8 @@
         ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_BIAS_PARAMS,
         ENC_MLP_DENSE_2_BIAS_PARAMS,
         MLP_HEAD_DENSE_2_BIAS_PARAMS,
-        SQRT_NUM_HEADS_PARAMS
+        SQRT_NUM_HEADS_PARAMS,
+        SINGLE_PARAMS_NUM
     } SINGLE_PARAM_NAME_T;
 
     typedef enum logic [4:0] {
@@ -94,18 +98,28 @@
         MLP_HEAD_LAYERNORM_GAMMA_EXT_MEM,
         MLP_HEAD_DENSE_SOFTMAX_KERNEL_EXT_MEM,
         MLP_HEAD_DENSE_SOFTMAX_BIAS_EXT_MEM,
-        SQRT_NUM_HEAD_EXT_MEM
+        SQRT_NUM_HEAD_EXT_MEM,
+        EXT_MEM_PARAM_NUM
     } EXT_MEM_PARAM_NAME_T;
 
 /*----- STRUCT -----*/
-    typedef struct {
+    typedef struct packed {
         logic [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] addr;
         logic [$clog2(NUM_CIMS+1)-1:0] len;
         logic [$clog2(NUM_CIMS+1)-1:0] num_rec;
     } ParamInfo_t;
 
+    typedef struct packed {
+        logic [$clog2(OP_NUM)-1:0] op;
+        logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] tx_addr;
+        logic [$clog2(NUM_CIMS+1)-1:0] len;
+        logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] rx_addr;
+        logic [$clog2(NUM_CIMS+1)-1:0] num_cim;
+    } BroadcastOpInfo_t;
+
 /*----- LUT -----*/
-    ParamInfo_t param_addr_map[10];
-    logic [$clog2(NUM_PARAMS/64)-1:0] ext_mem_param_addr_map[27];
+    ParamInfo_t param_addr_map[PARAMS_NUM-1];
+    BroadcastOpInfo_t broadcast_ops[HIGH_LEVEL_INFERENCE_STEP_NUM];
+    logic [$clog2(NUM_PARAMS/64)-1:0] ext_mem_param_addr_map[EXT_MEM_PARAM_NUM];
 
 `endif

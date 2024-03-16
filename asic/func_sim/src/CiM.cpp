@@ -132,19 +132,25 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             }
 
             // Prep new instruction to send
-            if ((bytes_sent_cnt.get_cnt() < data_len_reg) && (inst.target_or_sender == id)) { // If last time was me and I have more data to send
-                struct instruction new_inst = {/*op*/ inst.op, /*target_or_sender*/id, /*data*/{0, 0}, /*extra_fields*/0};
+            if (inst.target_or_sender == id) {
+                if (bytes_sent_cnt.get_cnt() < data_len_reg) { // If last time was me and I have more data to send
+                    struct instruction new_inst = {/*op*/ inst.op, /*target_or_sender*/id, /*data*/{0, 0}, /*extra_fields*/0};
 
-                if ((data_len_reg - bytes_sent_cnt.get_cnt() == 2)) { // Only two bytes left
-                    new_inst.data = {0, intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()]};
-                    new_inst.extra_fields = intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()+1];
-                } else if ((data_len_reg - bytes_sent_cnt.get_cnt() == 1)) { // Only one byte left
-                    new_inst.extra_fields = intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()];
+                    if ((data_len_reg - bytes_sent_cnt.get_cnt() == 2)) { // Only two bytes left
+                        new_inst.data = {0, intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()]};
+                        new_inst.extra_fields = intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()+1];
+                    } else if ((data_len_reg - bytes_sent_cnt.get_cnt() == 1)) { // Only one byte left
+                        new_inst.extra_fields = intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()];
+                    } else {
+                        new_inst.data = {intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()], intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()+1]};
+                        new_inst.extra_fields = intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()+2];
+                    }
+                    bus->push_inst(new_inst);
                 } else {
-                    new_inst.data = {intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()], intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()+1]};
-                    new_inst.extra_fields = intermediate_res[tx_addr_reg+bytes_sent_cnt.get_cnt()+2];
+                    struct instruction inst = {NOP, id, /*data*/{0, 0}, /*extra_fields*/0};
+                    bus->push_inst(inst);
                 }
-                bus->push_inst(new_inst);
+
             }
             break;
 

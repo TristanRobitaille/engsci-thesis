@@ -12,7 +12,13 @@ module master (
     input wire new_sleep_epoch, start_param_load, all_cims_ready,
 
     // Bus
-    inout bus_t bus,
+    inout wire [BUS_OP_WIDTH-1:0] bus_op,
+    inout wire signed [2:0][N_STORAGE-1:0] bus_data,
+    inout wire [$clog2(NUM_CIMS)-1:0] bus_target_or_sender,
+    // Note: For the purposes of easier testbenches, we will use separate signals for read and write
+    input wire [BUS_OP_WIDTH-1:0] bus_op_read,
+    input wire signed [2:0][N_STORAGE-1:0] bus_data_read,
+    input wire [$clog2(NUM_CIMS)-1:0] bus_target_or_sender_read,
 
     // EEG
     input wire new_eeg_sample,
@@ -27,24 +33,17 @@ module master (
     // Initialize arrays
     `include "master_init.sv"
 
-    // Read bus
-    wire [BUS_OP_WIDTH-1:0] bus_op_read;
-    wire signed [N_STORAGE-1:0] bus_data_0_read, bus_data_1_read, bus_data_2_read;
-    wire [$clog2(NUM_CIMS)-1:0] bus_target_or_sender_read;
-    assign {bus_op_read, bus_data_0_read, bus_data_1_read, bus_data_2_read, bus_target_or_sender_read} = bus;
-    
     // Write bus
-    logic bus_drive;
+    // TODO: Proper read logic on inout wires
+    logic bus_drive, bus_drive_delayed;
     logic [BUS_OP_WIDTH-1:0] bus_op_write;
     logic signed [2:0][N_STORAGE-1:0] bus_data_write;
     logic [$clog2(NUM_CIMS)-1:0] bus_target_or_sender_write;
-    always_comb begin : bus_drive_comb
-        bus.op = (bus_drive) ? bus_op_write : 'Z;
-        bus.data[0] = (bus_drive) ? bus_data_write[0] : 'Z;
-        bus.data[1] = (bus_drive) ? bus_data_write[1] : 'Z;
-        bus.data[2] = (bus_drive) ? bus_data_write[2] : 'Z;
-        bus.target_or_sender = (bus_drive) ? bus_target_or_sender_write : 'Z;
-    end
+    assign bus_op = (bus_drive) ? bus_op_write : 'Z;
+    assign bus_data[0] = (bus_drive) ? bus_data_write[0] : 'Z;
+    assign bus_data[1] = (bus_drive) ? bus_data_write[1] : 'Z;
+    assign bus_data[2] = (bus_drive) ? bus_data_write[2] : 'Z;
+    assign bus_target_or_sender = (bus_drive) ? bus_target_or_sender_write : 'Z;
 
     // Instantiate counters
     logic gen_cnt_2b_rst_n, gen_cnt_7b_rst_n, gen_cnt_7b_2_rst_n;
@@ -55,10 +54,7 @@ module master (
     counter #(.WIDTH(7), .MODE(0)) gen_cnt_7b_2 (.clk(clk), .rst_n(gen_cnt_7b_2_rst_n), .inc(gen_cnt_7b_2_inc), .cnt(gen_cnt_7b_2_cnt));
 
     // Internal registers and wires
-    logic new_cim, loading_params;
-    logic [15:0] gen_reg_16b = 'd0;
-    logic [15:0] gen_reg_16b_2 = 'd0;
-    logic [15:0] gen_reg_16b_3 = 'd0;
+    logic new_cim, loading_params, gen_bit;
     logic [3:0] params_curr_layer;
     logic [$clog2(NUM_PARAMS)-1:0] ext_mem_addr_prev;
 
@@ -67,9 +63,7 @@ module master (
     HIGH_LEVEL_INFERENCE_STEP_T high_level_inf_step = PRE_LAYERNORM_1_TRANS_STEP;
     always_ff @ (posedge clk or negedge rst_n) begin : master_main_fsm
         if (!rst_n) begin // Reset
-            gen_reg_16b <= 'd0;
-            gen_reg_16b_2 <= 'd0;
-            gen_reg_16b_3 <= 'd0;
+            gen_bit <= 1'b0;
             gen_cnt_2b_rst_n <= RST;
             gen_cnt_7b_rst_n <= RST;
             gen_cnt_7b_2_rst_n <= RST;
@@ -88,7 +82,6 @@ module master (
                     end else if (new_sleep_epoch) begin
                         state <= MASTER_STATE_SIGNAL_LOAD;
                         bus_drive <= 1'b1;
-                        // Clean up bus and counters
                         bus_data_write[0] <= 'd0;
                         bus_data_write[1] <= 'd0;
                         bus_data_write[2] <= 'd0;
@@ -98,11 +91,7 @@ module master (
                         gen_cnt_7b_2_rst_n <= RST;
                         bus_op_write <= PATCH_LOAD_BROADCAST_START_OP;
                     end
-                    gen_reg_16b <= 'd0;
-                    gen_reg_16b_2 <= 'd0;
-                    gen_reg_16b_3 <= 'd0;
-
-                    // Take out of reset
+                    gen_bit <= 1'b0;
                     gen_cnt_7b_rst_n <= RUN;
                     gen_cnt_7b_2_rst_n <= RUN;
                 end
@@ -128,7 +117,7 @@ module master (
                             gen_cnt_7b_rst_n <= (gen_cnt_7b_cnt == param_addr_map[params_curr_layer].len) ? RST : RUN;
                             gen_cnt_7b_2_inc <= {6'd0, (gen_cnt_7b_cnt == param_addr_map[params_curr_layer].len)};
                             gen_cnt_7b_2_rst_n <= (gen_cnt_7b_2_cnt == param_addr_map[params_curr_layer].num_rec) ? RST : RUN;
-                            
+
                             params_curr_layer <= ((gen_cnt_7b_2_cnt == param_addr_map[params_curr_layer].num_rec) && (gen_cnt_7b_2_rst_n == RUN)) ? params_curr_layer + 'd1 : params_curr_layer;
                             state <= (gen_cnt_7b_2_cnt == param_addr_map[params_curr_layer].num_rec) ? MASTER_STATE_IDLE : MASTER_STATE_PARAM_LOAD;
                         end
@@ -164,7 +153,8 @@ module master (
                 MASTER_STATE_SIGNAL_LOAD: begin
                     bus_op_write <= (new_eeg_sample) ? PATCH_LOAD_BROADCAST_OP : NOP;
                     bus_data_write[0] <= { {(N_STORAGE-Q){1'd0}}, eeg_sample[EEG_SAMPLE_DEPTH-1 -: Q] }; // Select the upper Q bits as a way to normalize (divide by 15b) and convert to fixed-point
-                    state <= (new_sleep_epoch) ? MASTER_STATE_SIGNAL_LOAD : MASTER_STATE_IDLE;
+                    state <= (new_sleep_epoch) ? MASTER_STATE_SIGNAL_LOAD : MASTER_STATE_INFERENCE_RUNNING;
+                    bus_drive <= new_sleep_epoch;
                 end
 
                 MASTER_STATE_INFERENCE_RUNNING: begin
@@ -194,9 +184,20 @@ module master (
                         MLP_HEAD_DENSE_2_STEP,
                         MLP_HEAD_SOFTMAX_TRANS_STEP,
                         SOFTMAX_AVERAGING: begin
+                            if (all_cims_ready && (bus_op_read == INFERENCE_RESULT_OP)) begin
+                                state <= MASTER_STATE_DONE_INFERENCE;
+                            end else if (high_level_inf_step != SOFTMAX_AVERAGING) begin
+                                state <= MASTER_STATE_BROADCAST_MANAGEMENT;
+                                gen_cnt_7b_rst_n <= RUN;
+                                gen_cnt_7b_2_rst_n <= RUN;
+                                bus_drive <= 1'b1;
+                                gen_cnt_7b_inc <= 'd1;
+                                prepare_for_broadcast(high_level_inf_step, 'd0, gen_cnt_7b_2_cnt, broadcast_ops[high_level_inf_step], bus_op_write, bus_data_write, bus_target_or_sender_write);
+                            end
                         end
 
                         ENC_MHSA_SOFTMAX_STEP: begin
+                            high_level_inf_step <= (all_cims_ready) ? HIGH_LEVEL_INFERENCE_STEP_T'(high_level_inf_step + 5'd1) : high_level_inf_step;
                         end
 
                         default:
@@ -205,6 +206,36 @@ module master (
                 end
 
                 MASTER_STATE_BROADCAST_MANAGEMENT: begin
+                    // gen_cnt_7b counts # of cims sent to the bus
+                    // gen_cnt_7b_2 counts position in Z-stack
+                    automatic logic all_transactions_sent = all_cims_ready && (bus_op_read == NOP);
+                    automatic logic all_cims_sent = (gen_cnt_7b_cnt == broadcast_ops[high_level_inf_step].num_cim);
+                    automatic logic is_multi_head_op = (high_level_inf_step == ENC_MHSA_QK_T_STEP) || (high_level_inf_step == ENC_MHSA_V_MULT_STEP) || (high_level_inf_step == ENC_MHSA_PRE_SOFTMAX_TRANS_STEP);
+
+                    if (all_transactions_sent) begin
+                        prepare_for_broadcast(high_level_inf_step, gen_cnt_7b_cnt, gen_cnt_7b_2_cnt, broadcast_ops[high_level_inf_step], bus_op_write, bus_data_write, bus_target_or_sender_write);
+                        if (all_cims_sent) begin
+                            gen_cnt_7b_2_inc <= 'd1;
+                            bus_op_write <= PISTOL_START_OP;
+                            gen_cnt_7b_rst_n <= RST;
+                            state <= MASTER_STATE_INFERENCE_RUNNING;
+                            if (~is_multi_head_op || (gen_cnt_7b_2_cnt == NUM_HEADS)) begin // Go to next inference step
+                                gen_cnt_7b_2_rst_n <= RST;
+                                high_level_inf_step <= HIGH_LEVEL_INFERENCE_STEP_T'(high_level_inf_step + 5'd1);
+                            end
+                        end else begin
+                            gen_cnt_7b_2_inc <= 'd0;
+                        end
+                        bus_drive <= 'b1;
+                    end else begin
+                        bus_op_write <= NOP;
+                        bus_drive <= 'b0;
+                    end
+                    gen_cnt_7b_inc <= {6'd0, all_transactions_sent};
+                    gen_cnt_7b_rst_n <= (all_transactions_sent && all_cims_sent) ? RST : RUN;
+                end
+
+                MASTER_STATE_DONE_INFERENCE: begin
                 end
 
                 default:

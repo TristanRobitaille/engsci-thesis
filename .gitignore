@@ -103,6 +103,7 @@ asic/rtl/master/dump.vcd
 asic/rtl/master/results.xml
 asic/rtl/master/~*
 asic/rtl/master/*.gtkw
+asic/rtl/rtl_env
 
 ### Documentation
 doc/CMC_VLSI_User_Manual_2023.pdf
