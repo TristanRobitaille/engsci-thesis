@@ -189,6 +189,7 @@ class CiM {
         large_fp_t exp_approx(large_fp_t input);
         large_fp_t floor_fpm(large_fp_t input);
         void update_state(STATE new_state);
+        void load_previous_softmax();
 
     public:
         CiM() : id(-1), gen_cnt_10b(10), gen_cnt_10b_2(10), bytes_rec_cnt(8), bytes_sent_cnt(8) {}

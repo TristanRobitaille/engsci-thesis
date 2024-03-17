@@ -151,16 +151,18 @@ class Master_Ctrl {
             {INFERENCE_FINISHED,                1}
         };
 
+        bool gen_bit = false;
         bool all_cims_ready = true;
+        bool params_loaded = false;
+        uint32_t inferred_sleep_stage = 0;
         Counter gen_cnt_7b;
         Counter gen_cnt_7b_2;
         Counter gen_cnt_7b_3;
-        bool gen_bit = false;
         STATE state;
         HIGH_LEVEL_INFERENCE_STEP high_level_inf_step = PRE_LAYERNORM_1_TRANS_STEP;
 
         // EEG file
-        std::vector<float> eeg_ds;
+        std::vector<std::vector<float>> eeg_ds;
         std::vector<float>::iterator eeg;
 
         // Parameters
@@ -172,11 +174,13 @@ class Master_Ctrl {
 
     public:
         Master_Ctrl(const std::string eeg_filepath, const std::string params_filepath);
-        int reset();
-        SYSTEM_STATE run(struct ext_signals* ext_sigs, Bus* bus, std::vector<CiM> cims);
+        int reset(uint32_t clip_index);
+        SYSTEM_STATE run(struct ext_signals* ext_sigs, Bus* bus, std::vector<CiM> cims, uint32_t clip_index);
         int start_signal_load(Bus* bus);
         struct instruction param_to_send();
         int prepare_for_broadcast(broadcast_op_info op_info, Bus* bus);
+        uint32_t get_inferred_sleep_stage();
+        bool get_are_params_loaded();
 };
 
 #endif //MASTER_CTRL_H

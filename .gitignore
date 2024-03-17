@@ -105,5 +105,8 @@ asic/rtl/master/~*
 asic/rtl/master/*.gtkw
 asic/rtl/rtl_env
 
+### ASIC functional simulation
+asic/fixed_point_accuracy_study/results_test.csv
+
 ### Documentation
 doc/CMC_VLSI_User_Manual_2023.pdf

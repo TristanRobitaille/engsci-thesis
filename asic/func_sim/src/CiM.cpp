@@ -9,13 +9,16 @@ using namespace std;
 
 /*----- DECLARATION -----*/
 CiM::CiM(const int16_t cim_id) : id(cim_id), gen_cnt_10b(10), gen_cnt_10b_2(10), bytes_rec_cnt(13), bytes_sent_cnt(10) {
-    update_state(RESET_CIM);
     reset();
 
     // Load in dummy softmax data of previous epochs for verification
+    load_previous_softmax();
+}
+
+void CiM::load_previous_softmax() {
     if (id == 0) {
         for (int i = 0; i < (NUM_SAMPLES_OUT_AVG-1); i++) { // Softmax for previous dummy epochs
-            std::string filename = "reference_data/dummy_softmax_" + std::to_string(i) + ".csv";
+            std::string filename = std::string(DATA_BASE_DIR)+"/dummy_softmax_" + std::to_string(i) + ".csv";
             rapidcsv::Document csv(filename, rapidcsv::LabelParams(-1, -1));
             std::vector<float> dummy_softmax = csv.GetRow<float>(0);
             for (int j = 0; j < NUM_SLEEP_STAGES; j++) { intermediate_res[mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + i*NUM_SLEEP_STAGES + j] = (dummy_softmax[j] / NUM_SAMPLES_OUT_AVG); }
@@ -24,20 +27,36 @@ CiM::CiM(const int16_t cim_id) : id(cim_id), gen_cnt_10b(10), gen_cnt_10b_2(10),
 }
 
 int CiM::reset(){
-    fill(begin(params), end(params), 0); // Reset local params
     fill(begin(intermediate_res), end(intermediate_res), 0); // Reset local intermediate_res
     is_ready = true;
+    compute_in_progress = false;
+    computation_result = 0;
+    gen_reg_16b = 0;
+    tx_addr_reg = 0;
+    rx_addr_reg = 0;
+    sender_id = 0;
+    data_len_reg = 0;
+    current_inf_step = CLASS_TOKEN_CONCAT_STEP;
+    prev_bus_op = NOP;
     gen_cnt_10b.reset();
     gen_cnt_10b_2.reset();
     bytes_rec_cnt.reset();
+    bytes_sent_cnt.reset();
+    _neg_exp_cnt = 0;
+    _total_exp_cnt = 0;
+    _max_exp_input_arg = large_fp_t(0);
+    _min_exp_input_arg = large_fp_t(0);
     _compute_process_cnt = 0;
     _num_compute_done = 0;
+    load_previous_softmax(); // Load in dummy softmax data of previous epochs for verification
     update_state(IDLE_CIM);
     return 0;
 }
 
 int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
     /* Run the CiM FSM */
+    if (ext_sigs->master_nrst == false) { reset(); } // Reset if master is reset
+
     // Update compute process counter
     update_compute_process_cnt();
 
@@ -48,11 +67,11 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case PATCH_LOAD_BROADCAST_START_OP:
             bytes_rec_cnt.reset();
             gen_cnt_10b_2.reset();
-            update_state(PATCH_LOAD_CIM);
             break;
 
         case PATCH_LOAD_BROADCAST_OP:
             if (compute_in_progress == false) {
+                update_state(PATCH_LOAD_CIM);
                 intermediate_res[bytes_rec_cnt.get_cnt()] = inst.data[0];
                 DIV(bytes_rec_cnt.get_cnt(), EEG_SCALE_FACTOR, ADC_INPUT);
                 is_ready = false;
@@ -150,7 +169,6 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     struct instruction inst = {NOP, id, /*data*/{0, 0}, /*extra_fields*/0};
                     bus->push_inst(inst);
                 }
-
             }
             break;
 
@@ -167,7 +185,6 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         break;
 
     case RESET_CIM:
-        if (ext_sigs->master_nrst == true) { update_state(IDLE_CIM); }
         reset();
         break;
 
@@ -609,10 +626,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     bus->push_inst(inst);
                 }
             }
-            gen_reg_16b = 0;
-            gen_cnt_10b.reset();
-            gen_cnt_10b_2.reset();
-            bytes_rec_cnt.reset();
+            update_state(IDLE_CIM);
             break;
         case INVALID_INF_STEP:
         default:

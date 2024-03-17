@@ -119,3 +119,14 @@ void print_intermediate_value_stats() {
     else { std::cout << "Highest valid relative error: " << highest_rel_error << ". Avg: " << arma::mean(arma_rel_errors) << ". Std. dev.: " << arma::stddev(arma_rel_errors) << std::endl; }
     std::cout << data_over_threshold_cnt << "/" << data_cnt << " over threshold (" << (100.0f*data_over_threshold_cnt/data_cnt) << "%)" << std::endl;
 }
+
+void reset_stats() {
+    min_val = 0.0f;
+    max_val = 0.0f;
+    highest_abs_error = 0.0f;
+    highest_rel_error = 0.0f;
+    abs_errors.clear();
+    rel_errors.clear();
+    data_cnt = 0;
+    data_over_threshold_cnt = 0;
+}

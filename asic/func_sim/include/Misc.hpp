@@ -13,13 +13,15 @@
 #define MLP_DIM                 32
 #define NUM_HEADS               8
 #define NUM_SLEEP_STAGES        5
-#define NUM_SAMPLES_OUT_AVG     3 // Number of samples in output averaging filter
-#define EEG_SCALE_FACTOR        65535 // Normalize from 16b
+#define NUM_SAMPLES_OUT_AVG     3       // Number of samples in output averaging filter
+#define EEG_SCALE_FACTOR        65535   // Normalize from 16b
+#define DATA_BASE_DIR           "reference_data/"
+#define NUM_FRAC_BITS           20
 
 /*----- TYPEDEF -----*/
 // Both should the same number of fractional bits, the large_fp_t is merely to store intermediate results in computation
-using fix_pt_t = fpm::fixed</*base type*/ std::int32_t, /*intermediate type*/ std::int64_t, /*# fractional bits*/ 20>; // 20.12 fixed point
-using large_fp_t = fpm::fixed</*base type*/ std::int32_t, /*intermediate type*/ std::int64_t, /*# fractional bits*/ 20>; // 20.12 fixed point
+using fix_pt_t = fpm::fixed</*base type*/ std::int32_t, /*intermediate type*/ std::int64_t, /*# fractional bits*/ NUM_FRAC_BITS>;
+using large_fp_t = fpm::fixed</*base type*/ std::int32_t, /*intermediate type*/ std::int64_t, /*# fractional bits*/ NUM_FRAC_BITS>;
 
 /*----- MACROS -----*/
 #define NUM_TRANS(x) ceil((x)/3.0f) // Returns the number of transactions each CiM will send (3 elements per transaction)
