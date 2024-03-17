@@ -6,7 +6,7 @@
     "configurations": [
         {
             "name": "NLP Transformer",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/python_prototype/main.py",
             "console": "integratedTerminal",
@@ -15,7 +15,7 @@
         },
         {
             "name": "Vision Transformer",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/python_prototype/main_vision_transformer.py",
             "console": "integratedTerminal",
@@ -31,7 +31,7 @@
         },
         {
             "name": "EDF Extract",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/python_prototype/edf_extract.py",
             "console": "integratedTerminal",
@@ -43,7 +43,7 @@
         },
         {
             "name": "Utilities",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/python_prototype/utilities.py",
             "console": "integratedTerminal",
@@ -55,7 +55,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/asic/func_sim/func_sim",
-            "args": [],
+            "args": ["--start_index", "0", "--end_index", "1", "--results_csv_fp", "${workspaceFolder}/asic/fixed_point_accuracy_study/results_test.csv"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/asic/func_sim/",
             "environment": [],

@@ -8,6 +8,7 @@ import git
 import sys
 import json
 import socket
+import shutil
 import datetime
 import imblearn
 import utilities
@@ -246,6 +247,9 @@ def load_from_dataset(args):
     sleep_stages_val = tf.cast(sleep_stages_val, dtype=DATA_TYPE)
     data_dict = {"signals_train":signals_train, "signals_val":signals_val, "sleep_stages_train":sleep_stages_train, "sleep_stages_val":sleep_stages_val}
 
+    # Save data_dict to disk for future use in accuracy study
+    if (args.reference_night_fp != ""): np.save("asic/fixed_point_accuracy_study/ref_data.npy", data_dict)
+
     return data_dict, start_of_val_night_indices, original_sleep_stage_count, dataset_metadata
 
 def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_stage_count:list, sleep_stages_count_training:list,
@@ -475,7 +479,7 @@ def manual_val(model, args, type:str, data:dict, whole_night_indices:list, out_f
     # Run model
     try:
         if (type == "tf"):
-            sleep_stages_pred = utilities.run_model(model, data=data, whole_night_indices=whole_night_indices, data_type=DATA_TYPE, num_output_filtering=args.num_out_filter,
+            sleep_stages_pred, ground_truth = utilities.run_model(model, data=data, whole_night_indices=whole_night_indices, data_type=DATA_TYPE, num_output_filtering=args.num_out_filter,
                                                     filter_post_argmax=filter_post_argmax, self_reset_threshold=args.filter_self_reset_threshold, num_sleep_stage_history=NUM_SLEEP_STAGE_HISTORY)
         elif (type == "tflite") or (type == "tflite (quant)") or (type == "tflite (16bx8b full quant)"):
             sleep_stages_pred = utilities.run_tflite_model(model, data=data, whole_night_indices=whole_night_indices, data_type=DATA_TYPE, num_output_filtering=args.num_out_filter,
@@ -1106,8 +1110,13 @@ def main():
         DEBUG = True
         OUTPUT_CSV = True
         tf.config.run_functions_eagerly(True) # Allows step-by-step debugging of tf.functions
-        ref_data = utilities.edf_to_h5(edf_fp=args.reference_night_fp, channel="EEG Cz-LER", clip_length_s=30, sampling_freq_hz=128, h5_filename="/home/trobitaille/engsci-thesis/python_prototype/reference_data/eeg.h5")
-        all_models["tf"](ref_data, training=False)
+        ref_data = utilities.edf_to_h5(edf_fp=args.reference_night_fp, channel="EEG Cz-LER", clip_length_s=30, sampling_freq_hz=128, full_night=True, h5_filename="python_prototype/reference_data/eeg.h5")
+        all_models["tf"](ref_data[0], training=False) # Run with the first clip
+        shutil.copy2(base_out_fp+"/run_1/models/model.tflite", "python_prototype/reference_data/model.tflite")
+        shutil.copy2(base_out_fp+"/run_1/models/model_quant.tflite", "python_prototype/reference_data/model_quant.tflite")
+        shutil.copy2(base_out_fp+"/run_1/models/model_weights.h5", "python_prototype/reference_data/model_weights.h5")
+        shutil.rmtree("python_prototype/reference_data/model.tf", ignore_errors=True)
+        shutil.copytree(base_out_fp+"/run_1/models/model.tf", "python_prototype/reference_data/model.tf")
 
     print(f"[{(time.time()-start_time):.2f}s] Done. Good bye.")
 

@@ -1,3 +1,4 @@
+import csv
 import h5py
 import glob
 import socket
@@ -250,12 +251,13 @@ def count_instances_per_class(input, num_classes) -> list:
         count[int(elem)] += 1
     return count
 
-def run_model(model, data:dict, whole_night_indices:list, data_type:tf.DType, num_output_filtering:int=0, filter_post_argmax:bool=True, self_reset_threshold:int=-1, num_sleep_stage_history:int=0) -> list:
+def run_model(model, data:dict, whole_night_indices:list, data_type:tf.DType, num_output_filtering:int=0, filter_post_argmax:bool=True, self_reset_threshold:int=-1, num_sleep_stage_history:int=0):
     # Load saved model (if argument is string)
     if (isinstance(model, str)):
         model = tf.keras.models.load_model(model, custom_objects={"CustomSchedule": CustomSchedule})
 
     sleep_stages_pred = []
+    ground_truth = []
     total = 0
     output_filter = MovingAverage(num_output_filtering, self_reset_threshold=self_reset_threshold)
     if num_sleep_stage_history > 0: historical_pred = tf.zeros(shape=(1, num_sleep_stage_history), dtype=data_type)
@@ -279,9 +281,10 @@ def run_model(model, data:dict, whole_night_indices:list, data_type:tf.DType, nu
             sleep_stages_pred.append(int(sleep_stage_pred[0].numpy()))
             output_filter.append_sleep_stage(int(sleep_stage_pred[0].numpy()))
             total += 1
+            ground_truth.append(int(y))
     except Exception as e: log_error_and_exit(exception=e, manual_description="Failed to manually run model.")
 
-    return sleep_stages_pred
+    return sleep_stages_pred, ground_truth
 
 def run_tflite_model(model_fp:str, data:str, whole_night_indices:list, data_type:tf.DType, num_output_filtering:int=0, filter_post_argmax:bool=True, self_reset_threshold:int=-1, num_sleep_stage_history:int=0) -> list:
     interpreter = tf.lite.Interpreter(model_path=model_fp)
@@ -344,8 +347,11 @@ def round_up_to_nearest_tenth(input) -> float:
     rounded_up_input = rounded_input if (rounded_input > input) else (rounded_input + 0.1) # Round up to nearest tenth
     return rounded_up_input
 
-def edf_to_h5(edf_fp:str, h5_filename:str, channel:str, clip_length_s=-1, sampling_freq_hz:int=-1) -> tf.Tensor:
-    """ Reads .edf input signal file, saves to .h5 and return the signal as a Tensor."""
+def edf_to_h5(edf_fp:str, h5_filename:str, channel:str, clip_length_s=30, full_night:bool=False, sampling_freq_hz:int=128) -> tf.Tensor:
+    """ Reads .edf input signal file, saves to .h5 and return the signal as a Tensor.
+        If full_night is True, the entire night is saved. Otherwise, only the first clip_length_s seconds are saved.
+    """
+    # Signals
     signal_reader = EdfReader(edf_fp)
     channels = list(signal_reader.getSignalLabels())
     channel_number = channels.index(channel)
@@ -353,37 +359,40 @@ def edf_to_h5(edf_fp:str, h5_filename:str, channel:str, clip_length_s=-1, sampli
 
     # Resampling
     original_indices = np.arange(0, len(signal))
-    target_length = int(len(signal) * (sampling_freq_hz / 256))
+    target_length = int(len(signal) * (sampling_freq_hz / 256)) # 256 Hz is the original sampling frequency
     target_indices = np.linspace(0, len(signal) - 1, target_length)
     interpolator = interp1d(original_indices, signal, kind='linear', fill_value="extrapolate")
     resample = interpolator(target_indices)
     resample = resample.astype(int)
 
-    # Grab 1 clip or all night
-    if clip_length_s != -1: resample = resample[0:clip_length_s*sampling_freq_hz]
+    # Grab 1 clip or all night. If one night, will save as a matrix instead of a vector.
+    if (full_night == False): resample = resample[0:clip_length_s*sampling_freq_hz]
 
     for i in range(len(resample)):
         resample[i] += 2**15 # Offset by 15b
 
     with h5py.File(h5_filename, 'w') as file:
-        file.create_dataset('eeg', data=resample)
-
-    tensor = tf.convert_to_tensor(resample, dtype=tf.float32, name="input_1")
-    tensor = tf.expand_dims(tensor, axis=0)
-
-    return tensor
+        if (full_night == True): 
+            resample = [resample[i : i+clip_length_s*sampling_freq_hz] for i in range(0, len(resample), clip_length_s*sampling_freq_hz)]
+            file.create_dataset('eeg', data=resample[0:-2])
+            tensor = tf.convert_to_tensor(resample[0:-2], dtype=tf.float32, name="input_1")
+            tensor = tf.expand_dims(tensor, axis=0)
+            return tensor
+        else:
+            file.create_dataset('eeg', data=[resample, resample]) # Need a 2D dataset
+            tensor = tf.convert_to_tensor(resample, dtype=tf.float32, name="input_1")
+            tensor = tf.expand_dims(tensor, axis=0)
+            return tensor
 
 def export_layer_outputs(model:tf.keras.Model, input_signal:tf.Tensor):
-    # Run model
     model.build(input_shape=input_signal.shape)
     model(input_signal, training=False)
-    intermediate_layer_model = tf.keras.Model(inputs=model.input, outputs=model.get_layer('patch_projection_dense').output)
     for i, layer in enumerate(model.layers):
         layer_model = tf.keras.Model(inputs=model.input, outputs=layer.output)
         layer_output = layer_model.predict(input_signal)
         print(layer_output)
 
-def visit_h5_datasets(name, node):
+def visit_h5_datasets(node):
     global global_min, global_max, global_closest_to_zero, global_total_params, global_prunable_params
     if isinstance(node, h5py.Dataset):
         data = node[:]
@@ -400,8 +409,39 @@ def print_stats_from_h5(h5_fp:str) -> None:
     print(f'Global Min = {global_min:.5f}, Global Max = {global_max:.5f}, Closest to zero (abs.) = {global_closest_to_zero:.8f}')
     print(f'Total prunable params (abs. < {PRUNE_THRESHOLD}) = {global_prunable_params/global_total_params*100:.2f}%')
 
+def run_accuracy_study(model_fp:str, results_fp:str, num_clips:int):
+    model = tf.keras.models.load_model(model_fp, custom_objects={"CustomSchedule": CustomSchedule})
+    data = np.load("asic/fixed_point_accuracy_study/ref_data.npy", allow_pickle=True).item()
+    sleep_stages_pred, ground_truth = run_model(model, data, whole_night_indices=[0], data_type=tf.float32, num_output_filtering=3, filter_post_argmax=True)
+
+    # Save results to CSV
+    with open(results_fp, "r", newline="") as file: # Read the existing data from the file
+        reader = csv.reader(file)
+        data = list(reader)
+
+    # Insert the new rows into the correct position in the list
+    for i, (sleep_stage, truth) in enumerate(zip(sleep_stages_pred, ground_truth)):
+        # If there's a row, modify it. Else, append a new row.
+        if (i < (len(data)-2)):
+            row = data[i+2]
+            row[0] = i
+            row[1] = truth
+            row[2] = sleep_stage
+            for i in range(20): row.append("")
+            data[i+2] = row
+        else:
+            row = [i, truth, sleep_stage]
+            data.insert(i+2, row)
+
+    # Write the list back to the file
+    with open(results_fp, "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerows(data)
+    
+    print("Done computing results for accuracy study.")
+
 def main():
-    print_stats_from_h5("/Users/tristan/Desktop/engsci-thesis/asic/func_sim/reference_data/model_params.h5")
+    run_accuracy_study(model_fp="/home/trobitaille/engsci-thesis/python_prototype/results/2024-03-17_13-38-49_vision/run_1/models/model.tf", results_fp="asic/fixed_point_accuracy_study/results_test.csv", num_clips=2000)
 
 if __name__ == "__main__":
     main()
