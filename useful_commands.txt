@@ -56,4 +56,5 @@ ASIC (run from /asic):
 
 ASIC functional model (run from /asic/func_sim):
     -[C++ functional model] Generate Makefile: cmake CMakeLists.txt
-    -[C++ functional model] Compile and run: make && ./func_sim
+    -[C++ functional model] Compile and run: make && ./func_sim --start_index <int> --end_index <int> --results_csv_fp "<string>"
+        - If you just want to run the functional simulation without accuracy study, run: make && ./func_sim --start_index 0 --end_index 0 --results_csv_fp ""

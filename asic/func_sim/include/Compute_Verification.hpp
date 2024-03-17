@@ -46,25 +46,25 @@ struct StepVerifInfo {
 
 /*----- STATIC -----*/
 static std::map<COMPUTE_VERIFICATION_STEP, StepVerifInfo> step_verif_info = {
-    {PATCH_PROJECTION_VERIF,    {"reference_data/patch_proj.csv"}},
-    {CLASS_TOKEN_VERIF,         {"reference_data/class_emb.csv"}},
-    {POS_EMB_VERIF,             {"reference_data/pos_emb.csv"}},
-    {ENC_LAYERNORM1_VERIF,      {"reference_data/enc_layernorm1.csv"}},
-    {ENC_MHSA_DENSE_Q_VERIF,    {"reference_data/enc_Q_dense.csv"}},
-    {ENC_MHSA_DENSE_K_VERIF,    {"reference_data/enc_K_dense.csv"}},
-    {ENC_MHSA_DENSE_V_VERIF,    {"reference_data/enc_V_dense.csv"}},
-    {ENC_MHSA_DENSE_QK_T_VERIF, {"reference_data/enc_scaled_score_"}},
-    {ENC_SOFTMAX_VERIF,         {"reference_data/enc_softmax_"}},
-    {ENC_MULT_V_VERIF,          {"reference_data/enc_softmax_mult_V.csv"}},
-    {ENC_RES_SUM_1_VERIF,       {"reference_data/enc_res_sum_1.csv"}},
-    {ENC_LAYERNORM2_VERIF,      {"reference_data/enc_layernorm2.csv"}},
-    {ENC_MLP_DENSE1_VERIF,      {"reference_data/enc_mlp_dense1.csv"}},
-    {ENC_OUT_VERIF,             {"reference_data/enc_output.csv"}},
-    {MLP_HEAD_LAYERNORM_VERIF,  {"reference_data/mlp_head_layernorm.csv"}},
-    {MLP_HEAD_DENSE_1_VERIF,    {"reference_data/mlp_head_out.csv"}},
-    {MLP_HEAD_SOFTMAX_VERIF,    {"reference_data/mlp_head_softmax.csv"}},
-    {MLP_HEAD_SOFTMAX_DIV_VERIF,{"reference_data/mlp_head_softmax.csv"}},
-    {POST_SOFTMAX_AVG_VERIF,    {"reference_data/dummy_softmax_"}}
+    {PATCH_PROJECTION_VERIF,    {std::string(DATA_BASE_DIR)+"patch_proj.csv"}},
+    {CLASS_TOKEN_VERIF,         {std::string(DATA_BASE_DIR)+"class_emb.csv"}},
+    {POS_EMB_VERIF,             {std::string(DATA_BASE_DIR)+"pos_emb.csv"}},
+    {ENC_LAYERNORM1_VERIF,      {std::string(DATA_BASE_DIR)+"enc_layernorm1.csv"}},
+    {ENC_MHSA_DENSE_Q_VERIF,    {std::string(DATA_BASE_DIR)+"enc_Q_dense.csv"}},
+    {ENC_MHSA_DENSE_K_VERIF,    {std::string(DATA_BASE_DIR)+"enc_K_dense.csv"}},
+    {ENC_MHSA_DENSE_V_VERIF,    {std::string(DATA_BASE_DIR)+"enc_V_dense.csv"}},
+    {ENC_MHSA_DENSE_QK_T_VERIF, {std::string(DATA_BASE_DIR)+"enc_scaled_score_"}},
+    {ENC_SOFTMAX_VERIF,         {std::string(DATA_BASE_DIR)+"enc_softmax_"}},
+    {ENC_MULT_V_VERIF,          {std::string(DATA_BASE_DIR)+"enc_softmax_mult_V.csv"}},
+    {ENC_RES_SUM_1_VERIF,       {std::string(DATA_BASE_DIR)+"enc_res_sum_1.csv"}},
+    {ENC_LAYERNORM2_VERIF,      {std::string(DATA_BASE_DIR)+"enc_layernorm2.csv"}},
+    {ENC_MLP_DENSE1_VERIF,      {std::string(DATA_BASE_DIR)+"enc_mlp_dense1.csv"}},
+    {ENC_OUT_VERIF,             {std::string(DATA_BASE_DIR)+"enc_output.csv"}},
+    {MLP_HEAD_LAYERNORM_VERIF,  {std::string(DATA_BASE_DIR)+"mlp_head_layernorm.csv"}},
+    {MLP_HEAD_DENSE_1_VERIF,    {std::string(DATA_BASE_DIR)+"mlp_head_out.csv"}},
+    {MLP_HEAD_SOFTMAX_VERIF,    {std::string(DATA_BASE_DIR)+"mlp_head_softmax.csv"}},
+    {MLP_HEAD_SOFTMAX_DIV_VERIF,{std::string(DATA_BASE_DIR)+"mlp_head_softmax.csv"}},
+    {POST_SOFTMAX_AVG_VERIF,    {std::string(DATA_BASE_DIR)+"dummy_softmax_"}}
 };
 
 /*----- FUNCTION -----*/
@@ -73,5 +73,6 @@ void verify_computation(COMPUTE_VERIFICATION_STEP cim_state, uint8_t id, float* 
 void verify_result(RESULT_TYPE type, float result, float* input_data, uint16_t starting_addr, uint16_t len, uint8_t id);
 void verify_softmax_storage(float* intermediate_res, uint16_t prev_softmax_base_addr);
 void print_intermediate_value_stats();
+void reset_stats();
 
 #endif //COMPUTE_VERIFICATION_H

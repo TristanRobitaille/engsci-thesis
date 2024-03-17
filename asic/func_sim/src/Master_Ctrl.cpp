@@ -9,24 +9,27 @@ Master_Ctrl::Master_Ctrl(const string eeg_filepath, const string params_filepath
 
     // EEG data file
     HighFive::File eeg_file(eeg_filepath, HighFive::File::ReadOnly);
-    eeg_ds = eeg_file.getDataSet("eeg").read<vector<float>>();
-    eeg = eeg_ds.begin();
+    eeg_ds = eeg_file.getDataSet("eeg").read<std::vector<std::vector<float>>>();
+    eeg = eeg_ds[0].begin(); // 1st clip
 
     // Parameters data file
     load_params_from_h5(params_filepath);
 }
 
-int Master_Ctrl::reset(){
+int Master_Ctrl::reset(uint32_t clip_index){
     gen_cnt_7b.reset();
     gen_cnt_7b_2.reset();
     gen_cnt_7b_3.reset();
     gen_bit = false;
+    all_cims_ready = true;
+    inferred_sleep_stage = 0;
     high_level_inf_step = PRE_LAYERNORM_1_TRANS_STEP;
+    eeg = eeg_ds[clip_index].begin(); // Update current clip
     state = IDLE;
     return 0;
 }
 
-SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vector<CiM> cims){
+SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vector<CiM> cims, uint32_t clip_index){
     /* Run the master controller FSM */
     SYSTEM_STATE sys_state = RUNNING;
 
@@ -50,18 +53,19 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
         break;
 
     case PARAM_LOAD:
-        if (all_cims_ready) { bus->push_inst(param_to_send()); }
+        if ((params_loaded == false) && (all_cims_ready)) { bus->push_inst(param_to_send()); }
+        else if (params_loaded == true) { state = IDLE; }
         break;
 
     case SIGNAL_LOAD:
         /* Sequentially parses the input EEG file and broadcasts it to all CiMs to emulate the ADC feed in the ASIC */
         if (all_cims_ready == true) {
-            if ((eeg != eeg_ds.end()) && (all_cims_ready == true)) {
+            if ((eeg != eeg_ds[clip_index].end()) && (all_cims_ready == true)) {
                 float data = *eeg;
                 struct instruction inst = {/*op*/ PATCH_LOAD_BROADCAST_OP, /*target_or_sender*/ 0, /*data*/ {data,0}, /*extra_field*/ 0};
                 bus->push_inst(inst); // Broadcast on bus
                 ++eeg;
-            } else if ((eeg == eeg_ds.end()) && (all_cims_ready == true)) {
+            } else if ((eeg == eeg_ds[clip_index].end()) && (all_cims_ready == true)) {
                 state = INFERENCE_RUNNING;
                 cout << "Reached end of signal file" << endl;
             }
@@ -97,6 +101,7 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
         case SOFTMAX_AVERAGING:
             if (bus->get_inst().op == INFERENCE_RESULT_OP && all_cims_ready == true) {
                 sys_state = EVERYTHING_FINISHED;
+                inferred_sleep_stage = static_cast<uint32_t>(bus->get_inst().data[0]);
                 break;
             } else if (high_level_inf_step != SOFTMAX_AVERAGING) {
                 if (high_level_inf_step == ENC_MHSA_QK_T_STEP) { cout << "Master: Performing encoder's MHSA QK_T. Starting matrix #" << gen_cnt_7b_3.get_cnt() << " in the Z-stack (out of " << NUM_HEADS << ")" << endl; }
@@ -141,7 +146,7 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
 
     case RESET:
         if (ext_sigs->master_nrst == true) { state = IDLE; } // No longer under reset
-        reset();
+        reset(clip_index);
         break;
 
     default:
@@ -245,6 +250,7 @@ struct instruction Master_Ctrl::param_to_send(){
         }
         break;
     case PARAM_LOAD_FINISHED:
+        params_loaded = true;
     default:
         state = IDLE;
         break;
@@ -374,4 +380,12 @@ int Master_Ctrl::prepare_for_broadcast(broadcast_op_info op_info, Bus* bus) {
 
     bus->push_inst(inst);
     return 0;
+}
+
+uint32_t Master_Ctrl::get_inferred_sleep_stage() {
+    return inferred_sleep_stage;
+}
+
+bool Master_Ctrl::get_are_params_loaded() {
+    return params_loaded;
 }
