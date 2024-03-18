@@ -88,7 +88,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             if (inst.target_or_sender == id) {
                 params[word_rec_cnt.get_cnt() + rx_addr_reg] = inst.data[0];
                 params[word_rec_cnt.get_cnt()+1 + rx_addr_reg] = inst.data[1]; // Note: If the length is less than 3, we will be loading junk. That's OK since it will get overwritten
-                params[word_rec_cnt.get_cnt()+2 + rx_addr_reg] = inst.extra_fields;
+                params[word_rec_cnt.get_cnt()+2 + rx_addr_reg] = inst.data[2];
                 word_rec_cnt.inc(3);
             }
             break;
@@ -99,8 +99,8 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 struct instruction new_inst;
                 tx_addr_reg = static_cast<uint16_t> (inst.data[0]);
                 OP op = (inst.op == DENSE_BROADCAST_START_OP) ? DENSE_BROADCAST_DATA_OP : TRANS_BROADCAST_DATA_OP;
-                if (inst.data[1] == 1) { new_inst = {op, id, /*data*/{0, 0}, /*extra_fields*/intermediate_res[tx_addr_reg]}; } // Special case to only send one data and have the correct alignment
-                else { new_inst = {op, id, /*data*/{intermediate_res[tx_addr_reg], intermediate_res[tx_addr_reg+1]}, /*extra_fields*/intermediate_res[tx_addr_reg+2]}; }
+                if (inst.data[1] == 1) { new_inst = {op, id, /*data*/{0, 0, intermediate_res[tx_addr_reg]},}; } // Special case to only send one data and have the correct alignment
+                else { new_inst = {op, id, /*data*/{intermediate_res[tx_addr_reg], intermediate_res[tx_addr_reg+1], intermediate_res[tx_addr_reg+2]}}; }
                 bus->push_inst(new_inst);
             }
 
@@ -109,7 +109,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 word_rec_cnt.reset(); // We also want to reset this counter here because the CiM that don't have to multiply anything for this matrix could overflow the counter
             }
 
-            rx_addr_reg = static_cast<uint16_t> (inst.extra_fields); // Save address where to store data
+            rx_addr_reg = static_cast<uint16_t> (inst.data[2]); // Save address where to store data
             data_len_reg = inst.data[1]; // Save length of data to send/receive
             sender_id = inst.target_or_sender; // Save sender's id
             word_snt_cnt.reset();
@@ -128,13 +128,13 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 }
                 if (id < data_len_reg) { // Avoid overwriting data for CiMs that should receive the data
                     if (word_snt_cnt.get_cnt() <= data_len_reg) {
-                        intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 1) ? (inst.extra_fields) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
+                        intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 1) ? (inst.data[2]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
                         intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 2) ? (inst.data[1]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
                         intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 3) ? (inst.data[0]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
                     } else {
                         intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 1) ? (inst.data[0]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
                         intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 2) ? (inst.data[1]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
-                        intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 3) ? (inst.extra_fields) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
+                        intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 3) ? (inst.data[2]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
                     }
                 }
             } else if (inst.op == DENSE_BROADCAST_DATA_OP) { // Always move data (even my own) to the correct location to perform operations later
@@ -142,31 +142,31 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 if (word_snt_cnt.get_cnt() <= data_len_reg) {
                     intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-3] = inst.data[0];
                     intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-2] = inst.data[1];
-                    intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-1] = inst.extra_fields;
+                    intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-1] = inst.data[2];
                 } else { // Will either have 1 or 2 left if we are over the data_len_reg
                     uint16_t num_data_left = data_len_reg - (word_snt_cnt.get_cnt()-3);
-                    intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-3] = (num_data_left == 1) ? inst.extra_fields : inst.data[1];
-                    intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-2] = (num_data_left == 1) ? (intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-2]) : (inst.extra_fields);
+                    intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-3] = (num_data_left == 1) ? inst.data[2] : inst.data[1];
+                    intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-2] = (num_data_left == 1) ? (intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-2]) : (inst.data[2]);
                 }
             }
 
             // Prep new instruction to send
             if (inst.target_or_sender == id) {
                 if (word_snt_cnt.get_cnt() < data_len_reg) { // If last time was me and I have more data to send
-                    struct instruction new_inst = {/*op*/ inst.op, /*target_or_sender*/id, /*data*/{0, 0}, /*extra_fields*/0};
+                    struct instruction new_inst = {/*op*/ inst.op, /*target_or_sender*/ id, /*data*/ {0, 0, 0}};
 
                     if ((data_len_reg - word_snt_cnt.get_cnt() == 2)) { // Only two bytes left
                         new_inst.data = {0, intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()]};
-                        new_inst.extra_fields = intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()+1];
+                        new_inst.data[2] = intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()+1];
                     } else if ((data_len_reg - word_snt_cnt.get_cnt() == 1)) { // Only one byte left
-                        new_inst.extra_fields = intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()];
+                        new_inst.data[2] = intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()];
                     } else {
                         new_inst.data = {intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()], intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()+1]};
-                        new_inst.extra_fields = intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()+2];
+                        new_inst.data[2] = intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()+2];
                     }
                     bus->push_inst(new_inst);
                 } else {
-                    struct instruction inst = {NOP, id, /*data*/{0, 0}, /*extra_fields*/0};
+                    struct instruction inst = {NOP, id, /*data*/ {0, 0, 0}};
                     bus->push_inst(inst);
                 }
             }
@@ -624,7 +624,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case INFERENCE_COMPLETE:
             if (inst.op == PISTOL_START_OP) {
                 if (id == 0) { 
-                    struct instruction inst = {/*op*/ INFERENCE_RESULT_OP, /*target_or_sender*/0, /*data*/{computation_result, 0}, /*extra_fields*/0};
+                    struct instruction inst = {/*op*/ INFERENCE_RESULT_OP, /*target_or_sender*/ 0, /*data*/ {computation_result, 0, 0}};
                     bus->push_inst(inst);
                 }
             }

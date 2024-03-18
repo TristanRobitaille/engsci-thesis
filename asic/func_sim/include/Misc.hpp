@@ -51,8 +51,7 @@ struct instruction {
     /* Instructions between master controller and CiM */
     OP op;
     int target_or_sender; // Should be 6 bits (represents target CiM for all ops except TRANSPOSE_BROADCAST_DATA_OP)
-    std::array<float, 2> data; // 2 words in ASIC
-    float extra_fields; // Opcode-dependent data arrangement
+    std::array<float, 3> data; // 3 words in ASIC
 };
 
 struct ext_signals {
@@ -115,8 +114,7 @@ class Bus {
             inst = {
                 /* op */                NOP,
                 /* target_or_sender */  0,
-                /* data */              {0,0},
-                /* extra_fields */      0};
+                /* data */              {0,0,0}};
             return inst;
         };
         int run() {

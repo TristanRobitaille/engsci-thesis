@@ -62,7 +62,7 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
         if (all_cims_ready == true) {
             if ((eeg != eeg_ds[clip_index].end()) && (all_cims_ready == true)) {
                 float data = *eeg;
-                struct instruction inst = {/*op*/ PATCH_LOAD_BROADCAST_OP, /*target_or_sender*/ 0, /*data*/ {data,0}, /*extra_field*/ 0};
+                struct instruction inst = {/*op*/ PATCH_LOAD_BROADCAST_OP, /*target_or_sender*/ 0, /*data*/ {data,0,0}};
                 bus->push_inst(inst); // Broadcast on bus
                 ++eeg;
             } else if ((eeg == eeg_ds[clip_index].end()) && (all_cims_ready == true)) {
@@ -130,7 +130,7 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
 
             if (gen_cnt_7b.get_cnt() == broadcast_ops.at(high_level_inf_step).num_cims) { // All CiMs sent all data and finished using it, can go back to running inference
                 if ((high_level_inf_step != ENC_MHSA_QK_T_STEP && high_level_inf_step != ENC_MHSA_V_MULT_STEP && high_level_inf_step != ENC_MHSA_PRE_SOFTMAX_TRANS_STEP) || (gen_cnt_7b_3.get_cnt() == (NUM_HEADS-1))) { // These three steps require going through the Z-stack of the Q and K matrices so only increment the step counter when we're done with the Z-stack
-                    struct instruction inst = {/*op*/ PISTOL_START_OP, /*target_or_sender*/ 0, /*data*/ {0,0}, /*extra_fields*/ 0}; // Tell CiMs that they can go to the next step
+                    struct instruction inst = {/*op*/ PISTOL_START_OP, /*target_or_sender*/ 0, /*data*/ {0,0,0}}; // Tell CiMs that they can go to the next step
                     bus->push_inst(inst);
                     high_level_inf_step = static_cast<HIGH_LEVEL_INFERENCE_STEP> (high_level_inf_step+1);
                     gen_cnt_7b_3.reset();
@@ -162,14 +162,14 @@ int Master_Ctrl::start_signal_load(Bus* bus){
     gen_cnt_7b.reset();
     gen_cnt_7b_2.reset();
     cout << "Starting signal load" << endl;
-    instruction inst = {PATCH_LOAD_BROADCAST_START_OP, /*target_or_sender*/ 0, /*data*/ {0,0}, /*extra_fields*/ 0};
+    instruction inst = {PATCH_LOAD_BROADCAST_START_OP, /*target_or_sender*/ 0, /*data*/ {0,0,0}};
     bus->push_inst(inst);
     return 0;
 }
 
 struct instruction Master_Ctrl::param_to_send(){
     /* Parses the parameter file and returns the instruction that master needs to send to CiM */
-    struct instruction inst = {NOP, 0, {0,0}, 0};
+    struct instruction inst = {NOP, 0, {0,0,0}};
 
     /* 
     * Note: gen_bit holds whether we've sent the first CiM of a layer
@@ -191,9 +191,9 @@ struct instruction Master_Ctrl::param_to_send(){
         if (((gen_bit == false) || (gen_cnt_7b.get_cnt() >= param_addr_map[params_curr_layer].len)) && (gen_cnt_7b_2.get_cnt() < param_addr_map[params_curr_layer].num_rec)) { // Starting a new CiM (if not done all layers)
             uint16_t addr = param_addr_map[params_curr_layer].addr;
             uint16_t length = param_addr_map[params_curr_layer].len;
-            array<float, 2> data = {static_cast<float>(addr), static_cast<float>(length)};
+            array<float, 3> data = {static_cast<float>(addr), static_cast<float>(length), 0};
 
-            inst = {DATA_STREAM_START_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data={start_addr, length_elem}*/ data, /*extra_fields*/ 0};
+            inst = {DATA_STREAM_START_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data={start_addr, length_elem, 0}*/ data};
             gen_bit = true;
             gen_cnt_7b.reset();
         } else if (gen_cnt_7b.get_cnt() < param_addr_map[params_curr_layer].len) { // Sending data to a CiM
@@ -216,30 +216,30 @@ struct instruction Master_Ctrl::param_to_send(){
         if ((gen_cnt_7b_2.get_cnt() < param_addr_map[params_curr_layer].num_rec) && (gen_cnt_7b.get_cnt() == 0)) {
             uint16_t addr = param_addr_map[params_curr_layer].addr;
             uint16_t length = param_addr_map[params_curr_layer].len;
-            std::array<float, 2> data = {static_cast<float>(addr), static_cast<float>(length)};
-            inst = {DATA_STREAM_START_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data={start_addr, length_elem}*/ data, /*extra_fields*/ 0};
+            std::array<float, 3> data = {static_cast<float>(addr), static_cast<float>(length), 0};
+            inst = {DATA_STREAM_START_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data={start_addr, length_elem}*/ data};
             gen_cnt_7b.inc(); // Use as indication that next time this runs, we go to the else if () below
 
         } else if (gen_cnt_7b_2.get_cnt() < param_addr_map[params_curr_layer].num_rec){
             if (gen_cnt_7b.get_cnt() == 1) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.patch_proj_bias[gen_cnt_7b_2.get_cnt()], params.class_emb[gen_cnt_7b_2.get_cnt()]}, /*extra_fields*/ params.layernorm_gamma[0][gen_cnt_7b_2.get_cnt()]};
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.patch_proj_bias[gen_cnt_7b_2.get_cnt()], params.class_emb[gen_cnt_7b_2.get_cnt()], params.layernorm_gamma[0][gen_cnt_7b_2.get_cnt()]}};
                 gen_cnt_7b.inc();
             } else if (gen_cnt_7b.get_cnt() == 2) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.layernorm_beta[0][gen_cnt_7b_2.get_cnt()], params.enc_mhsa_Q_bias[gen_cnt_7b_2.get_cnt()]}, /*extra_fields*/ params.enc_mhsa_K_bias[gen_cnt_7b_2.get_cnt()]};
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.layernorm_beta[0][gen_cnt_7b_2.get_cnt()], params.enc_mhsa_Q_bias[gen_cnt_7b_2.get_cnt()], params.enc_mhsa_K_bias[gen_cnt_7b_2.get_cnt()]}};
                 gen_cnt_7b.inc();
             } else if (gen_cnt_7b.get_cnt() == 3) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.enc_mhsa_V_bias[gen_cnt_7b_2.get_cnt()], params.enc_mhsa_sqrt_num_heads}, /*extra_fields*/ params.enc_mhsa_combine_bias[gen_cnt_7b_2.get_cnt()]};
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.enc_mhsa_V_bias[gen_cnt_7b_2.get_cnt()], params.enc_mhsa_sqrt_num_heads, params.enc_mhsa_combine_bias[gen_cnt_7b_2.get_cnt()]}};
                 gen_cnt_7b.inc();
             } else if (gen_cnt_7b.get_cnt() == 4) {
                 // Note: CiM's 0-31 receive bias for the encoder's MLP and CiM's 32-63 receive bias for the MLP head
-                if (gen_cnt_7b_2.get_cnt() < MLP_DIM) { inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.layernorm_gamma[1][gen_cnt_7b_2.get_cnt()], params.layernorm_beta[1][gen_cnt_7b_2.get_cnt()]}, /*extra_fields*/ params.enc_mlp_dense_1_bias[gen_cnt_7b_2.get_cnt()]}; }
-                else {                                  inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.layernorm_gamma[1][gen_cnt_7b_2.get_cnt()], params.layernorm_beta[1][gen_cnt_7b_2.get_cnt()]}, /*extra_fields*/ params.mlp_head_dense_1_bias[gen_cnt_7b_2.get_cnt()-MLP_DIM]}; }
+                if (gen_cnt_7b_2.get_cnt() < MLP_DIM) { inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.layernorm_gamma[1][gen_cnt_7b_2.get_cnt()], params.layernorm_beta[1][gen_cnt_7b_2.get_cnt()], params.enc_mlp_dense_1_bias[gen_cnt_7b_2.get_cnt()]}}; }
+                else {                                  inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.layernorm_gamma[1][gen_cnt_7b_2.get_cnt()], params.layernorm_beta[1][gen_cnt_7b_2.get_cnt()], params.mlp_head_dense_1_bias[gen_cnt_7b_2.get_cnt()-MLP_DIM]}}; }
                 gen_cnt_7b.inc();
             } else if (gen_cnt_7b.get_cnt() == 5) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.enc_mlp_dense_2_bias[gen_cnt_7b_2.get_cnt()], params.layernorm_gamma[2][gen_cnt_7b_2.get_cnt()]}, /*extra_fields*/ params.layernorm_beta[2][gen_cnt_7b_2.get_cnt()]};
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.enc_mlp_dense_2_bias[gen_cnt_7b_2.get_cnt()], params.layernorm_gamma[2][gen_cnt_7b_2.get_cnt()], params.layernorm_beta[2][gen_cnt_7b_2.get_cnt()]}};
                 gen_cnt_7b.inc();
             } else if (gen_cnt_7b.get_cnt() == 6) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.mlp_head_dense_2_bias[gen_cnt_7b_2.get_cnt()], 0}, /*extra_fields*/ 0};
+                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.mlp_head_dense_2_bias[gen_cnt_7b_2.get_cnt()], 0, 0}};
                 gen_cnt_7b_2.inc();
                 gen_cnt_7b.reset();
             }
@@ -317,45 +317,55 @@ void Master_Ctrl::update_inst_with_params(PARAM_NAME param_name, struct instruct
 
     switch (param_name) {
     case PATCH_PROJ_KERNEL_PARAMS:
-        inst->data = {params.patch_proj_kernel[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()], (num_left == 1) ? (0) : (params.patch_proj_kernel[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()])};
-        inst->extra_fields = (num_left <= 2) ? (0) : params.patch_proj_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()];
+        inst->data = {  params.patch_proj_kernel[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()],
+                        (num_left == 1) ? 0 : params.patch_proj_kernel[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()],
+                        (num_left <= 2) ? 0 : params.patch_proj_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()]};
         break;
     case POS_EMB_PARAMS:
-        inst->data = {params.pos_emb[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()], (num_left == 1) ? (0) : (params.pos_emb[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()])};
-        inst->extra_fields = (num_left <= 2) ? (0) : params.pos_emb[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()];
+        inst->data = {  params.pos_emb[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()], 
+                        (num_left == 1) ? 0 : params.pos_emb[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()], 
+                        (num_left <= 2) ? 0 : params.pos_emb[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()]};
         break;
     case ENC_Q_DENSE_PARAMS:
-        inst->data = {params.enc_mhsa_Q_kernel[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()], (num_left == 1) ? (0) : (params.enc_mhsa_Q_kernel[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()])};
-        inst->extra_fields = (num_left <= 2) ? (0) : params.enc_mhsa_Q_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()];
+        inst->data = {  params.enc_mhsa_Q_kernel[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()],
+                        (num_left == 1) ? 0 : params.enc_mhsa_Q_kernel[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()],
+                        (num_left <= 2) ? 0 : params.enc_mhsa_Q_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()]};
         break;
     case ENC_K_DENSE_PARAMS:
-        inst->data = {params.enc_mhsa_K_kernel[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()], (num_left == 1) ? (0) : (params.enc_mhsa_K_kernel[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()])};
-        inst->extra_fields = (num_left <= 2) ? (0) : params.enc_mhsa_K_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()];
+        inst->data = {  params.enc_mhsa_K_kernel[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()],
+                        (num_left == 1) ? 0 : params.enc_mhsa_K_kernel[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()],
+                        (num_left <= 2) ? 0 : params.enc_mhsa_K_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()]};
         break;
     case ENC_V_DENSE_PARAMS:
-        inst->data = {params.enc_mhsa_V_kernel[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()], (num_left == 1) ? (0) : (params.enc_mhsa_V_kernel[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()])};
-        inst->extra_fields = (num_left <= 2) ? (0) : params.enc_mhsa_V_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()];
+        inst->data = {  params.enc_mhsa_V_kernel[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()],
+                        (num_left == 1) ? 0 : params.enc_mhsa_V_kernel[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()],
+                        (num_left <= 2) ? 0 : params.enc_mhsa_V_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()]};
         break;
     case ENC_COMB_HEAD_PARAMS:
-        inst->data = {params.enc_mhsa_combine_kernel[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()], (num_left == 1) ? (0) : (params.enc_mhsa_combine_kernel[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()])};
-        inst->extra_fields = (num_left <= 2) ? (0) : params.enc_mhsa_combine_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()];
+        inst->data = {  params.enc_mhsa_combine_kernel[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()],
+                        (num_left == 1) ? 0 : params.enc_mhsa_combine_kernel[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()],
+                        (num_left <= 2) ? 0 : params.enc_mhsa_combine_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()]};
         break;
     case ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS:
         if (gen_cnt_7b_2.get_cnt() < MLP_DIM) { // Encoder's MLP (only CiMs 0-31 receive bias for the encoder's MLP and CiM's 32-63 receive bias for the MLP head)
-            inst->data = {params.enc_mlp_dense_1_kernel[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()], (num_left == 1) ? (0) : (params.enc_mlp_dense_1_kernel[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()])};
-            inst->extra_fields = (num_left <= 2) ? (0) : params.enc_mlp_dense_1_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()];
+            inst->data = {  params.enc_mlp_dense_1_kernel[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()],
+                            (num_left == 1) ? 0 : params.enc_mlp_dense_1_kernel[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()],
+                            (num_left <= 2) ? 0 : params.enc_mlp_dense_1_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()]};
         } else { // MLP head (only 1 layer)
-            inst->data = {params.mlp_head_dense_1_kernel[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()-MLP_DIM], (num_left == 1) ? (0) : (params.mlp_head_dense_1_kernel[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()-MLP_DIM])};
-            inst->extra_fields = (num_left <= 2) ? (0) : params.mlp_head_dense_1_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()-MLP_DIM];
+            inst->data = {  params.mlp_head_dense_1_kernel[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()-MLP_DIM],
+                            (num_left == 1) ? 0 : params.mlp_head_dense_1_kernel[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()-MLP_DIM],
+                            (num_left <= 2) ? 0 : params.mlp_head_dense_1_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()-MLP_DIM]};
         }
         break;
     case ENC_MLP_DENSE_2_PARAMS:
-        inst->data = {params.enc_mlp_dense_2_kernel[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()], (num_left == 1) ? (0) : (params.enc_mlp_dense_2_kernel[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()])};
-        inst->extra_fields = (num_left <= 2) ? (0) : params.enc_mlp_dense_2_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()];
+        inst->data = {  params.enc_mlp_dense_2_kernel[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()],
+                        (num_left == 1) ? 0 : params.enc_mlp_dense_2_kernel[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()],
+                        (num_left <= 2) ? 0 : params.enc_mlp_dense_2_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()]};
         break;
     case MLP_HEAD_DENSE_2_PARAMS:
-        inst->data = {params.mlp_head_dense_2_kernel[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()], (num_left == 1) ? (0) : (params.mlp_head_dense_2_kernel[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()])};
-        inst->extra_fields = (num_left <= 2) ? (0) : params.mlp_head_dense_2_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()];
+        inst->data = {  params.mlp_head_dense_2_kernel[gen_cnt_7b.get_cnt()][gen_cnt_7b_2.get_cnt()],
+                        (num_left == 1) ? 0 : params.mlp_head_dense_2_kernel[gen_cnt_7b.get_cnt()+1][gen_cnt_7b_2.get_cnt()],
+                        (num_left <= 2) ? 0 : params.mlp_head_dense_2_kernel[gen_cnt_7b.get_cnt()+2][gen_cnt_7b_2.get_cnt()]};
         break;
     default:
         throw invalid_argument("Invalid parameter name");
@@ -364,7 +374,7 @@ void Master_Ctrl::update_inst_with_params(PARAM_NAME param_name, struct instruct
 
 int Master_Ctrl::prepare_for_broadcast(broadcast_op_info op_info, Bus* bus) {
     /* Prepares the master controller for a broadcast operation */
-    struct instruction inst = {op_info.op, /*target_or_sender*/ gen_cnt_7b.get_cnt(), {op_info.tx_addr, op_info.len}, op_info.rx_addr};
+    struct instruction inst = {op_info.op, /*target_or_sender*/ gen_cnt_7b.get_cnt(), {op_info.tx_addr, op_info.len, op_info.rx_addr}};
     state = BROADCAST_MANAGEMENT;
     
     if (high_level_inf_step == ENC_MHSA_QK_T_STEP) { // Need to modify instruction based on where we are in the Z-stack of the Q and K matrices
@@ -373,7 +383,7 @@ int Master_Ctrl::prepare_for_broadcast(broadcast_op_info op_info, Bus* bus) {
         inst.data[0] = op_info.tx_addr + gen_cnt_7b_3.get_cnt()*(NUM_PATCHES+1);
     } else if (high_level_inf_step == ENC_MHSA_PRE_SOFTMAX_TRANS_STEP) {
         inst.data[0] = op_info.tx_addr + gen_cnt_7b_3.get_cnt()*(NUM_PATCHES+1);
-        inst.extra_fields = op_info.rx_addr + gen_cnt_7b_3.get_cnt()*(NUM_PATCHES+1);
+        inst.data[2] = op_info.rx_addr + gen_cnt_7b_3.get_cnt()*(NUM_PATCHES+1);
     } else if (high_level_inf_step == PRE_MLP_HEAD_DENSE_2_TRANS_STEP) {
         inst.target_or_sender = MLP_DIM + gen_cnt_7b.get_cnt();
     }
