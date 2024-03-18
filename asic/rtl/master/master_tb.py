@@ -11,7 +11,7 @@ import cocotb.triggers
 from cocotb.clock import Clock
 
 #----- EXTERNAL MEMORY -----#
-params = h5py.File("../../func_sim/reference_data/model_params.h5", "r")
+params = h5py.File("../../func_sim/reference_data/model_weights.h5", "r")
 READ_LATENCY = 3 # Number of clock cycles to read from external memory
 ext_mem_latency_cnt = READ_LATENCY+1
 prev_ext_mem_read_pulse = 0
@@ -120,11 +120,11 @@ eeg_index = 0
 async def send_eeg_from_adc(dut):
     global eeg_index
     dut.new_eeg_sample.value = 1
-    dut.eeg_sample.value = int(eeg["eeg"][eeg_index])
+    dut.eeg_sample.value = int(eeg["eeg"][CLIP_INDEX][eeg_index])
     await RisingEdge(dut.clk)
     dut.new_eeg_sample.value = 0
     for _ in range(2): await RisingEdge(dut.clk)
-    expected_eeg = BinToDec(int(eeg["eeg"][eeg_index])/(2**16), num_Q_storage)
+    expected_eeg = BinToDec(int(eeg["eeg"][CLIP_INDEX][eeg_index])/(2**16), num_Q_storage)
     assert ((expected_eeg-1) <= int(dut.bus_data_write.value[32:47]) <= (expected_eeg+1)), f"EEG data sent on bus ({int(dut.bus_data_write.value[32:47])}) doesn't match expected, normalize, fixed-point EEG data ({expected_eeg})"
     eeg_index += 1
 

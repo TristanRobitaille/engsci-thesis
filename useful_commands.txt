@@ -46,6 +46,7 @@ Tensorflow Lite model converter:
 EdgeTPU runner: source ../coral/bin/activate && python3 edgetpu_runner.py --model_fp=path_to_model --data_dir=directory_of_numpy_arrays
 
 ASIC (run from /asic):
+    -[Verilator/CocoTB] Activate virtual env: source rtl/rtl_env/bin/activate
     -[Verilator/CocoTB] Compile Verilog and run testbench: clear && make
     -[Verilator/CocoTB] Compile Verilog, run simulation and launch waveform viewer: clear && make && gtkwave dump.vcd
     -[Design Vision] Launch: source launch_dv.sh

@@ -47,8 +47,10 @@ module master (
 
     // Instantiate counters
     logic gen_cnt_2b_rst_n, gen_cnt_7b_rst_n, gen_cnt_7b_2_rst_n;
-    logic [1:0] gen_cnt_2b_cnt, gen_cnt_2b_inc;
-    logic [6:0] gen_cnt_7b_cnt, gen_cnt_7b_2_cnt, gen_cnt_7b_inc, gen_cnt_7b_2_inc;
+    logic [1:0] gen_cnt_2b_inc;
+    logic [6:0] gen_cnt_7b_inc, gen_cnt_7b_2_inc;
+    wire [1:0] gen_cnt_2b_cnt;
+    wire [6:0] gen_cnt_7b_cnt, gen_cnt_7b_2_cnt;
     counter #(.WIDTH(2), .MODE(0)) gen_cnt_2b   (.clk(clk), .rst_n(gen_cnt_2b_rst_n), .inc(gen_cnt_2b_inc), .cnt(gen_cnt_2b_cnt));
     counter #(.WIDTH(7), .MODE(0)) gen_cnt_7b   (.clk(clk), .rst_n(gen_cnt_7b_rst_n), .inc(gen_cnt_7b_inc), .cnt(gen_cnt_7b_cnt));
     counter #(.WIDTH(7), .MODE(0)) gen_cnt_7b_2 (.clk(clk), .rst_n(gen_cnt_7b_2_rst_n), .inc(gen_cnt_7b_2_inc), .cnt(gen_cnt_7b_2_cnt));

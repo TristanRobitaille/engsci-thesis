@@ -55,7 +55,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/asic/func_sim/func_sim",
-            "args": ["--start_index", "0", "--end_index", "1", "--results_csv_fp", "${workspaceFolder}/asic/fixed_point_accuracy_study/results_test.csv"],
+            "args": ["--start_index", "0", "--end_index", "0", "--results_csv_fp", ""],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/asic/func_sim/",
             "environment": [],

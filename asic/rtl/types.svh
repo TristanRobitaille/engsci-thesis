@@ -3,10 +3,9 @@
 
 /*----- PARAMETERS -----*/
     // Fixed-point parameters
+    // verilator lint_off UNUSEDPARAM
     parameter   N_STORAGE = 16, // 16b total (for storage)
-                // verilator lint_off UNUSEDPARAM
                 N_COMP = 22, // 22b total (for temporary results of computation)
-                // verilator lint_on UNUSEDPARAM
                 Q = 10; // 10b fractional
 
     // Bus parameters
@@ -26,6 +25,7 @@
                 TEMP_RES_STORAGE_SIZE_CIM = 848;
  
     parameter   EEG_SAMPLE_DEPTH = 16;
+    // verilator lint_on UNUSEDPARAM
 
 /*----- TYPES -----*/
 typedef enum reg [BUS_OP_WIDTH-1:0] {

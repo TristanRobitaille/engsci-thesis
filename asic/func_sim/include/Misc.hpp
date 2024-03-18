@@ -51,7 +51,7 @@ struct instruction {
     /* Instructions between master controller and CiM */
     OP op;
     int target_or_sender; // Should be 6 bits (represents target CiM for all ops except TRANSPOSE_BROADCAST_DATA_OP)
-    std::array<float, 2> data; // 2 bytes in ASIC
+    std::array<float, 2> data; // 2 words in ASIC
     float extra_fields; // Opcode-dependent data arrangement
 };
 

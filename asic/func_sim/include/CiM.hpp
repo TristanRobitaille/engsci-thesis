@@ -150,7 +150,7 @@ class CiM {
         bool compute_in_progress = false; // Used by compute element to notify CiM controller when is in progress
         bool is_ready = true; // Signal that CiM can use to override the compute_in_progress signal and force the master to wait before sending the next instruction
         uint16_t id; // ID of the CiM
-        uint16_t gen_reg_16b; // General-purpose register
+        uint16_t gen_reg_3b; // General-purpose register
         uint16_t tx_addr_reg; // Record the address of the data sent on the bus
         uint16_t rx_addr_reg; // Record the address of the data received on the bus
         uint16_t sender_id; // Record the id of an instruction's sender at a start of broadcast
@@ -166,17 +166,16 @@ class CiM {
 
         STATE cim_state;
         INFERENCE_STEP current_inf_step = CLASS_TOKEN_CONCAT_STEP;
-        OP prev_bus_op;
-        Counter gen_cnt_10b;
-        Counter gen_cnt_10b_2;
-        Counter bytes_rec_cnt; // Tracks the # of bytes received from the bus that are relevant to me
-        Counter bytes_sent_cnt; // Tracks the # of bytes sent to the bus
+        Counter gen_cnt_7b;
+        Counter gen_cnt_7b_2;
+        Counter word_rec_cnt; // Tracks the # of words received from the bus that are relevant to me
+        Counter word_snt_cnt; // Tracks the # of s sent to the bus
 
         // Metrics
-        uint32_t _neg_exp_cnt; // Track # of exponentials that have a negative argument
-        uint32_t _total_exp_cnt; // Track the # of exponentials performed
-        large_fp_t _max_exp_input_arg; // Track the maximum input argument to the exponential
-        large_fp_t _min_exp_input_arg; // Track the minimum input argument to the exponential
+        uint32_t _neg_exp_cnt; // [Not in ASIC] Track # of exponentials that have a negative argument
+        uint32_t _total_exp_cnt; // [Not in ASIC] Track the # of exponentials performed
+        large_fp_t _max_exp_input_arg; // [Not in ASIC] Track the maximum input argument to the exponential
+        large_fp_t _min_exp_input_arg; // [Not in ASIC] Track the minimum input argument to the exponential
 
         void update_compute_process_cnt();
         void ADD(uint16_t in1_addr, uint16_t in2_addr, INPUT_TYPE in2_type);
@@ -190,9 +189,10 @@ class CiM {
         large_fp_t floor_fpm(large_fp_t input);
         void update_state(STATE new_state);
         void load_previous_softmax();
+        void overflow_check();
 
     public:
-        CiM() : id(-1), gen_cnt_10b(10), gen_cnt_10b_2(10), bytes_rec_cnt(8), bytes_sent_cnt(8) {}
+        CiM() : id(-1), gen_cnt_7b(7), gen_cnt_7b_2(7), word_rec_cnt(7), word_snt_cnt(7) {}
         CiM(const int16_t cim_id);
         bool get_is_ready();
         int reset();

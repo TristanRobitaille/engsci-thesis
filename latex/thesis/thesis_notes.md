@@ -25,6 +25,10 @@
     - Number of clock cyles per operation
 - Discussion about memory
     - Amount of memory (intermediate results and params storage)
+- What else could we run this on?
+    - ARM-Cortex MCU and Edge TPU
+    - Power consumption of STM32L4
+    - Runtime 
 - Next steps
     - Potentially reduce number of data transpose needed (don't train beta and gamma in LayerNorm, etc.)
     - Architecture changes

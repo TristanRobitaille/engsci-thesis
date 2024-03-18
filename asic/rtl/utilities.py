@@ -45,6 +45,7 @@ SAMPLING_FREQ_HZ = 128
 CLIP_LENGTH_S = 30
 EEG_SAMPLING_PERIOD_CLOCK_CYCLE = 10 # Cannot simulate the real sampling period as it would take too long
 INTERLUDE_CLOCK_CYCLES = 10000
+CLIP_INDEX = 1 # Clip index to be used for the test
 
 num_Q_storage = FXfamily(NUM_FRACT_BITS, NUM_INT_BITS_STORAGE)
 num_Q_comp = FXfamily(NUM_FRACT_BITS, NUM_INT_BITS_COMP)
