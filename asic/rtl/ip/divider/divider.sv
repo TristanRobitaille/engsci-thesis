@@ -51,7 +51,7 @@ module divider #(
             dbz         <= 0;
             done        <= 0;
         end else begin
-            case (state)
+            unique case (state)
                 IDLE: begin
                     count <= 'b0;
                     done <= start ? 0 : done;
@@ -78,6 +78,7 @@ module divider #(
                     busy <= 0;
                     state <= IDLE;
                 end
+                default: state <= IDLE;
             endcase
         end
     end

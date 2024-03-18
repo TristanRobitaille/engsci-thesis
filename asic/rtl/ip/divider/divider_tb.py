@@ -10,7 +10,7 @@ from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
    
 @cocotb.test()
-async def int_count(dut):
+async def random_test(dut):
     cocotb.start_soon(Clock(dut.clk, 1, units="ns").start())
     await reset(dut)
 
@@ -19,9 +19,9 @@ async def int_count(dut):
         dividend = random.uniform(-200, -200)
         divisor = random.uniform(-2000, -2000)
         if (abs(divisor) < 0.1): divisor = 0.1
-        dut.dividend.value = BinToDec(dividend)
-        dut.divisor.value = BinToDec(divisor)
-        expected = FXnum(dividend, num_Q)/FXnum(divisor, num_Q)
+        dut.dividend.value = BinToDec(dividend, num_Q_comp)
+        dut.divisor.value = BinToDec(divisor, num_Q_comp)
+        expected = FXnum(dividend, num_Q_comp)/FXnum(divisor, num_Q_comp)
         expected_str = expected.toBinaryString(logBase=1).replace(".","")
 
         await start_pulse(dut)

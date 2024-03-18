@@ -14,8 +14,8 @@ async def output_check(dut, in1:float, in2:float, expected=None):
         expected = FXnum(in1, num_Q_comp)*FXnum(in2, num_Q_comp)
     expected_str = expected.toBinaryString(logBase=1).replace(".","")
 
-    dut.input_q_1.value = BinToDec(in1)
-    dut.input_q_2.value = BinToDec(in2)
+    dut.input_q_1.value = BinToDec(in1, num_Q_comp)
+    dut.input_q_2.value = BinToDec(in2, num_Q_comp)
     for _ in range(2): await RisingEdge(dut.clk)
     assert (dut.output_q.value == int(expected_str, base=2) or dut.output_q.value == (int(expected_str, base=2)-1)), f"Expected: {int(expected_str, base=2)}, received: {int(str(dut.output_q.value), base=2)} (in1: {in1:.6f}, in2: {in2:.6f})"
 
@@ -25,8 +25,8 @@ async def basic_reset(dut):
     await start_routine_basic_arithmetic(dut)
     input1 = -0.5
     input2 = 10.25
-    dut.input_q_1.value = BinToDec(input1)
-    dut.input_q_2.value = BinToDec(input2)
+    dut.input_q_1.value = BinToDec(input1, num_Q_comp)
+    dut.input_q_2.value = BinToDec(input2, num_Q_comp)
 
     # Reset
     for _ in range(2): await RisingEdge(dut.clk)
@@ -40,7 +40,7 @@ async def basic_reset(dut):
     await output_check(dut, 2.5, 13.25, num_Q_comp(input1)*num_Q_comp(input2))
 
 @cocotb.test()
-async def basic_mult(dut):
+async def random_test(dut):
     await start_routine_basic_arithmetic(dut)
     input_q_1 = [0, 1, 1, 0]
     input_q_2 = [0, 1, -1, -1]
@@ -65,7 +65,7 @@ async def overflow(dut):
     for _ in range(2): await RisingEdge(dut.clk)
 
     for i in range(len(input_q_1)):
-        dut.input_q_1.value = BinToDec(input_q_1[i])
-        dut.input_q_2.value = BinToDec(input_q_2[i])
+        dut.input_q_1.value = BinToDec(input_q_1[i], num_Q_comp)
+        dut.input_q_2.value = BinToDec(input_q_2[i], num_Q_comp)
         for _ in range(2): await RisingEdge(dut.clk)
         assert dut.overflow.value == 1, "Overflow not set as expected!"

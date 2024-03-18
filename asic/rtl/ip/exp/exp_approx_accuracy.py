@@ -2,14 +2,14 @@
 Measure the accuracy of the exponential approximation: e^x = 2^(x/ln(2))
 """
 import sys
-sys.path.append("..")
+sys.path.append("../../")
 import math
-from asic.rtl.utilities import *
+from utilities import *
 from FixedPoint import FXnum
 
 NUM_POINTS = 1000
-MIN_ARG = -3
-MAX_ARG = 3
+MIN_ARG = -4
+MAX_ARG = 4
 
 max_error_float_rel = 0
 max_error_float_input = 0
@@ -18,18 +18,18 @@ max_error_fix_input = 0
 taylor_multipliers = [1, math.log(2,math.e), math.log(2,math.e)**2/2, math.log(2,math.e)**3/6]
 
 # Print Taylor series multipliers in fixed point format
-print(f"1/ln(2): {num_Q(1/math.log(2,math.e)).toBinaryString(logBase=1, twosComp=True)}")
+print(f"1/ln(2): {num_Q_comp(1/math.log(2,math.e)).toBinaryString(logBase=1, twosComp=True)}")
 for i in range(len(taylor_multipliers)):
-    print(f"ln(2)^{i}/{i}!: {num_Q(taylor_multipliers[i]).toBinaryString(logBase=1, twosComp=True)}")
+    print(f"ln(2)^{i}/{i}!: {num_Q_comp(taylor_multipliers[i]).toBinaryString(logBase=1, twosComp=True)}")
 
 # Loops though NUM_POINTS points between min and max
 for i in range(NUM_POINTS):
     x = MIN_ARG + (MAX_ARG - MIN_ARG) * i / NUM_POINTS
-    x_fix = FXnum(x, num_Q).exp()
+    x_fix = FXnum(x, num_Q_comp)
     real_float = math.exp(x) # Calculate the real value of e^x (as a float)
     real_fix = x_fix.exp() # Calculate the real value of e^x (as a fixed-point)
 
-    x_for_approx = x_fix / FXnum(math.log(2, math.e), num_Q) # Calculate the argument for the approximation
+    x_for_approx = x_fix / FXnum(math.log(2, math.e), num_Q_comp) # Calculate the argument for the approximation
     x_int = math.floor(x_for_approx)
     x_frac = x_for_approx - x_int # Get fractional part of x_for_approx
     if (x_int < 0): int_part = 1 / (1 << abs(x_int)) # Calculate the integer part of the approximation

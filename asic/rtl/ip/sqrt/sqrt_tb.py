@@ -17,15 +17,15 @@ async def start_pulse(dut):
     await RisingEdge(dut.clk)
 
 @cocotb.test()
-async def int_count(dut):
+async def random_test(dut):
     cocotb.start_soon(Clock(dut.clk, 1, units="ns").start())
     await reset(dut)
 
     for _ in range(1000):
         await RisingEdge(dut.clk)
         radicand = random.uniform(0, 200)
-        dut.rad_q.value = BinToDec(radicand)
-        expected = FXnum(radicand, num_Q).sqrt()
+        dut.rad_q.value = BinToDec(radicand, num_Q_comp)
+        expected = FXnum(radicand, num_Q_comp).sqrt()
         expected_str = expected.toBinaryString(logBase=1).replace(".","")
 
         await start_pulse(dut)
