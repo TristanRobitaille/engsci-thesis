@@ -1,6 +1,0 @@
-<testsuites name="results">
-  <testsuite name="all" package="all">
-    <property name="random_seed" value="1710727496" />
-    <testcase name="basic_reset" classname="cim_tb" file="/Users/tristan/Developer/engsci-thesis/asic/rtl/cim/cim_tb.py" lineno="12" time="0.08110380172729492" sim_time_ns="10010.001" ratio_time="123422.09350010288" />
-  </testsuite>
-</testsuites>
