@@ -33,6 +33,7 @@
     - Potentially reduce number of data transpose needed (don't train beta and gamma in LayerNorm, etc.)
     - Architecture changes
     - Training on different datasets
+    - Evaluate dynamic fixed-point (different Q and N based on layer)
 
 ## Interesting project metrics
 - Number of lines of code (Python, C++, SystemVerilog, Tex, Shell)

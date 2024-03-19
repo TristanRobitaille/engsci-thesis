@@ -6,8 +6,8 @@
 module adder #(
     parameter N = 22    // 22b total
 )(
-    input logic clk,
-    input logic rst_n,
+    input wire clk,
+    input wire rst_n,
     input refresh, // Update output when this is set
 
     // Data in 2's complement format
@@ -27,4 +27,9 @@ module adder #(
 
     assign overflow = (input_q_1[N-1] == input_q_2[N-1]) && (input_q_1[N-1] != output_q[N-1]);
 
+    // Note: Verilator does not support assertions
+    always @(posedge clk) begin : adder_assertions
+        if (overflow)
+            $display("Overflow detected in adder!");
+    end
 endmodule // adder

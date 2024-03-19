@@ -7,15 +7,14 @@ module multiplier #(
     parameter N = 22, // 22b total
     parameter Q = 10 // 10b fractional
 )(
-    input logic clk,
-    input logic rst_n,
+    input wire clk,
+    input wire rst_n,
     input refresh, // Update output when this is set
 
     // Data in 2's complement format
     input wire signed [N-1:0] input_q_1,
     input wire signed [N-1:0] input_q_2,
-    output logic signed [N-1:0] output_q,
-    output wire overflow
+    output logic signed [N-1:0] output_q
 );
 
     logic signed [2*N-1:0] temp_result;
@@ -27,6 +26,4 @@ module multiplier #(
         end
     end
     assign output_q = temp_result[N-1+Q:Q];
-    assign overflow = (input_q_1[N-1] ^ input_q_2[N-1]) ? (~output_q[N-1]) : (output_q[N-1] != input_q_1[N-1]); // Overflow
-
 endmodule

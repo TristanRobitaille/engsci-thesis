@@ -1,0 +1,94 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Tue Mar 19 05:24:30 2024
+[*]
+[dumpfile] "dump.vcd"
+[dumpfile_mtime] "Tue Mar 19 05:16:44 2024"
+[dumpfile_size] 160191
+[savefile] "mac.gtkw"
+[timestart] 286760
+[size] 2672 1042
+[pos] 2288 307
+*-14.100000 366470 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[markername] AA
+[markername] BB
+[markername] CC
+[markername] DD
+[markername] EE
+[markername] FF
+[markername] GG
+[markername] HH
+[markername] II
+[markername] JJ
+[markername] KK
+[markername] LL
+[markername] MM
+[markername] NN
+[markername] OO
+[markername] PP
+[markername] QQ
+[markername] RR
+[markername] SS
+[markername] TT
+[markername] UU
+[markername] VV
+[markername] WW
+[markername] XX
+[markername] YY
+[markername] ZZ
+[treeopen] top.
+[sst_width] 335
+[signals_width] 350
+[sst_expanded] 1
+[sst_vpaned_height] 105
+@28
+clk
+@c00024
+top.mac_inst.state[2:0]
+@28
+(0)top.mac_inst.state[2:0]
+(1)top.mac_inst.state[2:0]
+(2)top.mac_inst.state[2:0]
+@1401200
+-group_end
+@24
+top.activation[1:0]
+@28
+top.start
+top.mac_inst.busy
+top.done
+@420
+top.mac_inst.index[6:0]
+@200
+-
+@22
+[color] 2
+top.mac_inst.param_addr[9:0]
+@28
+[color] 2
+top.mac_inst.int_res_mem_access_req
+[color] 2
+top.mac_inst.params_mem_access_req
+@200
+-
+@24
+>600
+top.mul_input_q_1[29:0]
+>600
+top.mul_input_q_2[29:0]
+@25
+>600
+top.mul_output_q[29:0]
+@24
+>600
+top.compute_temp[29:0]
+>600
+top.computation_result[29:0]
+>0
+top.add_input_q_1[29:0]
+top.add_input_q_2[29:0]
+top.add_output_q[29:0]
+top.intermediate_res_data[15:0]
+top.intermediate_res_addr[9:0]
+[pattern_trace] 1
+[pattern_trace] 0

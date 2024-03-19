@@ -5,21 +5,21 @@
     - Signal overflow is asserted when the division result has overflowed, and persists until the next start pulse.
     - Signal busy is asserted during the division process.
     - Inputs must remain stable until done is asserted.
-    - Computation time is N+Q+2 cycles, where N is the total number of bits, and Q is the number of fractional bits.
+    - Computation time is N+Q+3 cycles, where N is the total number of bits, and Q is the number of fractional bits.
 */
 
 module divider #(
     parameter N = 22, // 22b total
     parameter Q = 10 // 10b fractional
 )(
-    input logic clk,
-    input logic rst_n,
-    input logic start,
+    input wire clk,
+    input wire rst_n,
+    input wire start,
 
     // Data in 2's complement format
     output logic busy, done, dbz, overflow,
-    input logic signed [N-1:0] dividend,
-    input logic signed [N-1:0] divisor,
+    input wire signed [N-1:0] dividend,
+    input wire signed [N-1:0] divisor,
     output logic signed [N-1:0] output_q
 );
 
@@ -41,7 +41,7 @@ module divider #(
         divisor_abs = (divisor[N-1]) ? -divisor[N-2:0] : divisor[N-2:0]; // Take abs value
     end
 
-    enum [1:0] {IDLE, CALC, SIGN} state;
+    enum [1:0] {IDLE, CALC, SIGN, ROUND} state;
     always_ff @ (posedge clk) begin : divider_FSM
         if (!rst_n) begin
             state       <= IDLE;
@@ -63,13 +63,19 @@ module divider #(
                 end
                 CALC: begin
                     if (count == N+Q-1) begin
-                        state <= SIGN;
+                        state <= ROUND;
                     end else begin
                         count <= count + 1;
                         acc <= acc_next;
                         quo <= quo_next;
                         state <= CALC;
                         overflow <= (count == N-1) && (quo_next[N-2:N-1-Q] != '0);
+                    end
+                end
+                ROUND: begin // Gaussian rounding
+                    state <= SIGN;
+                    if (quo_next[0] == 1'b1) begin // Next digit is 1, so consider rounding
+                        if (quo[0] == 1'b1 || acc_next[N-1:1] != 0) quo <= quo + 1; // Round up if quotient is odd or remainder is non-zero
                     end
                 end
                 SIGN: begin

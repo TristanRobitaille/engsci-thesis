@@ -11,9 +11,9 @@ module sqrt # (
     parameter N = 22, // 22b total
     parameter Q = 10  // 10b fractional
 )(
-    input logic clk,
-    input logic rst_n,
-    input logic start,
+    input wire clk,
+    input wire rst_n,
+    input wire start,
 
     input wire signed [N-1:0] rad_q,
     output logic busy, done, neg_rad,

@@ -7,9 +7,9 @@ module counter # (
     parameter int WIDTH = 10,
     parameter int MODE = 0 // 0: posedge-triggered, 1: level-triggered
 ) (
-  input logic clk,
-  input logic rst_n,
-  input logic [WIDTH-1:0] inc,
+  input wire clk,
+  input wire rst_n,
+  input wire [WIDTH-1:0] inc,
   output logic [WIDTH-1:0] cnt
 );
 

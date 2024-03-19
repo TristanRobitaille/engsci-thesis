@@ -21,7 +21,7 @@ async def output_check(dut, in1:float, in2:float, expected=None):
 
 #----- TESTS -----#
 @cocotb.test()
-async def basic_reset(dut):
+async def basic_test(dut):
     await start_routine_basic_arithmetic(dut)
     input1 = -0.5
     input2 = 10.25
@@ -42,8 +42,8 @@ async def basic_reset(dut):
 @cocotb.test()
 async def random_test(dut):
     await start_routine_basic_arithmetic(dut)
-    input_q_1 = [0, 1, 1, 0]
-    input_q_2 = [0, 1, -1, -1]
+    input_q_1 = [0, 1, 1, 0, -1]
+    input_q_2 = [0, 1, -1, -1, -1]
 
     # Random inputs
     for _ in range(1000):
@@ -54,18 +54,3 @@ async def random_test(dut):
     # Edge cases
     for i in range(len(input_q_1)):
         await output_check(dut, input_q_1[i], input_q_2[i])
-
-@cocotb.test()
-async def overflow(dut):
-    await start_routine_basic_arithmetic(dut)
-
-    input_q_1 = [2*MAX_INT_MULT+1]
-    input_q_2 = [2*MAX_INT_MULT+1]
-
-    for _ in range(2): await RisingEdge(dut.clk)
-
-    for i in range(len(input_q_1)):
-        dut.input_q_1.value = BinToDec(input_q_1[i], num_Q_comp)
-        dut.input_q_2.value = BinToDec(input_q_2[i], num_Q_comp)
-        for _ in range(2): await RisingEdge(dut.clk)
-        assert dut.overflow.value == 1, "Overflow not set as expected!"
