@@ -50,8 +50,8 @@ void run_sim(uint32_t clip_num, string results_csv_fp) {
         epoch_cnt++;
     }
 
-    cout << "Total number of epochs: " << epoch_cnt << endl;
     print_intermediate_value_stats();
+    cout << "Total number of epochs: " << epoch_cnt << endl;
     cout << ">----- SIMULATION FINISHED -----<" << endl;
     if (results_csv_fp != "") { update_results_csv(ctrl.get_inferred_sleep_stage(), clip_num, results_csv_fp); }
     reset_stats();

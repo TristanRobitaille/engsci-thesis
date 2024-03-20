@@ -1,14 +1,16 @@
-# Simple tests for the fixed-point counter module
-import h5py
 import math
 import sys
-sys.path.append("..")
+sys.path.append("../")
 from utilities import *
 from FixedPoint import FXnum
 
 import cocotb
 import cocotb.triggers
 from cocotb.clock import Clock
+from cocotb.utils import get_sim_time
+
+#----- EEG -----#
+eeg = h5py.File("../../func_sim/reference_data/eeg.h5", "r")
 
 #----- EXTERNAL MEMORY -----#
 params = h5py.File("../../func_sim/reference_data/model_weights.h5", "r")
@@ -114,20 +116,6 @@ def read_param_from_ext_mem(dut):
 
     prev_ext_mem_read_pulse = dut.ext_mem_data_read_pulse.value
 
-#----- EEG -----#
-eeg = h5py.File("../../func_sim/reference_data/eeg.h5", "r")
-eeg_index = 0
-async def send_eeg_from_adc(dut):
-    global eeg_index
-    dut.new_eeg_sample.value = 1
-    dut.eeg_sample.value = int(eeg["eeg"][CLIP_INDEX][eeg_index])
-    await RisingEdge(dut.clk)
-    dut.new_eeg_sample.value = 0
-    for _ in range(2): await RisingEdge(dut.clk)
-    expected_eeg = BinToDec(int(eeg["eeg"][CLIP_INDEX][eeg_index])/(2**16), num_Q_storage)
-    assert ((expected_eeg-1) <= int(dut.bus_data_write.value[32:47]) <= (expected_eeg+1)), f"EEG data sent on bus ({int(dut.bus_data_write.value[32:47])}) doesn't match expected, normalize, fixed-point EEG data ({expected_eeg})"
-    eeg_index += 1
-
 def param_load_assertions(dut):
     # Assertions associated with parameters loading
     global data_last_inst
@@ -164,7 +152,7 @@ async def load_params(dut):
     print(f"Although we should send a new EEG sample at every {int(1000000*ASIC_FREQUENCY_MHZ/SAMPLING_FREQ_HZ)} clock cycles, we will shorten that to {EEG_SAMPLING_PERIOD_CLOCK_CYCLE} clock cycles.")
     dut.new_sleep_epoch.value = 1
     for _ in range(CLIP_LENGTH_S*SAMPLING_FREQ_HZ):
-        await send_eeg_from_adc(dut)
+        await send_eeg_from_adc(dut, eeg)
         for _ in range(EEG_SAMPLING_PERIOD_CLOCK_CYCLE-3): await RisingEdge(dut.clk) # Sampling delay of EEG data
 
     # Interlude
@@ -181,12 +169,12 @@ async def load_params(dut):
             for num_cim in range(inf_steps[inf_step].num_cim):
                 # Let master run through inference steps by emulating the CiMs
                 cnt = 0
-                while (dut.bus_op_write.value != (inf_steps[inf_step].op.value-1)): # Wait for the master to start the broadcast
+                while (dut.bus_op.value != (inf_steps[inf_step].op.value-1)): # Wait for the master to start the broadcast
                     await RisingEdge(dut.clk)
                     cnt += 1
-                    if (cnt == 100): raise ValueError(f"Master didn't start the broadcast (bus_op_write != {inf_steps[inf_step].op.value-1}) at inf_step {inf_step}!")
+                    if (cnt == 100): raise ValueError(f"Master didn't start the broadcast (bus_op != {inf_steps[inf_step].op.value-1}) at inf_step {inf_step}!")
 
-                assert (dut.bus_target_or_sender_write.value == (inf_steps[inf_step].start_cim + num_cim)), f"Master didn't start the broadcast for the correct CiM ({dut.bus_target_or_sender_write.value} != {num_cim}) at inf_step {inf_step}!"
+                assert (dut.bus_target_or_sender.value == (inf_steps[inf_step].start_cim + num_cim)), f"Master didn't start the broadcast for the correct CiM ({dut.bus_target_or_sender.value} != {num_cim}) at inf_step {inf_step}!"
 
                 for _ in range(math.ceil(inf_steps[inf_step].len//3)):
                     await RisingEdge(dut.clk)
@@ -201,7 +189,7 @@ async def load_params(dut):
                 await RisingEdge(dut.clk)
                 dut.all_cims_ready.value = 0
 
-            while (dut.bus_op_write.value != BusOp.PISTOL_START_OP.value): # Wait for pistol start
+            while (dut.bus_op.value != BusOp.PISTOL_START_OP.value): # Wait for pistol start
                 await RisingEdge(dut.clk)
                 cnt += 1
                 if (cnt == 100): raise ValueError(f"Master didn't send pistol start after inf_step {inf_step}!")

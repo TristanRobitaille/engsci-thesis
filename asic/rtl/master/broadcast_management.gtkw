@@ -1,0 +1,109 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Sat Mar 16 23:44:19 2024
+[*]
+[dumpfile] "dump.vcd"
+[dumpfile_mtime] "Sat Mar 16 23:44:08 2024"
+[dumpfile_size] 35442619
+[savefile] "broadcast_management.gtkw"
+[timestart] 3767100000
+[size] 2608 1040
+[pos] 1584 401
+*-25.600000 4192080000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[markername] AA
+[markername] BB
+[markername] CC
+[markername] DD
+[markername] EE
+[markername] FF
+[markername] GG
+[markername] HH
+[markername] II
+[markername] JJ
+[markername] KK
+[markername] LL
+[markername] MM
+[markername] NN
+[markername] OO
+[markername] PP
+[markername] QQ
+[markername] RR
+[markername] SS
+[markername] TT
+[markername] UU
+[markername] VV
+[markername] WW
+[markername] XX
+[markername] YY
+[markername] ZZ
+[treeopen] master.
+[treeopen] master.master_main_fsm.
+[sst_width] 253
+[signals_width] 234
+[sst_expanded] 1
+[sst_vpaned_height] 136
+@28
+clk
+@24
+master.state[2:0]
+@28
+new_sleep_epoch
+@24
+master.high_level_inf_step[4:0]
+@200
+-
+@24
+[color] 2
+master.bus_drive
+@28
+[color] 2
+master.bus_drive_delayed
+@24
+[color] 2
+master.bus_op_write[3:0]
+[color] 2
+master.bus_op_read[3:0]
+[color] 2
+master.bus_data_write[0][15:0]
+[color] 2
+master.bus_data_write[1][15:0]
+[color] 2
+master.bus_data_write[2][15:0]
+[color] 2
+master.bus_target_or_sender[5:0]
+@200
+-
+@28
+[color] 5
+master.all_cims_ready
+[color] 5
+master.master_main_fsm.unnamedblk1.all_cims_sent
+[color] 5
+master.master_main_fsm.unnamedblk1.all_transactions_sent
+[color] 5
+master.master_main_fsm.unnamedblk1.is_multi_head_op
+@200
+-
+@c00024
+master.gen_cnt_7b_cnt[6:0]
+@28
+(0)master.gen_cnt_7b_cnt[6:0]
+(1)master.gen_cnt_7b_cnt[6:0]
+(2)master.gen_cnt_7b_cnt[6:0]
+(3)master.gen_cnt_7b_cnt[6:0]
+(4)master.gen_cnt_7b_cnt[6:0]
+(5)master.gen_cnt_7b_cnt[6:0]
+(6)master.gen_cnt_7b_cnt[6:0]
+@1401200
+-group_end
+@24
+master.gen_cnt_7b_inc[6:0]
+@28
+master.gen_cnt_7b_rst_n
+@22
+master.gen_cnt_7b_2_cnt[6:0]
+master.gen_cnt_7b_2_inc[6:0]
+@29
+master.gen_cnt_7b_2_rst_n
+[pattern_trace] 1
+[pattern_trace] 0

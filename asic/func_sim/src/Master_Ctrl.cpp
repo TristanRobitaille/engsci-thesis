@@ -62,7 +62,7 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
         if (all_cims_ready == true) {
             if ((eeg != eeg_ds[clip_index].end()) && (all_cims_ready == true)) {
                 float data = *eeg;
-                struct instruction inst = {/*op*/ PATCH_LOAD_BROADCAST_OP, /*target_or_sender*/ 0, /*data*/ {data,0,0}};
+                struct instruction inst = {/*op*/ PATCH_LOAD_BROADCAST_OP, /*target_or_sender*/ 0, /*data*/ {static_cast<float>(large_fp_t{data/EEG_SCALE_FACTOR}),0,0}};
                 bus->push_inst(inst); // Broadcast on bus
                 ++eeg;
             } else if ((eeg == eeg_ds[clip_index].end()) && (all_cims_ready == true)) {
@@ -102,6 +102,9 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
             if (bus->get_inst().op == INFERENCE_RESULT_OP && all_cims_ready == true) {
                 sys_state = EVERYTHING_FINISHED;
                 inferred_sleep_stage = static_cast<uint32_t>(bus->get_inst().data[0]);
+                cout << ">----- MASTER CTRL STATS -----<" << endl;
+                cout << "Min. model parameter: " << _min_param_val << endl;
+                cout << "Max. model parameter: " << _max_param_val << endl;
                 break;
             } else if (high_level_inf_step != SOFTMAX_AVERAGING) {
                 if (high_level_inf_step == ENC_MHSA_QK_T_STEP) { cout << "Master: Performing encoder's MHSA QK_T. Starting matrix #" << gen_cnt_7b_3.get_cnt() << " in the Z-stack (out of " << NUM_HEADS << ")" << endl; }
@@ -256,6 +259,11 @@ struct instruction Master_Ctrl::param_to_send(){
         break;
     }
 
+    // Update min./max. parameter values
+    for (int i=0; i < 3; i++) {
+        if (inst.data[i] < _min_param_val) { _min_param_val = inst.data[i]; }
+        if (inst.data[i] > _max_param_val) { _max_param_val = inst.data[i]; }
+    }
     return inst;
 }
 

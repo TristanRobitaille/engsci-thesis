@@ -1,24 +1,21 @@
 /* Note:
 - Fixed-point MAC
+- Done signal is a single-cycle pulse
 - Uses external multiplier and adder modules to be shared with other modules in the CiM.
-- Implements three different activations: No activation (no bias), linear and SWISH
+- Implements three different activations: No activation (no bias), linear (adds bias to MAC result) and TODO: SWISH
 */
-module mac #(
-    parameter N_STORAGE = 16, // 16b total
-    parameter N_COMP = 22, // 22b total
-    parameter TEMP_RES_STORAGE_SIZE_CIM = 848, // # of words in the intermediate result storage
-    parameter PARAMS_STORAGE_SIZE_CIM = 528, // # of words in the model parameters storage
-    parameter MAX_LEN = 64 // Maximum length of the vectors to MAC
-)(
+module mac
+(
     input wire clk,
     input wire rst_n,
 
     // Control signals
     input wire start, param_type,
-    input wire [$clog2(MAX_LEN+1)-1:0] len,
+    input wire [1:0] activation,
+    input wire [$clog2(MAC_MAX_LEN+1)-1:0] len,
+    input wire [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] bias_addr,
     input wire [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] start_addr1,
     input wire [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] start_addr2, // Either intermediate res or params
-    input wire [1:0] activation,
     output logic busy, done,
 
     // Memory access signals
@@ -43,16 +40,14 @@ module mac #(
     output logic signed [N_COMP-1:0] mult_input_q_2,
     output logic mult_refresh
 );
-    /*----- ENUM -----*/
-    enum logic {MODEL_PARAM = 1'b0, INTERMEDIATE_RES = 1'b1} PARAM_TYPE_E;
-    enum logic [1:0] {NO_ACTIVATION = 2'd0, LINEAR_ACTIVATION = 2'd1, SWISH_ACTIVATION = 2'd2} ACTIVATION_TYPE_E;
-    enum logic [2:0] {IDLE, COMPUTE_MUL_IN1, COMPUTE_MUL_IN2, COMPUTE_MUL_OUT, COMPUTE_ADD, MAC_DONE} state;
 
-    /*----- LOGIC -----*/
+   /*----- LOGIC -----*/
     logic signed [N_COMP-1:0] compute_temp; // TODO: Consider if it should be shared with other modules in CiM
     logic signed [N_COMP-1:0] compute_temp_2; // TODO: Consider if it should be shared with other modules in CiM
+    logic [1:0] delay_signal;
 
-    logic [$clog2(MAX_LEN+1)-1:0] index;
+    logic [$clog2(MAC_MAX_LEN+1)-1:0] index;
+    enum logic [2:0] {IDLE, COMPUTE_MUL_IN1, COMPUTE_MUL_IN2, COMPUTE_MUL_OUT, COMPUTE_ADD, BASIC_MAC_DONE, COMPUTE_LINEAR_ACTIVATION} state;
     always_ff @ (posedge clk) begin : mac_fsm
         if (!rst_n) begin
             state <= IDLE;
@@ -62,13 +57,16 @@ module mac #(
                     if (start) begin
                         state <= COMPUTE_MUL_IN1;
                         busy <= 1'b1;
+                        intermediate_res_addr <= start_addr1;
+                        int_res_mem_access_req <= 1'b1;
+                        compute_temp <= 'd0;
+                    end else begin
                         done <= 1'b0;
                         index <= 'd0;
                         mult_refresh <= 1'b0;
                         add_refresh <= 1'b0;
-                        intermediate_res_addr <= start_addr1;
-                        int_res_mem_access_req <= 1'b1;
-                        compute_temp <= 'd0;
+                        int_res_mem_access_req <= 1'b0;
+                        delay_signal <= 2'b0;
                     end
                 end 
                 COMPUTE_MUL_IN1: begin
@@ -98,23 +96,39 @@ module mac #(
                     mult_refresh <= 1'b0;
                     add_refresh <= 1'b1;
                     if (add_refresh) begin
-                        state <= (index == len) ? MAC_DONE : COMPUTE_MUL_IN1;
+                        state <= (index == len) ? BASIC_MAC_DONE : COMPUTE_MUL_IN1;
                     end
                     // In case we need to go back to COMPUTE_MUL_IN1
                     intermediate_res_addr <= start_addr1 + {3'd0, index};
                     int_res_mem_access_req <= (index != len);
                 end
-                MAC_DONE: begin
+                BASIC_MAC_DONE: begin
+                    add_refresh <= 1'b0;
                     if (activation == NO_ACTIVATION) begin
-                        add_refresh <= 1'b0;
                         computation_result <= add_output_q;
                         done <= 1'b1;
                         state <= IDLE;
                     end else if (activation == LINEAR_ACTIVATION) begin
-                        // TODO
+                        param_addr <= (activation == LINEAR_ACTIVATION) ? bias_addr : param_addr;
+                        params_mem_access_req <= (activation == LINEAR_ACTIVATION);
+                        delay_signal <= {delay_signal[0], 1'b1}; // Need to delay signal by 1 cycle while we wait for bias
+                        state <= (delay_signal[1]) ? COMPUTE_LINEAR_ACTIVATION : BASIC_MAC_DONE;
                     end else if (activation == SWISH_ACTIVATION) begin
                         // TODO
                         $fatal("SWISH activation not implementedin MAC unit");
+                    end
+                end
+                COMPUTE_LINEAR_ACTIVATION: begin
+                    add_input_q_1 <= add_output_q;
+                    add_input_q_2 <= {{(N_COMP-N_STORAGE){param_data[N_STORAGE-1]}}, param_data}; // Sign extend;
+                    params_mem_access_req <= 1'b0;
+                    add_refresh <= 1'b1;
+                    delay_signal <= {delay_signal[0], 1'b0}; // Need to delay signal by 1 cycle while we wait for add
+
+                    if (add_refresh & ~delay_signal[1]) begin
+                        computation_result <= add_output_q;
+                        done <= 1'b1;
+                        state <= IDLE;
                     end
                 end
                 default: begin

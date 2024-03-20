@@ -111,7 +111,8 @@ void print_intermediate_value_stats() {
     if (ENABLE_COMPUTATION_VERIFICATION == false) { return; }
     arma::fvec arma_abs_errors(abs_errors.data(), abs_errors.size());
     arma::fvec arma_rel_errors(rel_errors.data(), rel_errors.size());
-
+    
+    std::cout << ">----- COMPUTE VERIFICATION STATS -----<" << std::endl;
     std::cout << "Min. intermediate value: " << min_val << std::endl;
     std::cout << "Max. intermediate value: " << max_val << std::endl;
     std::cout << "Highest valid absolute error: " << highest_abs_error << ". Avg: " << arma::mean(arma_abs_errors) << ". Std. dev.: " << arma::stddev(arma_abs_errors) << std::endl;

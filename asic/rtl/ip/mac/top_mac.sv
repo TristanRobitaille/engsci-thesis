@@ -1,16 +1,10 @@
-`include "../adder/adder.sv"
-`include "../multiplier/multiplier.sv"
+`include "../../types.svh"
 
-module top # (
-    parameter N_COMP = 22, // 22b total
-    parameter N_STORAGE = 16, // 16b total
-    parameter Q = 10, // 10b fractional
-    parameter TEMP_RES_STORAGE_SIZE_CIM = 848, // # of elements in the intermediate result storage
-    parameter PARAMS_STORAGE_SIZE_CIM = 528, // # of elements in the model parameters storage
-    parameter MAX_LEN = 64 // Maximum length of the vectors to MAC
-) (
+module top_mac # () (
     input wire clk, rst_n
 );
+    ParamInfo_t param_addr_map[PARAMS_NUM-1];
+    `include "../../top_init.sv"
 
     // CiM memory
     logic [N_STORAGE-1:0] params [PARAMS_STORAGE_SIZE_CIM-1:0];
@@ -34,7 +28,7 @@ module top # (
     // Control signals
     logic start, param_type;
     logic [1:0] activation = 'd0;
-    logic [$clog2(MAX_LEN+1)-1:0] len = 'd0;
+    logic [$clog2(MAC_MAX_LEN+1)-1:0] len = 'd0;
     logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] start_addr1 = 'd0;
     logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] start_addr2 = 'd0;
 
@@ -48,14 +42,10 @@ module top # (
     wire add_overflow, add_refresh, mul_refresh;
     wire signed [N_COMP-1:0] mul_input_q_1, mul_input_q_2, mul_output_q;
     wire signed [N_COMP-1:0] add_input_q_1, add_input_q_2, add_output_q;
-    adder       #(.N(N_COMP))           add (.clk(clk), .rst_n(rst_n), .refresh(add_refresh), .input_q_1(add_input_q_1), .input_q_2(add_input_q_2), .output_q(add_output_q), .overflow(add_overflow));
-    multiplier  #(.N(N_COMP), .Q(Q))    mul (.clk(clk), .rst_n(rst_n), .refresh(mul_refresh), .input_q_1(mul_input_q_1), .input_q_2(mul_input_q_2), .output_q(mul_output_q));
+    adder       add (.clk(clk), .rst_n(rst_n), .refresh(add_refresh), .input_q_1(add_input_q_1), .input_q_2(add_input_q_2), .output_q(add_output_q), .overflow(add_overflow));
+    multiplier  mul (.clk(clk), .rst_n(rst_n), .refresh(mul_refresh), .input_q_1(mul_input_q_1), .input_q_2(mul_input_q_2), .output_q(mul_output_q));
 
-    mac #(
-        .N_STORAGE(N_STORAGE), .N_COMP(N_COMP),
-        .TEMP_RES_STORAGE_SIZE_CIM(TEMP_RES_STORAGE_SIZE_CIM),
-        .MAX_LEN(MAX_LEN)
-    ) mac_inst (
+    mac mac_inst (
         .clk(clk),
         .rst_n(rst_n),
         .start(start),
@@ -63,6 +53,7 @@ module top # (
         .len(len),
         .start_addr1(start_addr1),
         .start_addr2(start_addr2),
+        .bias_addr(param_addr_map[SINGLE_PARAMS].addr + PATCH_PROJ_BIAS_PARAMS),
         .activation(activation),
         .busy(busy),
         .done(done),

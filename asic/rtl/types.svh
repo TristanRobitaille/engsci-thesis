@@ -1,5 +1,5 @@
-`ifndef _shared_parameters_vh_
-`define _shared_parameters_vh_
+`ifndef _types_vh_
+`define _types_vh_
 
 /*----- PARAMETERS -----*/
     // Fixed-point parameters
@@ -18,7 +18,8 @@
                 EMB_DEPTH           = 64,
                 MLP_DIM             = 32,
                 NUM_SLEEP_STAGES    = 5,
-                NUM_HEADS           = 8;
+                NUM_HEADS           = 8,
+                MAC_MAX_LEN         = 64;
 
     parameter   NUM_PARAMS  = 31589;
     parameter   PARAMS_STORAGE_SIZE_CIM = 528,
@@ -27,7 +28,14 @@
     parameter   EEG_SAMPLE_DEPTH = 16;
     // verilator lint_on UNUSEDPARAM
 
-/*----- TYPES -----*/
+/*----- STRUCT -----*/
+typedef struct packed {
+    logic [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] addr;
+    logic [$clog2(NUM_CIMS+1)-1:0] len;
+    logic [$clog2(NUM_CIMS+1)-1:0] num_rec;
+} ParamInfo_t;
+
+/*----- ENUMS -----*/
 typedef enum reg [BUS_OP_WIDTH-1:0] {
     PATCH_LOAD_BROADCAST_START_OP,
     PATCH_LOAD_BROADCAST_OP,
@@ -41,12 +49,51 @@ typedef enum reg [BUS_OP_WIDTH-1:0] {
     INFERENCE_RESULT_OP,
     NOP,
     OP_NUM // Number of ops
-} bus_op_t;
+} BUS_OP_T;
 
-/*----- ENUM -----*/
 typedef enum logic {
     RST = 1'b0,
     RUN = 1'b1
 } RESET_STATE_T;
+
+typedef enum logic {
+    MODEL_PARAM = 'd0,
+    INTERMEDIATE_RES = 'd1
+} PARAM_TYPE_T;
+
+typedef enum logic [1:0] {
+    NO_ACTIVATION = 2'd0,
+    LINEAR_ACTIVATION = 2'd1,
+    SWISH_ACTIVATION = 2'd2
+} ACTIVATION_TYPE_T;
+
+typedef enum logic [3:0] {
+    POS_EMB_PARAMS,
+    PATCH_PROJ_KERNEL_PARAMS,
+    ENC_Q_DENSE_KERNEL_PARAMS,
+    ENC_K_DENSE_KERNEL_PARAMS,
+    ENC_V_DENSE_KERNEL_PARAMS,
+    ENC_COMB_HEAD_KERNEL_PARAMS,
+    ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_KERNEL_PARAMS,
+    ENC_MLP_DENSE_2_KERNEL_PARAMS,
+    MLP_HEAD_DENSE_2_KERNEL_PARAMS,
+    SINGLE_PARAMS,
+    PARAM_LOAD_FINISHED,
+    PARAMS_NUM
+} PARAM_NAME_T;
+
+typedef enum logic [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] {
+    PATCH_PROJ_BIAS_PARAMS,
+    CLASS_EMB_PARAMS,
+    ENC_Q_BIAS_PARAMS,
+    ENC_K_BIAS_PARAMS,
+    ENC_V_BIAS_PARAMS,
+    ENC_COMB_HEAD_BIAS_PARAMS,
+    ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_BIAS_PARAMS,
+    ENC_MLP_DENSE_2_BIAS_PARAMS,
+    MLP_HEAD_DENSE_2_BIAS_PARAMS,
+    SQRT_NUM_HEADS_PARAMS,
+    SINGLE_PARAMS_NUM
+} SINGLE_PARAM_NAME_T;
 
 `endif

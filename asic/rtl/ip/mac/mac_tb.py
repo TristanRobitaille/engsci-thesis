@@ -15,6 +15,12 @@ MAX_LEN = 64
 NUM_TESTS = 100
 
 #----- HELPERS-----#
+def random_input():
+    val = random.normalvariate(mu = 0.0, sigma = (MAX_VAL/5)) # Random number from a normal distribution (max. value at 5 std. dev.)
+    if val > MAX_VAL: val = MAX_VAL
+    elif val < -MAX_VAL: val = -MAX_VAL
+    return val
+                          
 async def test_MAC(dut, activation=ActivationType.NO_ACTIVATION.value):
     # Prepare MAC
     expected_result = 0
@@ -28,7 +34,6 @@ async def test_MAC(dut, activation=ActivationType.NO_ACTIVATION.value):
 
     len = 64
     param_type = MACParamType.INTERMEDIATE_RES.value
-    activation = ActivationType.NO_ACTIVATION.value
 
     dut.start_addr1.value = start_addr1
     dut.start_addr2.value = start_addr2
@@ -38,13 +43,16 @@ async def test_MAC(dut, activation=ActivationType.NO_ACTIVATION.value):
 
     expected_result = 0
     for i in range(len):
-        in1 = random.normalvariate(mu = 0.0, sigma = (MAX_VAL/5)) # Random number from a normal distribution (max. value at 5 std. dev.)
-        if in1 > MAX_VAL: in1 = MAX_VAL
-        in2 = random.normalvariate(mu = 0.0, sigma = (MAX_VAL/5))
-        if in2 < -MAX_VAL: in1 = -MAX_VAL
+        in1 = random_input()
+        in2 = random_input()
+        bias = random_input()
         dut.intermediate_res[start_addr1+i].value = BinToDec(in1, num_Q_storage)
         dut.intermediate_res[start_addr2+i].value = BinToDec(in2, num_Q_storage)
+        dut.params[param_addr_map["patch_proj_bias"]].value = BinToDec(bias, num_Q_storage)
         expected_result += FXnum(in1, num_Q_comp)*FXnum(in2, num_Q_comp)
+
+    if activation == ActivationType.LINEAR_ACTIVATION.value:
+        expected_result += FXnum(bias, num_Q_comp)
 
     dut.start.value = 1
     await RisingEdge(dut.clk)
@@ -65,3 +73,6 @@ async def random_test(dut):
 
     for _ in range(NUM_TESTS):
         await test_MAC(dut, ActivationType.NO_ACTIVATION.value)
+
+    for _ in range(NUM_TESTS):
+        await test_MAC(dut, ActivationType.LINEAR_ACTIVATION.value)

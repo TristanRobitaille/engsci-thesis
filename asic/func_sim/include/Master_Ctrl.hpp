@@ -168,6 +168,8 @@ class Master_Ctrl {
         // Parameters
         PARAM_NAME params_curr_layer = PATCH_PROJ_KERNEL_PARAMS; // Keeps track of which layer of parameters we are sending
         struct parameters params;
+        float _max_param_val = 0.0f;
+        float _min_param_val = 0.0f;
 
         int load_params_from_h5(const std::string params_filepath);
         void update_inst_with_params(PARAM_NAME param_name, struct instruction* inst);

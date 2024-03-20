@@ -20,10 +20,9 @@
 class CiM {
     private:
         enum ACTIVATION {
-            NO_ACTIVATION, // Used for simple matrix multiplies
+            NO_ACTIVATION, // Used for simple matrix multiplies (no bias)
             LINEAR_ACTIVATION,
-            SWISH_ACTIVATION,
-            SOFTMAX_ACTIVATION
+            SWISH_ACTIVATION
         };
 
         enum INPUT_TYPE { // Type of input for a given computation
@@ -150,7 +149,7 @@ class CiM {
         bool compute_in_progress = false; // Used by compute element to notify CiM controller when is in progress
         bool is_ready = true; // Signal that CiM can use to override the compute_in_progress signal and force the master to wait before sending the next instruction
         uint16_t id; // ID of the CiM
-        uint16_t gen_reg_3b; // General-purpose register
+        uint16_t gen_reg_2b; // General-purpose register
         uint16_t tx_addr_reg; // Record the address of the data sent on the bus
         uint16_t rx_addr_reg; // Record the address of the data received on the bus
         uint16_t sender_id; // Record the id of an instruction's sender at a start of broadcast

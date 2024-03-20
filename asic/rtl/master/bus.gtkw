@@ -1,0 +1,79 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Mon Mar 18 17:28:10 2024
+[*]
+[dumpfile] "dump.vcd"
+[dumpfile_mtime] "Mon Mar 18 17:27:45 2024"
+[dumpfile_size] 3253390
+[savefile] "bus.gtkw"
+[timestart] 483787400
+[size] 3440 1387
+[pos] 1679 0
+*-15.000000 484030000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[markername] AA
+[markername] BB
+[markername] CC
+[markername] DD
+[markername] EE
+[markername] FF
+[markername] GG
+[markername] HH
+[markername] II
+[markername] JJ
+[markername] KK
+[markername] LL
+[markername] MM
+[markername] NN
+[markername] OO
+[markername] PP
+[markername] QQ
+[markername] RR
+[markername] SS
+[markername] TT
+[markername] UU
+[markername] VV
+[markername] WW
+[markername] XX
+[markername] YY
+[markername] ZZ
+[treeopen] master.
+[sst_width] 253
+[signals_width] 283
+[sst_expanded] 1
+[sst_vpaned_height] 434
+@28
+clk
+@24
+master.bus_drive
+[color] 1
+bus_op[3:0]
+[color] 1
+bus_data[0][15:0]
+[color] 1
+bus_data[1][15:0]
+[color] 1
+bus_data[2][15:0]
+[color] 1
+bus_target_or_sender[5:0]
+[color] 2
+master.bus_op_write[3:0]
+[color] 2
+master.bus_data_write[0][15:0]
+[color] 2
+master.bus_data_write[1][15:0]
+[color] 2
+master.bus_data_write[2][15:0]
+[color] 2
+master.bus_target_or_sender_write[5:0]
+master.bus_op_read[3:0]
+@25
+[color] 5
+master.bus_data_read[0][15:0]
+[color] 5
+master.bus_data_read[1][15:0]
+[color] 5
+master.bus_data_read[2][15:0]
+[color] 5
+master.bus_target_or_sender_read[5:0]
+[pattern_trace] 1
+[pattern_trace] 0

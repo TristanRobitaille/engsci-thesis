@@ -102,13 +102,11 @@ asic/rtl/master/sim_build
 asic/rtl/master/dump.vcd
 asic/rtl/master/results.xml
 asic/rtl/master/~*
-asic/rtl/master/*.gtkw
 asic/rtl/cim/__pycache__
 asic/rtl/cim/sim_build
 asic/rtl/cim/dump.vcd
 asic/rtl/cim/results.xml
 asic/rtl/cim/~*
-asic/rtl/cim/*.gtkw
 asic/rtl/rtl_env
 
 ### ASIC functional simulation

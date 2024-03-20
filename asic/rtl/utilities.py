@@ -3,6 +3,8 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
 from FixedPoint import FXfamily
+
+import h5py
 from enum import Enum
 
 #----- CLASSES -----#
@@ -19,6 +21,15 @@ class BusOp(Enum):
     INFERENCE_RESULT_OP             = 9
     NOP                             = 10
     OP_NUM                          = 11
+
+class MACParamType(Enum):
+    MODEL_PARAM = 0
+    INTERMEDIATE_RES = 1
+
+class ActivationType(Enum):
+    NO_ACTIVATION = 0
+    LINEAR_ACTIVATION = 1
+    SWISH_ACTIVATION = 2
 
 class broadcast_op():
     def __init__(self, op:BusOp, len:int, num_cim:int, num_runs:int=1, start_cim:int=1):
@@ -37,15 +48,18 @@ MAX_INT_MULT = 2**(NUM_INT_BITS_COMP//2-1) - 1
 NUM_HEADS = 8
 NUM_CIM = 64
 NUM_PATCHES = 60
+PATCH_LEN = 64
 EMB_DEPTH = 64
 MLP_DIM = 32
 NUM_SLEEP_STAGES = 5
 ASIC_FREQUENCY_MHZ = 100
 SAMPLING_FREQ_HZ = 128
 CLIP_LENGTH_S = 30
-EEG_SAMPLING_PERIOD_CLOCK_CYCLE = 10 # Cannot simulate the real sampling period as it would take too long
+EEG_SAMPLING_PERIOD_CLOCK_CYCLE = 500 # Cannot simulate the real sampling period as it would take too long (however, this needs to be > 362)
 INTERLUDE_CLOCK_CYCLES = 10000
 CLIP_INDEX = 1 # Clip index to be used for the test
+TEMP_RES_STORAGE_SIZE_CIM = 848 
+PARAMS_STORAGE_SIZE_CIM = 528
 
 num_Q_storage = FXfamily(NUM_FRACT_BITS, NUM_INT_BITS_STORAGE)
 num_Q_comp = FXfamily(NUM_FRACT_BITS, NUM_INT_BITS_COMP)
@@ -78,6 +92,10 @@ inf_steps = [
     broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, len=1,              num_cim=NUM_SLEEP_STAGES,   num_runs=1, start_cim=0)
 ]
 
+param_addr_map = {
+    "patch_proj_bias": 64*8,
+}
+
 #----- HELPERS -----#
 async def reset(dut):
     dut.rst_n.value = 0
@@ -91,13 +109,33 @@ async def start_pulse(dut):
     dut.start.value = 0
     await RisingEdge(dut.clk)
 
-def BinToDec(dec:float, num_type:FXfamily):
-    z2 = num_type(dec)
-    z2_str = z2.toBinaryString(logBase=1, twosComp=True).replace(".","")
-    return int(z2_str, base=2)
-
 async def start_routine_basic_arithmetic(dut):
     cocotb.start_soon(Clock(dut.clk, 1, units="ns").start())
     await RisingEdge(dut.clk)
     await reset(dut)
     dut.refresh.value = 1
+    
+def BinToDec(dec:float, num_type:FXfamily):
+    z2 = num_type(dec)
+    z2_str = z2.toBinaryString(logBase=1, twosComp=True).replace(".","")
+    return int(z2_str, base=2)
+
+#----- EEG -----#
+eeg_index = 0
+async def send_eeg_from_adc(dut, eeg_file):
+    global eeg_index
+    dut.new_eeg_sample.value = 1
+    dut.eeg_sample.value = int(eeg_file["eeg"][CLIP_INDEX][eeg_index])
+    await RisingEdge(dut.clk)
+    dut.new_eeg_sample.value = 0
+    for _ in range(2): await RisingEdge(dut.clk)
+    expected_eeg = BinToDec(int(eeg_file["eeg"][CLIP_INDEX][eeg_index])/(2**16), num_Q_storage)
+    assert ((expected_eeg-1) <= int(dut.bus_data_write.value[32:47]) <= (expected_eeg+1)), f"EEG data sent on bus ({int(dut.bus_data_write.value[32:47])}) doesn't match expected, normalize, fixed-point EEG data ({expected_eeg})"
+    eeg_index += 1
+
+def send_eeg_from_master(dut, eeg_file):
+    global eeg_index
+    dut.bus_op_read.value = BusOp.PATCH_LOAD_BROADCAST_OP.value
+    dut.bus_data_read.value = BinToDec(int(eeg_file["eeg"][CLIP_INDEX][eeg_index])/(2**16), num_Q_storage)
+    eeg_index += 1
+    return eeg_index

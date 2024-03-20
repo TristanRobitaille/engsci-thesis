@@ -42,35 +42,6 @@
         HIGH_LEVEL_INFERENCE_STEP_NUM
     } HIGH_LEVEL_INFERENCE_STEP_T;
 
-    typedef enum logic [3:0] {
-        POS_EMB_PARAMS,
-        PATCH_PROJ_KERNEL_PARAMS,
-        ENC_Q_DENSE_KERNEL_PARAMS,
-        ENC_K_DENSE_KERNEL_PARAMS,
-        ENC_V_DENSE_KERNEL_PARAMS,
-        ENC_COMB_HEAD_KERNEL_PARAMS,
-        ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_KERNEL_PARAMS,
-        ENC_MLP_DENSE_2_KERNEL_PARAMS,
-        MLP_HEAD_DENSE_2_KERNEL_PARAMS,
-        SINGLE_PARAMS,
-        PARAM_LOAD_FINISHED,
-        PARAMS_NUM
-    } PARAM_NAME_T;
-
-    typedef enum logic [3:0] {
-        PATCH_PROJ_BIAS_PARAMS,
-        CLASS_EMB_PARAMS,
-        ENC_Q_BIAS_PARAMS,
-        ENC_K_BIAS_PARAMS,
-        ENC_V_BIAS_PARAMS,
-        ENC_COMB_HEAD_BIAS_PARAMS,
-        ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_BIAS_PARAMS,
-        ENC_MLP_DENSE_2_BIAS_PARAMS,
-        MLP_HEAD_DENSE_2_BIAS_PARAMS,
-        SQRT_NUM_HEADS_PARAMS,
-        SINGLE_PARAMS_NUM
-    } SINGLE_PARAM_NAME_T;
-
     typedef enum logic [4:0] {
         PATCH_PROJ_KERNEL_EXT_MEM,
         PATCH_PROJ_BIAS_EXT_MEM,
@@ -103,12 +74,6 @@
     } EXT_MEM_PARAM_NAME_T;
 
 /*----- STRUCT -----*/
-    typedef struct packed {
-        logic [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] addr;
-        logic [$clog2(NUM_CIMS+1)-1:0] len;
-        logic [$clog2(NUM_CIMS+1)-1:0] num_rec;
-    } ParamInfo_t;
-
     typedef struct packed {
         logic [$clog2(OP_NUM)-1:0] op;
         logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] tx_addr;

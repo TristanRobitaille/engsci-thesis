@@ -4,7 +4,9 @@
 `include "../ip/counter/counter.sv"
 `include "../types.svh"
 
-module master (
+module master #(
+    parameter STANDALONE_TB = 0
+)(
     input wire clk,
     input wire rst_n,
 
@@ -15,37 +17,40 @@ module master (
     inout wire [BUS_OP_WIDTH-1:0] bus_op,
     inout wire signed [2:0][N_STORAGE-1:0] bus_data,
     inout wire [$clog2(NUM_CIMS)-1:0] bus_target_or_sender,
-    // Note: For the purposes of easier testbenches, we will use separate signals for read and write
-    input wire [BUS_OP_WIDTH-1:0] bus_op_read,
-    input wire signed [2:0][N_STORAGE-1:0] bus_data_read,
-    input wire [$clog2(NUM_CIMS)-1:0] bus_target_or_sender_read,
 
     // EEG
     input wire new_eeg_sample,
     input wire [EEG_SAMPLE_DEPTH-1:0] eeg_sample,
 
-    // Signals to fake external memory containing the weights
+    // Interface to external memory storing the weights
     input wire ext_mem_data_valid,
     input logic signed [N_STORAGE-1:0] ext_mem_data,
     output logic ext_mem_data_read_pulse,
     output logic [$clog2(NUM_PARAMS)-1:0] ext_mem_addr
 );
     // Initialize arrays
+    `include "top_init.sv"
     `include "master_init.sv"
 
-    // Write bus
-    // TODO: Proper read logic on inout wires
+    // Bus
     logic bus_drive, bus_drive_delayed;
     logic [BUS_OP_WIDTH-1:0] bus_op_write;
     logic signed [2:0][N_STORAGE-1:0] bus_data_write;
     logic [$clog2(NUM_CIMS)-1:0] bus_target_or_sender_write;
     assign bus_op = (bus_drive) ? bus_op_write : 'Z;
-    assign bus_data[0] = (bus_drive) ? bus_data_write[0] : 'Z;
-    assign bus_data[1] = (bus_drive) ? bus_data_write[1] : 'Z;
-    assign bus_data[2] = (bus_drive) ? bus_data_write[2] : 'Z;
+    assign bus_data = (bus_drive) ? bus_data_write : 'Z;
     assign bus_target_or_sender = (bus_drive) ? bus_target_or_sender_write : 'Z;
 
-    // Instantiate counters
+    wire [BUS_OP_WIDTH-1:0] bus_op_read;
+    wire signed [2:0][N_STORAGE-1:0] bus_data_read;
+    wire [$clog2(NUM_CIMS)-1:0] bus_target_or_sender_read;
+    if (STANDALONE_TB == 0) begin : bus_read_assignment // Cannot drive inout's in CocoTB testbench, so we drive bus_x_read directly and do not assign to them
+        assign bus_op_read = bus_op;
+        assign bus_data_read = bus_data;
+        assign bus_target_or_sender_read = bus_target_or_sender;
+    end
+
+    // Counters
     logic gen_cnt_2b_rst_n, gen_cnt_7b_rst_n, gen_cnt_7b_2_rst_n;
     logic [1:0] gen_cnt_2b_inc;
     logic [6:0] gen_cnt_7b_inc, gen_cnt_7b_2_inc;
@@ -63,7 +68,7 @@ module master (
     // Main FSM
     MASTER_STATE_T state = MASTER_STATE_IDLE;
     HIGH_LEVEL_INFERENCE_STEP_T high_level_inf_step = PRE_LAYERNORM_1_TRANS_STEP;
-    always_ff @ (posedge clk or negedge rst_n) begin : master_main_fsm
+    always_ff @ (posedge clk) begin : master_main_fsm
         if (!rst_n) begin // Reset
             gen_bit <= 1'b0;
             gen_cnt_2b_rst_n <= RST;
@@ -238,6 +243,8 @@ module master (
                 end
 
                 MASTER_STATE_DONE_INFERENCE: begin
+                    bus_drive <= 1'b0;
+                    state <= MASTER_STATE_IDLE;
                 end
 
                 default:

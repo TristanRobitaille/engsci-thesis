@@ -29,7 +29,7 @@ int CiM::reset(){
     is_ready = true;
     compute_in_progress = false;
     computation_result = 0;
-    gen_reg_3b = 0;
+    gen_reg_2b = 0;
     tx_addr_reg = 0;
     rx_addr_reg = 0;
     sender_id = 0;
@@ -62,125 +62,123 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
     // Read bus if new instruction
     struct instruction inst = bus->get_inst();
-    if (inst.op != NOP) {
-        switch (inst.op){
-        case PATCH_LOAD_BROADCAST_START_OP:
-            word_rec_cnt.reset();
-            gen_cnt_7b_2.reset();
-            break;
+    switch (inst.op){
+    case PATCH_LOAD_BROADCAST_START_OP:
+        word_rec_cnt.reset();
+        gen_cnt_7b_2.reset();
+        break;
 
-        case PATCH_LOAD_BROADCAST_OP:
-            if (compute_in_progress == false) {
-                update_state(PATCH_LOAD_CIM);
-                intermediate_res[word_rec_cnt.get_cnt()] = inst.data[0];
-                DIV(word_rec_cnt.get_cnt(), EEG_SCALE_FACTOR, ADC_INPUT);
-                is_ready = false;
-                gen_reg_3b = 0;
-            }
-            break;
+    case PATCH_LOAD_BROADCAST_OP:
+        intermediate_res[word_rec_cnt.get_cnt()] = inst.data[0];
+        word_rec_cnt.inc();
+        break;
 
-        case DATA_STREAM_START_OP:
-            rx_addr_reg = inst.data[0]; // Address
-            word_rec_cnt.reset();
-            break;
+    case DATA_STREAM_START_OP:
+        rx_addr_reg = inst.data[0]; // Address
+        word_rec_cnt.reset();
+        break;
 
-        case DATA_STREAM_OP:
-            if (inst.target_or_sender == id) {
-                params[word_rec_cnt.get_cnt() + rx_addr_reg] = inst.data[0];
-                params[word_rec_cnt.get_cnt()+1 + rx_addr_reg] = inst.data[1]; // Note: If the length is less than 3, we will be loading junk. That's OK since it will get overwritten
-                params[word_rec_cnt.get_cnt()+2 + rx_addr_reg] = inst.data[2];
-                word_rec_cnt.inc(3);
-            }
-            break;
-
-        case DENSE_BROADCAST_START_OP:
-        case TRANS_BROADCAST_START_OP:
-            if (inst.target_or_sender == id) { // Master controller tells me to start broadcasting some data
-                struct instruction new_inst;
-                tx_addr_reg = static_cast<uint16_t> (inst.data[0]);
-                OP op = (inst.op == DENSE_BROADCAST_START_OP) ? DENSE_BROADCAST_DATA_OP : TRANS_BROADCAST_DATA_OP;
-                if (inst.data[1] == 1) { new_inst = {op, id, /*data*/{0, 0, intermediate_res[tx_addr_reg]},}; } // Special case to only send one data and have the correct alignment
-                else { new_inst = {op, id, /*data*/{intermediate_res[tx_addr_reg], intermediate_res[tx_addr_reg+1], intermediate_res[tx_addr_reg+2]}}; }
-                bus->push_inst(new_inst);
-            }
-
-            if (current_inf_step == ENC_MHSA_MULT_V_STEP) {
-                if (inst.target_or_sender == 0) { gen_cnt_7b_2.inc(); } // Counts matrix
-                word_rec_cnt.reset(); // We also want to reset this counter here because the CiM that don't have to multiply anything for this matrix could overflow the counter
-            }
-
-            rx_addr_reg = static_cast<uint16_t> (inst.data[2]); // Save address where to store data
-            data_len_reg = inst.data[1]; // Save length of data to send/receive
-            sender_id = inst.target_or_sender; // Save sender's id
-            word_snt_cnt.reset();
-            break;
-
-        case DENSE_BROADCAST_DATA_OP:
-        case TRANS_BROADCAST_DATA_OP:
-            word_snt_cnt.inc(3); // Increment data that was sent on the bus
-
-            // Data grab
-            if (inst.op == TRANS_BROADCAST_DATA_OP) { // Grab the data that corresponds to my data (note this will also move the data to the correct location for the id that is currently sending)
-                if (current_inf_step == MLP_HEAD_DENSE_2_STEP) { // This step is special. Each of CiM's #0-#31 send a single element and every CiM's must grab it, so there is no check to do
-                    word_rec_cnt.inc();
-                } else {
-                    if (HAS_MY_DATA(word_snt_cnt.get_cnt())) { word_rec_cnt.inc(); } // Increment data received
-                }
-                if (id < data_len_reg) { // Avoid overwriting data for CiMs that should receive the data
-                    if (word_snt_cnt.get_cnt() <= data_len_reg) {
-                        intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 1) ? (inst.data[2]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
-                        intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 2) ? (inst.data[1]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
-                        intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 3) ? (inst.data[0]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
-                    } else {
-                        intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 1) ? (inst.data[0]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
-                        intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 2) ? (inst.data[1]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
-                        intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 3) ? (inst.data[2]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
-                    }
-                }
-            } else if (inst.op == DENSE_BROADCAST_DATA_OP) { // Always move data (even my own) to the correct location to perform operations later
-                word_rec_cnt.inc(3); // Increment data received
-                if (word_snt_cnt.get_cnt() <= data_len_reg) {
-                    intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-3] = inst.data[0];
-                    intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-2] = inst.data[1];
-                    intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-1] = inst.data[2];
-                } else { // Will either have 1 or 2 left if we are over the data_len_reg
-                    uint16_t num_data_left = data_len_reg - (word_snt_cnt.get_cnt()-3);
-                    intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-3] = (num_data_left == 1) ? inst.data[2] : inst.data[1];
-                    intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-2] = (num_data_left == 1) ? (intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-2]) : (inst.data[2]);
-                }
-            }
-
-            // Prep new instruction to send
-            if (inst.target_or_sender == id) {
-                if (word_snt_cnt.get_cnt() < data_len_reg) { // If last time was me and I have more data to send
-                    struct instruction new_inst = {/*op*/ inst.op, /*target_or_sender*/ id, /*data*/ {0, 0, 0}};
-
-                    if ((data_len_reg - word_snt_cnt.get_cnt() == 2)) { // Only two bytes left
-                        new_inst.data = {0, intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()]};
-                        new_inst.data[2] = intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()+1];
-                    } else if ((data_len_reg - word_snt_cnt.get_cnt() == 1)) { // Only one byte left
-                        new_inst.data[2] = intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()];
-                    } else {
-                        new_inst.data = {intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()], intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()+1]};
-                        new_inst.data[2] = intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()+2];
-                    }
-                    bus->push_inst(new_inst);
-                } else {
-                    struct instruction inst = {NOP, id, /*data*/ {0, 0, 0}};
-                    bus->push_inst(inst);
-                }
-            }
-            break;
-
-        case NOP:
-        default:
-            break;
+    case DATA_STREAM_OP:
+        if (inst.target_or_sender == id) {
+            params[word_rec_cnt.get_cnt() + rx_addr_reg] = inst.data[0];
+            params[word_rec_cnt.get_cnt()+1 + rx_addr_reg] = inst.data[1]; // Note: If the length is less than 3, we will be loading junk. That's OK since it will get overwritten
+            params[word_rec_cnt.get_cnt()+2 + rx_addr_reg] = inst.data[2];
+            word_rec_cnt.inc(3);
         }
+        break;
+
+    case DENSE_BROADCAST_START_OP:
+    case TRANS_BROADCAST_START_OP:
+        if (inst.target_or_sender == id) { // Master controller tells me to start broadcasting some data
+            struct instruction new_inst;
+            tx_addr_reg = static_cast<uint16_t> (inst.data[0]);
+            OP op = (inst.op == DENSE_BROADCAST_START_OP) ? DENSE_BROADCAST_DATA_OP : TRANS_BROADCAST_DATA_OP;
+            if (inst.data[1] == 1) { new_inst = {op, id, /*data*/{0, 0, intermediate_res[tx_addr_reg]},}; } // Special case to only send one data and have the correct alignment
+            else { new_inst = {op, id, /*data*/{intermediate_res[tx_addr_reg], intermediate_res[tx_addr_reg+1], intermediate_res[tx_addr_reg+2]}}; }
+            bus->push_inst(new_inst);
+        }
+
+        if (current_inf_step == ENC_MHSA_MULT_V_STEP) {
+            if (inst.target_or_sender == 0) { gen_cnt_7b_2.inc(); } // Counts matrix
+            word_rec_cnt.reset(); // We also want to reset this counter here because the CiM that don't have to multiply anything for this matrix could overflow the counter
+        }
+
+        rx_addr_reg = static_cast<uint16_t> (inst.data[2]); // Save address where to store data
+        data_len_reg = inst.data[1]; // Save length of data to send/receive
+        sender_id = inst.target_or_sender; // Save sender's id
+        word_snt_cnt.reset();
+        break;
+
+    case DENSE_BROADCAST_DATA_OP:
+    case TRANS_BROADCAST_DATA_OP:
+        word_snt_cnt.inc(3); // Increment data that was sent on the bus
+
+        // Data grab
+        if (inst.op == TRANS_BROADCAST_DATA_OP) { // Grab the data that corresponds to my data (note this will also move the data to the correct location for the id that is currently sending)
+            if (current_inf_step == MLP_HEAD_DENSE_2_STEP) { // This step is special. Each of CiM's #0-#31 send a single element and every CiM's must grab it, so there is no check to do
+                word_rec_cnt.inc();
+            } else {
+                if (HAS_MY_DATA(word_snt_cnt.get_cnt())) { word_rec_cnt.inc(); } // Increment data received
+            }
+            if (id < data_len_reg) { // Avoid overwriting data for CiMs that should receive the data
+                if (word_snt_cnt.get_cnt() <= data_len_reg) {
+                    intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 1) ? (inst.data[2]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
+                    intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 2) ? (inst.data[1]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
+                    intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 3) ? (inst.data[0]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
+                } else {
+                    intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 1) ? (inst.data[0]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
+                    intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 2) ? (inst.data[1]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
+                    intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 3) ? (inst.data[2]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
+                }
+            }
+        } else if (inst.op == DENSE_BROADCAST_DATA_OP) { // Always move data (even my own) to the correct location to perform operations later
+            word_rec_cnt.inc(3); // Increment data received
+            if (word_snt_cnt.get_cnt() <= data_len_reg) {
+                intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-3] = inst.data[0];
+                intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-2] = inst.data[1];
+                intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-1] = inst.data[2];
+            } else { // Will either have 1 or 2 left if we are over the data_len_reg
+                uint16_t num_data_left = data_len_reg - (word_snt_cnt.get_cnt()-3);
+                intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-3] = (num_data_left == 1) ? inst.data[2] : inst.data[1];
+                intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-2] = (num_data_left == 1) ? (intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-2]) : (inst.data[2]);
+            }
+        }
+
+        // Prep new instruction to send
+        if (inst.target_or_sender == id) {
+            if (word_snt_cnt.get_cnt() < data_len_reg) { // If last time was me and I have more data to send
+                struct instruction new_inst = {/*op*/ inst.op, /*target_or_sender*/ id, /*data*/ {0, 0, 0}};
+
+                if ((data_len_reg - word_snt_cnt.get_cnt() == 2)) { // Only two bytes left
+                    new_inst.data = {0, intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()]};
+                    new_inst.data[2] = intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()+1];
+                } else if ((data_len_reg - word_snt_cnt.get_cnt() == 1)) { // Only one byte left
+                    new_inst.data[2] = intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()];
+                } else {
+                    new_inst.data = {intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()], intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()+1]};
+                    new_inst.data[2] = intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()+2];
+                }
+                bus->push_inst(new_inst);
+            } else {
+                struct instruction inst = {NOP, id, /*data*/ {0, 0, 0}};
+                bus->push_inst(inst);
+            }
+        }
+        break;
+    
+    case INFERENCE_RESULT_OP:
+    case PISTOL_START_OP:
+    case NOP:
+    default:
+        break;
     }
 
     // Run FSM
     switch (cim_state){
     case IDLE_CIM:
+        if (inst.op == PATCH_LOAD_BROADCAST_OP) {
+            update_state(PATCH_LOAD_CIM);
+        }
         break;
 
     case RESET_CIM:
@@ -188,19 +186,14 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         break;
 
     case PATCH_LOAD_CIM:
-        if ((compute_in_progress == false) && (gen_reg_3b == 0)) { // Finished normalization divide
-            intermediate_res[word_rec_cnt.get_cnt()] = computation_result;
-            word_rec_cnt.inc();
-            gen_reg_3b = 1;
-            is_ready = true;
-        }
-        if ((compute_in_progress == false) && (word_rec_cnt.get_cnt() == PATCH_LEN) && (gen_reg_3b == 1)) { // Received my complete patch, perform part of Dense layer
+        if ((compute_in_progress == false) && (word_rec_cnt.get_cnt() == PATCH_LEN) && (gen_reg_2b == 0)) { // Received my complete patch, perform part of Dense layer
             MAC(/* patch starting addr */ 0,/* weight starting addr */ 0, /*len*/ PATCH_LEN, /* bias addr */ param_addr_map[SINGLE_PARAMS].addr+PATCH_PROJ_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION);
-            gen_reg_3b = 2;
+            gen_reg_2b = 1;
             word_rec_cnt.reset();
-        } else if ((compute_in_progress == false) && (gen_reg_3b == 2)) { // Done computation
-            intermediate_res[gen_cnt_7b_2.get_cnt() + mem_map.at(PATCH_MEM)] = computation_result; // +1 to account for classification token
-            gen_reg_3b = 0;
+        } else if ((compute_in_progress == false) && (gen_reg_2b == 1)) { // Done computation
+            intermediate_res[gen_cnt_7b_2.get_cnt() + mem_map.at(PATCH_MEM)] = computation_result;
+            is_ready = true;
+            gen_reg_2b = 0;
             gen_cnt_7b_2.inc(); // Increment number of patches received
             if (gen_cnt_7b_2.get_cnt() == NUM_PATCHES) { // Received all patches, automatically start inference
                 is_ready = false;
@@ -218,18 +211,18 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             current_inf_step = POS_EMB_STEP;
             word_rec_cnt.reset();
             gen_cnt_7b.reset();
-            gen_reg_3b = 0;
+            gen_reg_2b = 0;
             verify_computation(CLASS_TOKEN_VERIF, id, intermediate_res, mem_map.at(CLASS_TOKEN_MEM));
             break;
 
         case POS_EMB_STEP:
             if ((compute_in_progress == false) && (gen_cnt_7b.get_cnt() < NUM_PATCHES+1)) { // Start computation
-                if (gen_reg_3b == 1) { // Save computation result from previous iteration (except for the first iteration)
+                if (gen_reg_2b == 1) { // Save computation result from previous iteration (except for the first iteration)
                     intermediate_res[gen_cnt_7b.get_cnt() + mem_map.at(POS_EMB_MEM)] = computation_result;
                     gen_cnt_7b.inc();
                 }
                 ADD(PATCH_LEN+gen_cnt_7b.get_cnt(), param_addr_map[POS_EMB_PARAMS].addr+gen_cnt_7b.get_cnt(), MODEL_PARAM);
-                gen_reg_3b = 1;
+                gen_reg_2b = 1;
             } else if ((compute_in_progress == false) && (gen_cnt_7b.get_cnt() == NUM_PATCHES+1)) { // Done with positional embedding
                 intermediate_res[gen_cnt_7b.get_cnt() + mem_map.at(POS_EMB_MEM)] = computation_result; // Save the last result
                 current_inf_step = ENC_LAYERNORM_1_1ST_HALF_STEP;
@@ -256,7 +249,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             if (inst.op == PISTOL_START_OP) {
                 if (id == 0) { cout << "CiM: Finished LayerNorm (1st half)" << endl; }
                 current_inf_step = static_cast<INFERENCE_STEP> (static_cast<int> (current_inf_step) + 1);
-                gen_reg_3b = 0;
+                gen_reg_2b = 0;
                 word_rec_cnt.reset();
             }
             break;
@@ -288,7 +281,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     current_inf_step = MLP_HEAD_PRE_DENSE_1_TRANSPOSE_STEP;
                     verify_computation(MLP_HEAD_LAYERNORM_VERIF, id, intermediate_res, mem_map.at(MLP_HEAD_LN_2ND_HALF_MEM));
                 }
-                gen_reg_3b = 0;
+                gen_reg_2b = 0;
                 if (id == 0) { cout << "CiM: Finished LayerNorm (2nd half)" << endl; }
                 word_rec_cnt.reset();
             }
@@ -301,48 +294,48 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case MLP_HEAD_DENSE_2_STEP:
             if (word_rec_cnt.get_cnt() >= EMB_DEPTH) { // No more data to receive for this broadcast, start MACs
                 if ((compute_in_progress == false) && (current_inf_step == ENC_MHSA_DENSE_STEP)) {
-                    if (gen_reg_3b == 0) {
+                    if (gen_reg_2b == 0) {
                         is_ready = false;
                         MAC(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_Q_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_Q_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION); // Q
-                        gen_reg_3b = 1;
-                    } else if (gen_reg_3b == 1) {
+                        gen_reg_2b = 1;
+                    } else if (gen_reg_2b == 1) {
                         intermediate_res[mem_map.at(ENC_Q_MEM)+sender_id] = computation_result; // Q
                         MAC(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_K_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_K_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION); // K
-                        gen_reg_3b = 2;
-                    } else if (gen_reg_3b == 2) {
+                        gen_reg_2b = 2;
+                    } else if (gen_reg_2b == 2) {
                         intermediate_res[mem_map.at(ENC_K_MEM)+sender_id] = computation_result; // K
                         MAC(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_V_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_V_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION); // V
-                        gen_reg_3b = 3;
+                        gen_reg_2b = 3;
                         word_rec_cnt.reset();
                     }
                 } else if ((compute_in_progress == false) && (current_inf_step == MLP_DENSE_1_STEP)) { // Only least significant MLP_DIM number of CiMs will perform this computation
                     if (id < MLP_DIM) {
                         MAC(mem_map.at(ENC_MLP_IN_MEM), param_addr_map[ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_1_MLP_HEAD_DENSE_1_BIAS_OFF, MODEL_PARAM, SWISH_ACTIVATION);
-                        gen_reg_3b = 3;
+                        gen_reg_2b = 3;
                     }
                     word_rec_cnt.reset();
                 } else if ((compute_in_progress == false) && (current_inf_step == MLP_HEAD_DENSE_1_STEP) && (id >= MLP_DIM)) { // Only most significant MLP_DIM number of CiMs will perform this computation
                     MAC(mem_map.at(MLP_HEAD_DENSE_1_IN_MEM), param_addr_map[ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_1_MLP_HEAD_DENSE_1_BIAS_OFF, MODEL_PARAM, SWISH_ACTIVATION);
-                    gen_reg_3b = 3;
+                    gen_reg_2b = 3;
                     word_rec_cnt.reset();
                 }
             } else if ((word_rec_cnt.get_cnt() >= MLP_DIM) && (current_inf_step == MLP_DENSE_2_AND_SUM_STEP || current_inf_step == MLP_HEAD_DENSE_2_STEP)) { // No more data to receive for this broadcast (for MLP's dense #2), start MACs
                 if ((compute_in_progress == false) && (current_inf_step == MLP_DENSE_2_AND_SUM_STEP)) {
-                    if (gen_reg_3b == 0) {
+                    if (gen_reg_2b == 0) {
                         MAC(mem_map.at(ENC_MLP_DENSE2_IN_MEM), param_addr_map[ENC_MLP_DENSE_2_PARAMS].addr, MLP_DIM, param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_2_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION);
-                        gen_reg_3b = 1;
-                    } else if (gen_reg_3b == 1) {
+                        gen_reg_2b = 1;
+                    } else if (gen_reg_2b == 1) {
                         intermediate_res[mem_map.at(ENC_MLP_OUT_MEM)+sender_id] = computation_result; // MLP Dense 2
                         ADD(/*enc input*/ sender_id, mem_map.at(ENC_MLP_OUT_MEM)+sender_id, INTERMEDIATE_RES);  // Sum with encoder's input (next step in inference pipeline, but do it now)
-                        gen_reg_3b = 3;
+                        gen_reg_2b = 3;
                         word_rec_cnt.reset();
                     }
                 } else if ((compute_in_progress == false) && (current_inf_step == MLP_HEAD_DENSE_2_STEP) && (id < NUM_SLEEP_STAGES)) {
                     MAC(mem_map.at(MLP_HEAD_DENSE_2_IN_MEM), param_addr_map[MLP_HEAD_DENSE_2_PARAMS].addr, MLP_DIM, param_addr_map[SINGLE_PARAMS].addr+MLP_HEAD_DENSE_2_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION);
-                    gen_reg_3b = 3;
+                    gen_reg_2b = 3;
                     word_rec_cnt.reset();
                 }
-            } else if ((compute_in_progress == false) && (gen_reg_3b == 3)){ // Done
+            } else if ((compute_in_progress == false) && (gen_reg_2b == 3)){ // Done
                 gen_cnt_7b_2.inc();
                 if (current_inf_step == ENC_MHSA_DENSE_STEP) { // Encoder's MHSA Q/K/V Dense
                     if ((id == 0) && (gen_cnt_7b_2.get_cnt() == EMB_DEPTH)) { cout << "CiM: Finished encoder's MHSA Q/K/V Dense" << endl; }
@@ -361,7 +354,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     intermediate_res[mem_map.at(MLP_HEAD_DENSE_2_OUT_MEM)] = computation_result;
                 }
                 is_ready = true;
-                gen_reg_3b = 0;
+                gen_reg_2b = 0;
             }
 
             if (inst.op == PISTOL_START_OP) {
@@ -380,7 +373,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     current_inf_step = MLP_HEAD_PRE_DENSE_2_TRANSPOSE_STEP;
                     if (id >= MLP_DIM) { verify_computation(MLP_HEAD_DENSE_1_VERIF, id-MLP_DIM, intermediate_res, mem_map.at(MLP_HEAD_DENSE_1_OUT_MEM)); }
                 } else if (current_inf_step == MLP_HEAD_DENSE_2_STEP) { current_inf_step = MLP_HEAD_PRE_SOFTMAX_TRANSPOSE_STEP; }
-                gen_reg_3b = 0;
+                gen_reg_2b = 0;
                 gen_cnt_7b_2.reset();
                 word_rec_cnt.reset();
             }
@@ -424,20 +417,20 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             uint16_t MAC_storage_addr = mem_map.at(ENC_QK_T_MEM) + gen_cnt_7b_2.get_cnt()*(NUM_PATCHES+1) + sender_id; // Storage location of MAC result
             if (word_rec_cnt.get_cnt() >= NUM_HEADS) { // No more data to receive, start MACs
                 if (compute_in_progress == false){
-                    if (gen_reg_3b == 0) {
+                    if (gen_reg_2b == 0) {
                         uint16_t K_T_addr = mem_map.at(ENC_K_T_MEM) + gen_cnt_7b_2.get_cnt()*NUM_HEADS;
                         uint16_t Q_addr = mem_map.at(ENC_QK_T_IN_MEM); // Temporary storage location for Q's dense broadcast, so it remains the same for all heads
                         MAC(Q_addr, K_T_addr, NUM_HEADS, /*bias addr unused when NO_ACTIVATION*/ 0, INTERMEDIATE_RES, NO_ACTIVATION);
-                        gen_reg_3b = 1;
-                    } else if (gen_reg_3b == 1) {
+                        gen_reg_2b = 1;
+                    } else if (gen_reg_2b == 1) {
                         intermediate_res[MAC_storage_addr] = computation_result;
                         DIV(MAC_storage_addr, param_addr_map[SINGLE_PARAMS].addr+ENC_SQRT_NUM_HEADS_OFF, MODEL_PARAM); // /sqrt(NUM_HEADS)
-                        gen_reg_3b = 2; // Just a signal to avoid coming here every time FSM runs
+                        gen_reg_2b = 2; // Just a signal to avoid coming here every time FSM runs
                         word_rec_cnt.reset();
                     }
                 }
-            } else if (compute_in_progress == false && gen_reg_3b == 2) { // Done with this MAC
-                gen_reg_3b = 0;
+            } else if (compute_in_progress == false && gen_reg_2b == 2) { // Done with this MAC
+                gen_reg_2b = 0;
                 intermediate_res[MAC_storage_addr] = computation_result;
                 gen_cnt_7b.inc();
                 if (gen_cnt_7b.get_cnt() == (NUM_PATCHES+1)) { // All MACs for one matrix are done
@@ -456,35 +449,35 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             break;
         }
         case MLP_HEAD_SOFTMAX_STEP:
-            if ((compute_in_progress == false) && (gen_reg_3b == 0) && (id < NUM_SLEEP_STAGES)) {
+            if ((compute_in_progress == false) && (gen_reg_2b == 0) && (id < NUM_SLEEP_STAGES)) {
                 SOFTMAX(/*input addr*/ mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM), /*len*/ NUM_SLEEP_STAGES);
-                gen_reg_3b = 1; // Just a signal to avoid coming here every time FSM runs
+                gen_reg_2b = 1; // Just a signal to avoid coming here every time FSM runs
             } else if (compute_in_progress == false) {
                 if (id == 0) { current_inf_step = POST_SOFTMAX_DIVIDE_STEP; }
                 else { current_inf_step = INFERENCE_COMPLETE;}
                 is_ready = false;
                 if (id == 0) { verify_computation(MLP_HEAD_SOFTMAX_VERIF, id, intermediate_res, mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM)); }
                 gen_cnt_7b.reset();
-                gen_reg_3b = 0;
+                gen_reg_2b = 0;
                 if (id == 0) { cout << "CiM: Finished MLP head's Softmax" << endl; }
             }
             break;
 
         case POST_SOFTMAX_DIVIDE_STEP:
-            if ((compute_in_progress == false) && (gen_reg_3b == 0) && (gen_cnt_7b.get_cnt() < NUM_SLEEP_STAGES)) { // Divide all elements by NUM_SAMPLES_OUT_AVG
+            if ((compute_in_progress == false) && (gen_reg_2b == 0) && (gen_cnt_7b.get_cnt() < NUM_SLEEP_STAGES)) { // Divide all elements by NUM_SAMPLES_OUT_AVG
                 DIV(mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM)+gen_cnt_7b.get_cnt(), NUM_SAMPLES_OUT_AVG, IMMEDIATE_VAL);
-                gen_reg_3b = 1; // Just a signal to avoid coming here every time FSM runs
+                gen_reg_2b = 1; // Just a signal to avoid coming here every time FSM runs
             } else if ((gen_cnt_7b.get_cnt() == NUM_SLEEP_STAGES) && (compute_in_progress == false)) {
                 cout << "CiM: Finished MLP head's Softmax averaging divide" << endl;
                 verify_computation(MLP_HEAD_SOFTMAX_DIV_VERIF, id, intermediate_res, mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM));
                 current_inf_step = POST_SOFTMAX_AVERAGING_STEP;
                 gen_cnt_7b.reset();
                 gen_cnt_7b_2.reset();
-            } else if ((compute_in_progress == false) && (gen_reg_3b == 1)) { // Done one division
+            } else if ((compute_in_progress == false) && (gen_reg_2b == 1)) { // Done one division
                 intermediate_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM)+gen_cnt_7b.get_cnt()] = computation_result;
                 intermediate_res[mem_map.at(SOFTMAX_AVG_SUM_MEM)+gen_cnt_7b.get_cnt()] = computation_result; // Copy there for averaging sum step
                 gen_cnt_7b.inc();
-                gen_reg_3b = 0;
+                gen_reg_2b = 0;
             }
             break;
 
@@ -498,20 +491,20 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 uint16_t addr_softmax_divide_sum = mem_map.at(SOFTMAX_AVG_SUM_MEM) + gen_cnt_7b.get_cnt();
 
                 intermediate_res[gen_cnt_7b.get_cnt()] = intermediate_res[addr_prev_softmax]; // Move previous softmax result to intermediate storage
-                if (gen_reg_3b == 1) { intermediate_res[mem_map.at(SOFTMAX_AVG_SUM_MEM)+gen_cnt_7b.get_cnt()-1] = computation_result; } // Save previous sum result
+                if (gen_reg_2b == 1) { intermediate_res[mem_map.at(SOFTMAX_AVG_SUM_MEM)+gen_cnt_7b.get_cnt()-1] = computation_result; } // Save previous sum result
                 ADD(gen_cnt_7b.get_cnt(), addr_softmax_divide_sum, INTERMEDIATE_RES); // Sum with previous result
 
-                gen_reg_3b = 1;
+                gen_reg_2b = 1;
                 gen_cnt_7b.inc();
                 if (gen_cnt_7b.get_cnt() == NUM_SLEEP_STAGES) {
                     intermediate_res[mem_map.at(SOFTMAX_AVG_SUM_MEM)+gen_cnt_7b.get_cnt()-1] = computation_result;
                     gen_cnt_7b.reset();
                     gen_cnt_7b_2.inc();
                 }
-            } else if ((compute_in_progress == false) && (gen_reg_3b == 1)) {
+            } else if ((compute_in_progress == false) && (gen_reg_2b == 1)) {
                 ARGMAX(/*addr*/ mem_map.at(SOFTMAX_AVG_SUM_MEM), /*len*/ NUM_SLEEP_STAGES); // Start a ARGMAX in the background
-                gen_reg_3b = 2;
-            } else if ((compute_in_progress == false) && (gen_reg_3b == 2)) {
+                gen_reg_2b = 2;
+            } else if ((compute_in_progress == false) && (gen_reg_2b == 2)) {
                 gen_cnt_7b.reset();
                 gen_cnt_7b_2.reset();
                 current_inf_step = RETIRE_SOFTMAX_STEP;
@@ -538,6 +531,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 gen_cnt_7b_2.reset();
                 verify_softmax_storage(intermediate_res, mem_map.at(PREV_SOFTMAX_OUTPUT_MEM));
                 if (id == 0) {
+                    cout << ">----- CiM STATS -----<" << endl;
                     cout << "CiM #0: Inference complete. Inferred sleep stage: " << computation_result << endl;
                     cout << "CiM #0: Number of exponent operations with negative argument = " << _neg_exp_cnt << "/" << _total_exp_cnt << " (" << 100*_neg_exp_cnt/_total_exp_cnt  << "%)" << endl;
                     cout << "CiM #0: Min./Max. inputs to exponential = " << static_cast<float>(_min_exp_input_arg) << " and " << static_cast<float>(_max_exp_input_arg) << endl;
@@ -547,13 +541,13 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
         case ENC_MHSA_SOFTMAX_STEP:
             if (gen_cnt_7b_2.get_cnt() < NUM_HEADS && (id < NUM_PATCHES+1)) {
-                if (compute_in_progress == false && gen_reg_3b == 1) { // Done with this matrix in the Z-stack
+                if (compute_in_progress == false && gen_reg_2b == 1) { // Done with this matrix in the Z-stack
                     gen_cnt_7b_2.inc();
-                    gen_reg_3b = 0;
+                    gen_reg_2b = 0;
                 } else if (compute_in_progress == false) {
                     uint16_t MAC_storage_addr = mem_map.at(ENC_PRE_SOFTMAX_MEM) + gen_cnt_7b_2.get_cnt()*(NUM_PATCHES+1); // Storage location of MAC result
                     SOFTMAX(/*input addr*/ MAC_storage_addr, /*len*/ NUM_PATCHES+1);
-                    gen_reg_3b = 1; // Just a signal to avoid coming here every time FSM runs
+                    gen_reg_2b = 1; // Just a signal to avoid coming here every time FSM runs
                 }
             } else { is_ready = true; }
 
@@ -570,22 +564,22 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             if (word_rec_cnt.get_cnt() >= (NUM_PATCHES+1)) { // No more data to receive for this given row
                 if (IS_MY_MATRIX(gen_cnt_7b_2.get_cnt()-1) && (compute_in_progress == false)) { // Only if matrix being broadcast corresponds to mine (-1 because gen_cnt_7b_2 is incremented when the matrix starts broadcast)
                     MAC(mem_map.at(ENC_V_MULT_IN_MEM), /*in2 addr*/ mem_map.at(ENC_V_MEM), NUM_PATCHES+1, /*bias addr unused when NO_ACTIVATION*/ 0, INTERMEDIATE_RES, NO_ACTIVATION);
-                    gen_reg_3b = 1; // Just a signal to avoid coming here every time FSM runs
+                    gen_reg_2b = 1; // Just a signal to avoid coming here every time FSM runs
                     word_rec_cnt.reset();
                     if (id >= (NUM_CIM - NUM_HEADS) && sender_id == NUM_PATCHES) { is_ready = false; } // Need to explicitly stop master else it would send pistol_start and we would miss the last row of CiM #56-#63
                 }
-            } else if (compute_in_progress == false && gen_reg_3b == 1) { // Done with this row in the matrix
+            } else if (compute_in_progress == false && gen_reg_2b == 1) { // Done with this row in the matrix
                 intermediate_res[mem_map.at(ENC_V_MULT_MEM) + gen_cnt_7b.get_cnt()] = computation_result;
                 gen_cnt_7b.inc();
                 if (gen_cnt_7b.get_cnt() == (NUM_PATCHES+1)) { gen_cnt_7b.reset(); } // gen_cnt_7b counts row in the current matrix
-                gen_reg_3b = 0;
+                gen_reg_2b = 0;
             }
 
             if (inst.op == PISTOL_START_OP) {
                 if (id >= (NUM_CIM-NUM_HEADS)) { intermediate_res[mem_map.at(ENC_V_MULT_MEM) + gen_cnt_7b.get_cnt()] = computation_result; }
                 current_inf_step = ENC_POST_MHSA_TRANSPOSE_STEP;
                 is_ready = true;
-                gen_reg_3b = 0;
+                gen_reg_2b = 0;
                 verify_computation(ENC_MULT_V_VERIF, id, intermediate_res, mem_map.at(ENC_V_MULT_MEM));
                 if (id == 0) { cout << "CiM: Finished encoder's V matmul" << endl; }
                 word_rec_cnt.reset();
@@ -595,20 +589,20 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
         case ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP:
             if (word_rec_cnt.get_cnt() >= EMB_DEPTH) { // No more data to receive for this broadcast, start MACs
-                if ((compute_in_progress == false) && (gen_reg_3b == 0)){ // Start computation
+                if ((compute_in_progress == false) && (gen_reg_2b == 0)){ // Start computation
                     MAC(mem_map.at(ENC_DENSE_IN_MEM), param_addr_map[ENC_COMB_HEAD_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_COMB_HEAD_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION);
-                    gen_reg_3b = 1; // Just a signal to avoid coming here every time FSM runs
-                } else if ((compute_in_progress == false) && (gen_reg_3b == 1)) {
+                    gen_reg_2b = 1; // Just a signal to avoid coming here every time FSM runs
+                } else if ((compute_in_progress == false) && (gen_reg_2b == 1)) {
                     intermediate_res[mem_map.at(ENC_MHSA_OUT_MEM) + sender_id] = computation_result;
                     ADD(mem_map.at(ENC_MHSA_OUT_MEM) + sender_id, sender_id, INTERMEDIATE_RES); // Sum with encoder's input as a residual connection
-                    gen_reg_3b = 2;
+                    gen_reg_2b = 2;
                     word_rec_cnt.reset();
                 }
                 if (sender_id == NUM_PATCHES-1) { is_ready = false; }
-            } else if (compute_in_progress == false && gen_reg_3b == 2) {
+            } else if (compute_in_progress == false && gen_reg_2b == 2) {
                 intermediate_res[mem_map.at(ENC_MHSA_OUT_MEM) + sender_id] = computation_result;
                 gen_cnt_7b_2.inc();
-                gen_reg_3b = 0;
+                gen_reg_2b = 0;
                 is_ready = true;
             }
 
@@ -616,7 +610,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 verify_computation(ENC_RES_SUM_1_VERIF, id, intermediate_res, mem_map.at(ENC_MHSA_OUT_MEM));
                 if (id == 0 && gen_cnt_7b_2.get_cnt() == (NUM_PATCHES+1)) { cout << "CiM: Finished encoder's post-MHSA Dense" << endl; }
                 current_inf_step = ENC_LAYERNORM_2_1ST_HALF_STEP; // Start another round of LayerNorm
-                gen_reg_3b = 0;
+                gen_reg_2b = 0;
                 gen_cnt_7b_2.reset();
             }
             break;
@@ -656,7 +650,7 @@ void CiM::update_compute_process_cnt() {
 }
 
 void CiM::MAC(uint16_t in1_start_addr, uint16_t in2_start_addr, uint16_t len, uint16_t bias_addr, INPUT_TYPE param_type, ACTIVATION activation) {
-    /* Dot-product between two vectors. */
+    /* Dot-product between two vectors with selectable activation function. */
     if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start MAC!"); }
     compute_in_progress = true;
 
@@ -847,5 +841,5 @@ void CiM::update_state(STATE new_state) {
 }
 
 void CiM::overflow_check() {
-    if (gen_reg_3b > 7) { throw std::overflow_error("CiM: Overflow on gen_reg_3b!"); }
+    if (gen_reg_2b > 3) { throw std::overflow_error("CiM: Overflow on gen_reg_2b!"); }
 }

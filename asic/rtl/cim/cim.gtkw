@@ -1,0 +1,118 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Wed Mar 20 06:11:49 2024
+[*]
+[dumpfile] "dump.vcd"
+[dumpfile_mtime] "Wed Mar 20 06:08:55 2024"
+[dumpfile_size] 7338338
+[savefile] "cim.gtkw"
+[timestart] 516840000
+[size] 2384 1387
+[pos] 1769 53
+*-17.999998 517940000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[markername] AA
+[markername] BB
+[markername] CC
+[markername] DD
+[markername] EE
+[markername] FF
+[markername] GG
+[markername] HH
+[markername] II
+[markername] JJ
+[markername] KK
+[markername] LL
+[markername] MM
+[markername] NN
+[markername] OO
+[markername] PP
+[markername] QQ
+[markername] RR
+[markername] SS
+[markername] TT
+[markername] UU
+[markername] VV
+[markername] WW
+[markername] XX
+[markername] YY
+[markername] ZZ
+[treeopen] cim.
+[treeopen] cim.mem.
+[sst_width] 253
+[signals_width] 295
+[sst_expanded] 1
+[sst_vpaned_height] 434
+@28
+clk
+@24
+cim.cim_state[2:0]
+cim.gen_reg_2b[1:0]
+@200
+-
+@24
+[color] 2
+cim.bus_target_or_sender_read[5:0]
+[color] 2
+cim.bus_op_read[3:0]
+[color] 2
+cim.bus_data_read[0][15:0]
+[color] 2
+cim.bus_data_read[1][15:0]
+[color] 2
+cim.bus_data_read[2][15:0]
+@200
+-
+-
+@24
+cim.word_rec_cnt[6:0]
+cim.word_snt_cnt[6:0]
+cim.gen_cnt_7b_2_cnt[6:0]
+@200
+-
+@28
+[color] 1
+cim.mac_start
+[color] 1
+cim.mac_compute_in_progress
+@24
+[color] 1
+cim.mac_len[6:0]
+@28
+[color] 1
+cim.mac_done
+@24
+[color] 1
+cim.mac_inst.param_data[15:0]
+[color] 1
+cim.mac_inst.intermediate_res_data[15:0]
+@28
+[color] 1
+cim.mac_inst.state[2:0]
+[color] 1
+cim.mac_inst.int_res_mem_access_req
+[color] 1
+cim.mac_inst.params_mem_access_req
+@22
+[color] 1
+cim.mac_inst.computation_result[21:0]
+@200
+-
+@24
+[color] 5
+cim.mem.int_res_access_signals.addr_table[2][9:0]
+[color] 5
+cim.mem.params_access_signals.addr_table[2][9:0]
+@28
+[color] 5
+(0)cim.mem.params_access_signals.read_req_src[2:0]
+[color] 5
+(0)cim.mem.int_res_access_signals.read_req_src[2:0]
+[color] 5
+cim.mem.int_res_wen
+@24
+[color] 5
+cim.mem.int_res_read_data[15:0]
+[color] 5
+cim.mem.int_res_addr[9:0]
+[pattern_trace] 1
+[pattern_trace] 0
