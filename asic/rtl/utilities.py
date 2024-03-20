@@ -4,7 +4,7 @@ from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
 from FixedPoint import FXfamily
 
-import h5py
+import random
 from enum import Enum
 
 #----- CLASSES -----#
@@ -45,6 +45,7 @@ NUM_INT_BITS_COMP = 12
 NUM_FRACT_BITS = 10
 MAX_INT_ADD = 2**(NUM_INT_BITS_COMP-1)/2 - 1
 MAX_INT_MULT = 2**(NUM_INT_BITS_COMP//2-1) - 1
+MAX_VAL = 5
 NUM_HEADS = 8
 NUM_CIM = 64
 NUM_PATCHES = 60
@@ -120,6 +121,12 @@ def BinToDec(dec:float, num_type:FXfamily):
     z2_str = z2.toBinaryString(logBase=1, twosComp=True).replace(".","")
     return int(z2_str, base=2)
 
+def random_input():
+    val = random.normalvariate(mu = 0.0, sigma = (MAX_VAL/5)) # Random number from a normal distribution (max. value at 5 std. dev.)
+    if val > MAX_VAL: val = MAX_VAL
+    elif val < -MAX_VAL: val = -MAX_VAL
+    return val
+
 #----- EEG -----#
 eeg_index = 0
 async def send_eeg_from_adc(dut, eeg_file):
@@ -135,7 +142,9 @@ async def send_eeg_from_adc(dut, eeg_file):
 
 def send_eeg_from_master(dut, eeg_file):
     global eeg_index
+    scaled_raw_eeg = int(eeg_file["eeg"][CLIP_INDEX][eeg_index])/(2**16)
+    val = BinToDec(scaled_raw_eeg, num_Q_storage)
     dut.bus_op_read.value = BusOp.PATCH_LOAD_BROADCAST_OP.value
-    dut.bus_data_read.value = BinToDec(int(eeg_file["eeg"][CLIP_INDEX][eeg_index])/(2**16), num_Q_storage)
+    dut.bus_data_read.value = val
     eeg_index += 1
-    return eeg_index
+    return scaled_raw_eeg

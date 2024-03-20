@@ -2,7 +2,9 @@
 import sys
 sys.path.append("..")
 from utilities import *
+from FixedPoint import FXnum
 
+import h5py
 import cocotb
 import cocotb.triggers
 from cocotb.clock import Clock
@@ -22,13 +24,36 @@ async def basic_reset(dut):
     dut.bus_op_read.value = BusOp.PATCH_LOAD_BROADCAST_START_OP.value
     await RisingEdge(dut.clk)
 
+    # Patch load test
+    # Fill patch project bias parameters with random data
+    patch_proj_kernel = []
+    for i in range(PATCH_LEN):
+        param = random_input()
+        patch_proj_kernel.append(FXnum(param, num_Q_comp))
+        dut.mem.params[i].value = BinToDec(param, num_Q_storage)
+    
+    bias = random_input()
+    patch_proj_bias = FXnum(bias, num_Q_comp)
+    dut.mem.params[param_addr_map["patch_proj_bias"]].value = BinToDec(bias, num_Q_storage)
+
+    cnt = 0
+    mac_result = 0
+    eeg_vals = []
     for _ in range(int(CLIP_LENGTH_S*SAMPLING_FREQ_HZ)): # TODO: Remove the /100 once patch load and MAC is fully validated to load all data
-        eeg_index = send_eeg_from_master(dut, eeg)
+        scaled_raw_eeg = send_eeg_from_master(dut, eeg)
+        eeg_vals.append(FXnum(scaled_raw_eeg, num_Q_comp))
         await RisingEdge(dut.clk)
         dut.bus_op_read.value = BusOp.NOP.value
-        # Since the patch MAC takes just under EEG_SAMPLING_PERIOD_CLOCK_CYCLE clock cycles to complete, we need to wait for the next clock cycle to send the next EEG sample
-        # but to save simulation time, we will wait for EEG_SAMPLING_PERIOD_CLOCK_CYCLE clock cycles only if we are at the end of a patch
-        if (eeg_index%PATCH_LEN == 0): await cocotb.triggers.ClockCycles(dut.clk, EEG_SAMPLING_PERIOD_CLOCK_CYCLE-1)
-        else:  await cocotb.triggers.ClockCycles(dut.clk, 5)
+        await cocotb.triggers.ClockCycles(dut.clk, 3)
+        if (dut.mac_start == 1):
+            while (dut.mac_done == 0): await cocotb.triggers.RisingEdge(dut.clk)
+            for i in range(PATCH_LEN): mac_result += patch_proj_kernel[i]*eeg_vals[i]
+            mac_result += patch_proj_bias
+            expected_str = mac_result.toBinaryString(logBase=1).replace(".","")
+            assert ((int(expected_str, base=2)-50) <= int(dut.mac_out.value) <= (int(expected_str, base=2)+50)), f"MAC result during patch load doesn't match expected. Expected: {BinToDec(mac_result, num_Q_comp)}, got: {int(dut.mac_out.value)}"
+            eeg_vals = []
+            mac_result = 0
+        
+        cnt += 1
 
     await cocotb.triggers.ClockCycles(dut.clk, 1000)

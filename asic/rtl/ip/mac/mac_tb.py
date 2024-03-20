@@ -6,21 +6,14 @@ from utilities import *
 from FixedPoint import FXnum
 
 import cocotb
-from cocotb.triggers import RisingEdge, FallingEdge
+from cocotb.triggers import RisingEdge
 
 #----- CONSTANTS -----#
 # Rough figures from functional simulation
-MAX_VAL = 5
 MAX_LEN = 64
 NUM_TESTS = 100
 
-#----- HELPERS-----#
-def random_input():
-    val = random.normalvariate(mu = 0.0, sigma = (MAX_VAL/5)) # Random number from a normal distribution (max. value at 5 std. dev.)
-    if val > MAX_VAL: val = MAX_VAL
-    elif val < -MAX_VAL: val = -MAX_VAL
-    return val
-                          
+#----- HELPERS-----#                         
 async def test_MAC(dut, activation=ActivationType.NO_ACTIVATION.value):
     # Prepare MAC
     expected_result = 0
@@ -62,7 +55,7 @@ async def test_MAC(dut, activation=ActivationType.NO_ACTIVATION.value):
     # Wait for the MAC to finish and check result
     while dut.done.value == 0: await RisingEdge(dut.clk)
     expected_str = expected_result.toBinaryString(logBase=1).replace(".","")
-    assert ((int(expected_str, base=2)-50) <= int(dut.computation_result.value) <= (int(expected_str, base=2)+50)), f"Output value is incorrect! Expected: {BinToDec(expected_result, num_Q_comp)}, got: {int(dut.computation_result.value)}"
+    assert ((int(expected_str, base=2)-50) <= int(dut.computation_result.value) <= (int(expected_str, base=2)+50)), f"MAC output value is incorrect! Expected: {BinToDec(expected_result, num_Q_comp)}, got: {int(dut.computation_result.value)}"
 
 #----- TESTS -----#
 @cocotb.test()
