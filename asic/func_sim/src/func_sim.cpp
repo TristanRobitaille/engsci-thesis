@@ -21,8 +21,8 @@ int init(){
     event_schedule[2] = master_nrst_reset;
     event_schedule[4] = master_param_load;
     event_schedule[6] = master_param_load_reset;
-    event_schedule[12500] = epoch_start;
-    event_schedule[12502] = epoch_start_reset;
+    event_schedule[40000] = epoch_start;
+    event_schedule[40002] = epoch_start_reset;
 
     // Construct CiMs
     for (int16_t i = 0; i < NUM_CIM; ++i) {

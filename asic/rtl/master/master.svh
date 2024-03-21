@@ -1,6 +1,8 @@
 `ifndef _master_vh_
 `define _master_vh_
 
+`include "../types.svh"
+
 /*----- ENUM -----*/
     typedef enum logic [2:0] {
         MASTER_STATE_IDLE,

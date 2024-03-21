@@ -1,0 +1,79 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Thu Mar 21 00:44:58 2024
+[*]
+[dumpfile] "dump.vcd"
+[dumpfile_mtime] "Thu Mar 21 00:40:17 2024"
+[dumpfile_size] 465817
+[savefile] "param_load.gtkw"
+[timestart] 0
+[size] 3440 1387
+[pos] 1679 0
+*-21.799997 4330000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[markername] AA
+[markername] BB
+[markername] CC
+[markername] DD
+[markername] EE
+[markername] FF
+[markername] GG
+[markername] HH
+[markername] II
+[markername] JJ
+[markername] KK
+[markername] LL
+[markername] MM
+[markername] NN
+[markername] OO
+[markername] PP
+[markername] QQ
+[markername] RR
+[markername] SS
+[markername] TT
+[markername] UU
+[markername] VV
+[markername] WW
+[markername] XX
+[markername] YY
+[markername] ZZ
+[treeopen] cim.
+[treeopen] cim.mem.
+[sst_width] 331
+[signals_width] 340
+[sst_expanded] 1
+[sst_vpaned_height] 293
+@28
+cim.clk
+cim.cim_state[2:0]
+@200
+-
+@24
+[color] 2
+cim.bus_op_read[3:0]
+[color] 2
+bus_target_or_sender[5:0]
+[color] 2
+cim.bus_data_read[0][15:0]
+[color] 2
+cim.bus_data_read[1][15:0]
+[color] 2
+cim.bus_data_read[2][15:0]
+@200
+-
+@25
+[color] 5
+cim.mem.params_access_signals.addr_table[0][9:0]
+@24
+[color] 5
+cim.mem.params_access_signals.write_data[0][15:0]
+@c00024
+[color] 5
+cim.mem.params_access_signals.write_req_src[2:0]
+@28
+(0)cim.mem.params_access_signals.write_req_src[2:0]
+(1)cim.mem.params_access_signals.write_req_src[2:0]
+(2)cim.mem.params_access_signals.write_req_src[2:0]
+@1401200
+-group_end
+[pattern_trace] 1
+[pattern_trace] 0

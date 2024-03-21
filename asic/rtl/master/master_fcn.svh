@@ -91,11 +91,11 @@ endfunction
 
 function automatic void update_inst(ref logic signed [2:0][N_STORAGE-1:0] bus_data_write, ref logic[3:0] bus_op_write, input logic signed [N_STORAGE-1:0] ext_mem_data, input logic[1:0] gen_cnt_2b_cnt, input logic[6:0] gen_cnt_7b_cnt, input logic ext_mem_data_valid, input logic new_cim, input logic gen_cnt_2b_rst_n);
     if (new_cim) begin
-        bus_op_write <= DATA_STREAM_START_OP;
+        bus_op_write <= PARAM_STREAM_START_OP;
         bus_data_write[0] <= {6'd0, param_addr_map[gen_cnt_7b_cnt[3:0]].addr};
         bus_data_write[1] <= {9'd0, param_addr_map[gen_cnt_7b_cnt[3:0]].len};
     end else begin
-        bus_op_write <= (gen_cnt_2b_rst_n == RST) ? DATA_STREAM_OP : NOP;
+        bus_op_write <= ((gen_cnt_2b_rst_n == RST) || ext_mem_data_valid) ? PARAM_STREAM_OP : NOP;
         bus_data_write[0] <= (ext_mem_data_valid && (gen_cnt_2b_cnt == 'd0)) ? ext_mem_data : bus_data_write[0];
         bus_data_write[1] <= (ext_mem_data_valid && (gen_cnt_2b_cnt == 'd1)) ? ext_mem_data : bus_data_write[1];
         bus_data_write[2] <= (ext_mem_data_valid && (gen_cnt_2b_cnt == 'd2)) ? ext_mem_data : bus_data_write[2];

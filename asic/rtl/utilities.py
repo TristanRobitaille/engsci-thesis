@@ -2,24 +2,25 @@
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
-from FixedPoint import FXfamily
+from FixedPoint import FXfamily, FXnum
 
+import h5py
 import random
 from enum import Enum
 
 #----- CLASSES -----#
 class BusOp(Enum):
-    PATCH_LOAD_BROADCAST_START_OP   = 0
-    PATCH_LOAD_BROADCAST_OP         = 1
-    DENSE_BROADCAST_START_OP        = 2
-    DENSE_BROADCAST_DATA_OP         = 3
-    DATA_STREAM_START_OP            = 4
-    DATA_STREAM_OP                  = 5
-    TRANS_BROADCAST_START_OP        = 6
-    TRANS_BROADCAST_DATA_OP         = 7
-    PISTOL_START_OP                 = 8
-    INFERENCE_RESULT_OP             = 9
-    NOP                             = 10
+    NOP                             = 0
+    PATCH_LOAD_BROADCAST_START_OP   = 1
+    PATCH_LOAD_BROADCAST_OP         = 2
+    DENSE_BROADCAST_START_OP        = 3
+    DENSE_BROADCAST_DATA_OP         = 4
+    PARAM_STREAM_START_OP           = 5
+    PARAM_STREAM_OP                 = 6
+    TRANS_BROADCAST_START_OP        = 7
+    TRANS_BROADCAST_DATA_OP         = 8
+    PISTOL_START_OP                 = 9
+    INFERENCE_RESULT_OP             = 10
     OP_NUM                          = 11
 
 class MACParamType(Enum):
@@ -62,6 +63,8 @@ CLIP_INDEX = 1 # Clip index to be used for the test
 TEMP_RES_STORAGE_SIZE_CIM = 848 
 PARAMS_STORAGE_SIZE_CIM = 528
 
+params_file = h5py.File("../../func_sim/reference_data/model_weights.h5", "r")
+
 num_Q_storage = FXfamily(NUM_FRACT_BITS, NUM_INT_BITS_STORAGE)
 num_Q_comp = FXfamily(NUM_FRACT_BITS, NUM_INT_BITS_COMP)
 
@@ -94,7 +97,16 @@ inf_steps = [
 ]
 
 param_addr_map = {
-    "patch_proj_bias": 64*8,
+    "patch_proj_kernel":                            {"start_addr": 0,       "len": PATCH_LEN},
+    "pos_emb":                                      {"start_addr": 1*64,    "len": NUM_PATCHES+1},
+    "enc_Q_dense_kernel":                           {"start_addr": 2*64,    "len": EMB_DEPTH},
+    "enc_K_dense_kernel":                           {"start_addr": 3*64,    "len": EMB_DEPTH},
+    "enc_V_dense_kernel":                           {"start_addr": 4*64,    "len": EMB_DEPTH},
+    "enc_comb_head_kernel":                         {"start_addr": 5*64,    "len": EMB_DEPTH},
+    "enc_mlp_dense_1_or_mlp_head_dense_1_kernel":   {"start_addr": 6*64,    "len": EMB_DEPTH},
+    "enc_mlp_dense_2_kernel":                       {"start_addr": 7*64,    "len": MLP_DIM},
+    "enc_enc_comb_2_kernel":                        {"start_addr": 7*64+32, "len": MLP_DIM},
+    "single_params":                                {"start_addr": 8*64,    "len": 16}
 }
 
 #----- HELPERS -----#
@@ -126,6 +138,36 @@ def random_input():
     if val > MAX_VAL: val = MAX_VAL
     elif val < -MAX_VAL: val = -MAX_VAL
     return val
+
+def params(param_name:str):
+    if (param_name == "patch_proj_kernel"):                 return params_file["patch_projection_dense"]["vision_transformer"]["patch_projection_dense"]["kernel:0"] # Patch projection kernel
+    elif (param_name == "pos_emb"):                         return params_file["top_level_model_weights"]["pos_emb:0"] # Positional embedding
+    elif (param_name == "enc_Q_dense_kernel"):              return params_file["Encoder_1"]["mhsa_query_dense"]["kernel:0"] # Encoder Q dense kernel
+    elif (param_name == "enc_K_dense_kernel"):              return params_file["Encoder_1"]["mhsa_key_dense"]["kernel:0"] # Encoder K dense kernel
+    elif (param_name == "enc_V_dense_kernel"):              return params_file["Encoder_1"]["mhsa_value_dense"]["kernel:0"] # Encoder V dense kernel
+    elif (param_name == "mhsa_combine_head_dense_kernel"):  return params_file["Encoder_1"]["mhsa_combine_head_dense"]["kernel:0"] # MHSA combine head dense kernel
+    elif (param_name == "mlp_head_dense_1_kernel"):         return params_file["Encoder_1"]["vision_transformer"]["Encoder_1"]["mlp_dense1_encoder"]["kernel:0"] # Encoder MLP dense 1 kernel
+    elif (param_name == "mlp_dense_1_kernel"):              return params_file["mlp_head"]["mlp_head_dense1"]["kernel:0"] # MLP head dense 1 kernel
+    elif (param_name == "mlp_dense_2_kernel"):              return params_file["Encoder_1"]["vision_transformer"]["Encoder_1"]["mlp_dense2_encoder"]["kernel:0"] # Encoder MLP dense 2 kernel
+    elif (param_name == "class_emb"):                       return params_file["top_level_model_weights"]["class_emb:0"][0] # Class embedding
+    elif (param_name == "patch_proj_bias"):                 return params_file["patch_projection_dense"]["vision_transformer"]["patch_projection_dense"]["bias:0"] # Patch projection bias
+    elif (param_name == "enc_Q_dense_bias"):                return params_file["Encoder_1"]["mhsa_query_dense"]["bias:0"] # Encoder Q dense bias
+    elif (param_name == "enc_K_dense_bias"):                return params_file["Encoder_1"]["mhsa_key_dense"]["bias:0"] # Encoder K dense bias
+    elif (param_name == "enc_V_dense_bias"):                return params_file["Encoder_1"]["mhsa_value_dense"]["bias:0"] # Encoder V dense bias
+    elif (param_name == "mhsa_combine_head_dense_bias"):    return params_file["Encoder_1"]["mhsa_combine_head_dense"]["bias:0"] # MHSA combine head dense bias
+    elif (param_name == "mlp_head_dense_1_bias"):           return params_file["mlp_head"]["mlp_head_dense1"]["bias:0"] # MLP head dense 1 bias
+    elif (param_name == "mlp_head_softmax_bias"):           return params_file["mlp_head_softmax"]["vision_transformer"]["mlp_head_softmax"]["bias:0"] # MLP head softmax bias
+    elif (param_name == "sqrt_num_heads"):                  return FXnum(NUM_HEADS, num_Q_storage).sqrt() # sqrt(# heads)
+    elif (param_name == "mlp_dense_2_bias"):                return params_file["Encoder_1"]["vision_transformer"]["Encoder_1"]["mlp_dense2_encoder"]["bias:0"] # Encoder MLP dense 2 bias
+    elif (param_name == "enc_layernorm_1_beta"):            return params_file["Encoder_1"]["vision_transformer"]["Encoder_1"]["layerNorm1_encoder"]["beta:0"] # Encoder LayerNorm 1 beta
+    elif (param_name == "enc_layernorm_1_gamma"):           return params_file["Encoder_1"]["vision_transformer"]["Encoder_1"]["layerNorm1_encoder"]["gamma:0"] # Encoder LayerNorm 1 gamma
+    elif (param_name == "enc_layernorm_2_beta"):            return params_file["Encoder_1"]["vision_transformer"]["Encoder_1"]["layerNorm2_encoder"]["beta:0"] # Encoder LayerNorm 2 beta
+    elif (param_name == "enc_layernorm_2_gamma"):           return params_file["Encoder_1"]["vision_transformer"]["Encoder_1"]["layerNorm2_encoder"]["gamma:0"] # Encoder LayerNorm 2 gamma
+    elif (param_name == "mlp_head_layernorm_beta"):         return params_file["Encoder_1"]["vision_transformer"]["Encoder_1"]["layerNorm2_encoder"]["beta:0"] # MLP head LayerNorm beta
+    elif (param_name == "mlp_head_layernorm_gamma"):        return params_file["Encoder_1"]["vision_transformer"]["Encoder_1"]["layerNorm2_encoder"]["gamma:0"] # MLP head LayerNorm gamma
+    elif (param_name == "mlp_dense_1_bias"):                return params_file["Encoder_1"]["vision_transformer"]["Encoder_1"]["mlp_dense1_encoder"]["bias:0"] # Encoder MLP dense 1 bias
+    elif (param_name == "mlp_head_softmax_kernel"):         return params_file["mlp_head_softmax"]["vision_transformer"]["mlp_head_softmax"]["kernel:0"]# MLP head softmax kernel
+    else: raise ValueError(f"Unknown parameter name: {param_name}")
 
 #----- EEG -----#
 eeg_index = 0

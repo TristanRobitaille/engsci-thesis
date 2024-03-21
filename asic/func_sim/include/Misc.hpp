@@ -28,17 +28,17 @@ using large_fp_t = fpm::fixed</*base type*/ std::int32_t, /*intermediate type*/ 
 
 /*----- ENUM -----*/
 enum OP {
+    NOP, // Represents the no tranmission
     PATCH_LOAD_BROADCAST_START_OP, // Broadcast the start of a new patch to all CiM
     PATCH_LOAD_BROADCAST_OP, // Broadcast current patch to all CiM, which perform vector-matrix multiplication after each patch
     DENSE_BROADCAST_START_OP, // Tell the target CiM that it needs to broadcast its data starting at a given addr and length. Non-target CiM will then listen to the broadcast and perform MAC once the full vector is received.
     DENSE_BROADCAST_DATA_OP, // Sent from a CiM. Contains 3 bytes of data
-    DATA_STREAM_START_OP, // Indicates that the next x data transmission will contain only parameters data (except op field, so 3B)
-    DATA_STREAM_OP, // This instruction contains three bytes of data, and follow DATA_STREAM_START_OP
+    PARAM_STREAM_START_OP, // Indicates that the next x data transmission will contain only parameters data (except op field, so 3B)
+    PARAM_STREAM_OP, // This instruction contains three bytes of data, and follow PARAM_STREAM_START_OP
     TRANS_BROADCAST_START_OP, // Tell the target CiM that it needs to broadcast its data starting at a given addr and length. Non-target CiM will then listen to the broadcast and grab the data they need.
     TRANS_BROADCAST_DATA_OP, // Sent from a CiM. Contains 3 bytes of data
     PISTOL_START_OP, // Used to instruct CiMs to move to their next step in the inference pipeline
-    INFERENCE_RESULT_OP, // Sent from CiM #0 to master. Contains inference result.
-    NOP // Represents the no tranmission
+    INFERENCE_RESULT_OP // Sent from CiM #0 to master. Contains inference result.
 };
 
 enum SYSTEM_STATE {
@@ -94,6 +94,7 @@ class Counter {
 /* Bus */
 class Bus {
     private:
+        bool hold_on_bus = false; // Allows instruction to remain on bus until next instruction is pushed
         struct instruction inst;
         std::queue<struct instruction> q;
         uint32_t _num_transpose_data_op_sent = 0; // Used to track the number of transpose data ops (for debugging purposes)
@@ -101,11 +102,13 @@ class Bus {
 
     public:
         struct instruction get_inst() { return inst; };
-        int push_inst(struct instruction inst) {
+        int push_inst(struct instruction inst, bool hold=false) {
             if (inst.target_or_sender > NUM_CIM) {
                 std::cout << "Invalid target or sender (" << inst.target_or_sender << "; out of range). Exiting." << std::endl;
                 exit(-1);
             }
+            if (hold_on_bus == true) { q.pop(); } // If we were already holding an instruction on the bus, need to pop it so we can push the new one
+            hold_on_bus = hold;
             q.push(inst);
             return 0;
         };
@@ -122,7 +125,7 @@ class Bus {
             if (q.size() == 0) { inst = reset(); } // Send NOP on bus
             else {
                 inst = q.front();
-                q.pop();
+                if (hold_on_bus == false) { q.pop(); }
                 if (inst.op == TRANS_BROADCAST_DATA_OP) { _num_transpose_data_op_sent++; }
                 if (inst.op == DENSE_BROADCAST_DATA_OP) { _num_dense_broadcast_data_op_sent++; }
             }

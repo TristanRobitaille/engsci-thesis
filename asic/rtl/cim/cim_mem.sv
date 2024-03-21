@@ -79,7 +79,7 @@ module cim_mem (
         assert (!int_res_access_signals.write_req_src[MAC]) else $fatal("MAC is not allowed to write to intermediate results memory");
         assert (!params_access_signals.write_req_src[MAC]) else $fatal("MAC is not allowed to write to model parameters memory");
 
-        // TODO
+        // TODO: Only one request at a 1time
     end
 endmodule
 

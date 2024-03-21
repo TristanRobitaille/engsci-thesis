@@ -1,7 +1,7 @@
 // Includes
 `include "master.svh"
 `include "master_fcn.svh"
-`include "../ip/counter/counter.sv"
+// `include "../ip/counter/counter.sv"
 `include "../types.svh"
 
 module master #(
@@ -104,6 +104,11 @@ module master #(
                 end
 
                 MASTER_STATE_PARAM_LOAD: begin
+                    /* Note that there is a slight mismatch between model parameter loading behaviour in the RTL and the C++ functional simulation.
+                       In the functional simulation, the master updates all three data word in the instruction on the same cycle and holds the instruction on the bus, while the CiM sequentially reads the words and writes to memory.
+                       In the RTL, because we need to wait for external memory to send data to the master, we only update one word at a time. When waiting for data from external memory, the instruction is NOP. Instruction changes
+                       to PARAM_STREAM_OP only when the external memory data is valid.
+                    */
                     case (params_curr_layer)
                         PATCH_PROJ_KERNEL_PARAMS,
                         POS_EMB_PARAMS,
@@ -153,8 +158,8 @@ module master #(
                     bus_target_or_sender_write <= gen_cnt_7b_2_cnt[5:0];
                     update_inst(bus_data_write, bus_op_write, ext_mem_data, gen_cnt_2b_cnt, gen_cnt_7b_cnt, ext_mem_data_valid, new_cim, gen_cnt_2b_rst_n);
 
-                    // Don't update external memory if we are sending DATA_STREAM_START_OP because it will be garbage
-                    ext_mem_addr <= (bus_op_write != DATA_STREAM_START_OP) ? param_ext_mem_addr(gen_cnt_7b_cnt, gen_cnt_7b_2_cnt, gen_cnt_2b_cnt, params_curr_layer) : ext_mem_addr;
+                    // Don't update external memory address if we are sending PARAM_STREAM_START_OP because it will be garbage
+                    ext_mem_addr <= (bus_op_write != PARAM_STREAM_START_OP) ? param_ext_mem_addr(gen_cnt_7b_cnt, gen_cnt_7b_2_cnt, gen_cnt_2b_cnt, params_curr_layer) : ext_mem_addr;
                 end
 
                 MASTER_STATE_SIGNAL_LOAD: begin

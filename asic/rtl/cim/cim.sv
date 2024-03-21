@@ -125,9 +125,35 @@ module cim # (
                 DENSE_BROADCAST_DATA_OP,
                 TRANS_BROADCAST_DATA_OP: begin
                 end
-                DATA_STREAM_START_OP: begin
+                PARAM_STREAM_START_OP: begin
+                    rx_addr <= bus_data_read[0][$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0];
+                    word_rec_cnt_rst_n <= RST;
                 end
-                DATA_STREAM_OP: begin
+                PARAM_STREAM_OP: begin
+                    if (bus_target_or_sender_read == ID) begin // The master will progressively fill bus_data[0..1..2] as it receives data from external memory
+                        unique case (gen_reg_2b)
+                            'd0: begin
+                                params_access_signals.addr_table[BUS_FSM] <= rx_addr + {3'd0, word_rec_cnt};
+                                params_access_signals.write_data[BUS_FSM] <= bus_data_read[0];
+                                gen_reg_2b <= 'd1;
+                                is_ready <= 1'b0;
+                            end
+                            'd1: begin
+                                params_access_signals.addr_table[BUS_FSM] <= rx_addr + {3'd0, word_rec_cnt};
+                                params_access_signals.write_data[BUS_FSM] <= bus_data_read[1];
+                                gen_reg_2b <= 'd2;
+                            end
+                            'd2: begin
+                                params_access_signals.addr_table[BUS_FSM] <= rx_addr + {3'd0, word_rec_cnt};
+                                params_access_signals.write_data[BUS_FSM] <= bus_data_read[2];
+                                gen_reg_2b <= 'd0;
+                                is_ready <= 1'b1;
+                            end
+                        endcase
+                    end
+                    params_access_signals.write_req_src[BUS_FSM] <= (bus_target_or_sender_read == ID);
+                    word_rec_cnt_inc <= {6'd0, (bus_target_or_sender_read == ID)};
+                    word_rec_cnt_rst_n <= (bus_target_or_sender_read == ID) ? RUN : RST; // Hold under reset is CiM isn't recipient to save power
                 end
                 NOP: begin
                     int_res_access_signals.write_req_src[BUS_FSM] <= 1'b0;
@@ -183,8 +209,10 @@ module cim # (
                                 int_res_access_signals.write_data[LOGIC_FSM] <= (mac_out[N_COMP-1]) ? mac_out_flipped[N_STORAGE-1:0] : mac_out[N_STORAGE-1:0]; // Selecting the bottom N_STORAGE bits requires converting to positive two's complement if the number is negative, selecting, and converting back
                                 gen_reg_2b <= 'd0;
                                 gen_cnt_7b_2_inc <= 'd1;
-                                // TODO: Verify computation?
                             end
+                        end
+                        default: begin
+                            $fatal("Invalid gen_reg_2b value in CIM_PATCH_LOAD state");
                         end
                     endcase
                     word_rec_cnt_rst_n <= (~MAC_compute_in_progress && (word_rec_cnt == PATCH_LEN)) ? RST : RUN;

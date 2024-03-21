@@ -73,17 +73,27 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         word_rec_cnt.inc();
         break;
 
-    case DATA_STREAM_START_OP:
+    case PARAM_STREAM_START_OP:
         rx_addr_reg = inst.data[0]; // Address
         word_rec_cnt.reset();
         break;
 
-    case DATA_STREAM_OP:
+    case PARAM_STREAM_OP:
         if (inst.target_or_sender == id) {
-            params[word_rec_cnt.get_cnt() + rx_addr_reg] = inst.data[0];
-            params[word_rec_cnt.get_cnt()+1 + rx_addr_reg] = inst.data[1]; // Note: If the length is less than 3, we will be loading junk. That's OK since it will get overwritten
-            params[word_rec_cnt.get_cnt()+2 + rx_addr_reg] = inst.data[2];
-            word_rec_cnt.inc(3);
+            // Can only write to memory one parameter at a time
+            if (gen_reg_2b == 0) {
+                params[word_rec_cnt.get_cnt() + rx_addr_reg] = inst.data[0];
+                gen_reg_2b = 1;
+                is_ready = false;
+            } else if (gen_reg_2b == 1) {
+                params[word_rec_cnt.get_cnt() + rx_addr_reg + 1] = inst.data[1];
+                gen_reg_2b = 2;
+            } else if (gen_reg_2b == 2) {
+                params[word_rec_cnt.get_cnt() + rx_addr_reg + 2] = inst.data[2]; // Note: If the length is less than 3, we will be loading junk. That's OK since it will get overwritten
+                gen_reg_2b = 0;
+                word_rec_cnt.inc(3);
+                is_ready = true;
+            }
         }
         break;
 

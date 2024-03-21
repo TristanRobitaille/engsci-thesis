@@ -53,7 +53,7 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
         break;
 
     case PARAM_LOAD:
-        if ((params_loaded == false) && (all_cims_ready)) { bus->push_inst(param_to_send()); }
+        if ((params_loaded == false) && all_cims_ready) { bus->push_inst(param_to_send(), /*hold_on_bus*/true); }
         else if (params_loaded == true) { state = IDLE; }
         break;
 
@@ -196,11 +196,11 @@ struct instruction Master_Ctrl::param_to_send(){
             uint16_t length = param_addr_map[params_curr_layer].len;
             array<float, 3> data = {static_cast<float>(addr), static_cast<float>(length), 0};
 
-            inst = {DATA_STREAM_START_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data={start_addr, length_elem, 0}*/ data};
+            inst = {PARAM_STREAM_START_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data={start_addr, length_elem, 0}*/ data};
             gen_bit = true;
             gen_cnt_7b.reset();
         } else if (gen_cnt_7b.get_cnt() < param_addr_map[params_curr_layer].len) { // Sending data to a CiM
-            inst.op = DATA_STREAM_OP;
+            inst.op = PARAM_STREAM_OP;
             inst.target_or_sender = gen_cnt_7b_2.get_cnt();
             update_inst_with_params(params_curr_layer, &inst);
             gen_cnt_7b.inc(3); // Increment by 3 since we send 3 bytes per transaction
@@ -220,29 +220,29 @@ struct instruction Master_Ctrl::param_to_send(){
             uint16_t addr = param_addr_map[params_curr_layer].addr;
             uint16_t length = param_addr_map[params_curr_layer].len;
             std::array<float, 3> data = {static_cast<float>(addr), static_cast<float>(length), 0};
-            inst = {DATA_STREAM_START_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data={start_addr, length_elem}*/ data};
+            inst = {PARAM_STREAM_START_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data={start_addr, length_elem}*/ data};
             gen_cnt_7b.inc(); // Use as indication that next time this runs, we go to the else if () below
 
         } else if (gen_cnt_7b_2.get_cnt() < param_addr_map[params_curr_layer].num_rec){
             if (gen_cnt_7b.get_cnt() == 1) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.patch_proj_bias[gen_cnt_7b_2.get_cnt()], params.class_emb[gen_cnt_7b_2.get_cnt()], params.layernorm_gamma[0][gen_cnt_7b_2.get_cnt()]}};
+                inst = {PARAM_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.patch_proj_bias[gen_cnt_7b_2.get_cnt()], params.class_emb[gen_cnt_7b_2.get_cnt()], params.layernorm_gamma[0][gen_cnt_7b_2.get_cnt()]}};
                 gen_cnt_7b.inc();
             } else if (gen_cnt_7b.get_cnt() == 2) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.layernorm_beta[0][gen_cnt_7b_2.get_cnt()], params.enc_mhsa_Q_bias[gen_cnt_7b_2.get_cnt()], params.enc_mhsa_K_bias[gen_cnt_7b_2.get_cnt()]}};
+                inst = {PARAM_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.layernorm_beta[0][gen_cnt_7b_2.get_cnt()], params.enc_mhsa_Q_bias[gen_cnt_7b_2.get_cnt()], params.enc_mhsa_K_bias[gen_cnt_7b_2.get_cnt()]}};
                 gen_cnt_7b.inc();
             } else if (gen_cnt_7b.get_cnt() == 3) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.enc_mhsa_V_bias[gen_cnt_7b_2.get_cnt()], params.enc_mhsa_sqrt_num_heads, params.enc_mhsa_combine_bias[gen_cnt_7b_2.get_cnt()]}};
+                inst = {PARAM_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.enc_mhsa_V_bias[gen_cnt_7b_2.get_cnt()], params.enc_mhsa_sqrt_num_heads, params.enc_mhsa_combine_bias[gen_cnt_7b_2.get_cnt()]}};
                 gen_cnt_7b.inc();
             } else if (gen_cnt_7b.get_cnt() == 4) {
                 // Note: CiM's 0-31 receive bias for the encoder's MLP and CiM's 32-63 receive bias for the MLP head
-                if (gen_cnt_7b_2.get_cnt() < MLP_DIM) { inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.layernorm_gamma[1][gen_cnt_7b_2.get_cnt()], params.layernorm_beta[1][gen_cnt_7b_2.get_cnt()], params.enc_mlp_dense_1_bias[gen_cnt_7b_2.get_cnt()]}}; }
-                else {                                  inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.layernorm_gamma[1][gen_cnt_7b_2.get_cnt()], params.layernorm_beta[1][gen_cnt_7b_2.get_cnt()], params.mlp_head_dense_1_bias[gen_cnt_7b_2.get_cnt()-MLP_DIM]}}; }
+                if (gen_cnt_7b_2.get_cnt() < MLP_DIM) { inst = {PARAM_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.layernorm_gamma[1][gen_cnt_7b_2.get_cnt()], params.layernorm_beta[1][gen_cnt_7b_2.get_cnt()], params.enc_mlp_dense_1_bias[gen_cnt_7b_2.get_cnt()]}}; }
+                else {                                  inst = {PARAM_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.layernorm_gamma[1][gen_cnt_7b_2.get_cnt()], params.layernorm_beta[1][gen_cnt_7b_2.get_cnt()], params.mlp_head_dense_1_bias[gen_cnt_7b_2.get_cnt()-MLP_DIM]}}; }
                 gen_cnt_7b.inc();
             } else if (gen_cnt_7b.get_cnt() == 5) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.enc_mlp_dense_2_bias[gen_cnt_7b_2.get_cnt()], params.layernorm_gamma[2][gen_cnt_7b_2.get_cnt()], params.layernorm_beta[2][gen_cnt_7b_2.get_cnt()]}};
+                inst = {PARAM_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.enc_mlp_dense_2_bias[gen_cnt_7b_2.get_cnt()], params.layernorm_gamma[2][gen_cnt_7b_2.get_cnt()], params.layernorm_beta[2][gen_cnt_7b_2.get_cnt()]}};
                 gen_cnt_7b.inc();
             } else if (gen_cnt_7b.get_cnt() == 6) {
-                inst = {DATA_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.mlp_head_dense_2_bias[gen_cnt_7b_2.get_cnt()], 0, 0}};
+                inst = {PARAM_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.mlp_head_dense_2_bias[gen_cnt_7b_2.get_cnt()], 0, 0}};
                 gen_cnt_7b_2.inc();
                 gen_cnt_7b.reset();
             }
