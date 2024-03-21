@@ -79,7 +79,9 @@ module cim_mem (
         assert (!int_res_access_signals.write_req_src[MAC]) else $fatal("MAC is not allowed to write to intermediate results memory");
         assert (!params_access_signals.write_req_src[MAC]) else $fatal("MAC is not allowed to write to model parameters memory");
 
-        // TODO: Only one request at a 1time
+        // Only one request at a time
+        assert ($countones({int_res_access_signals.read_req_src, int_res_access_signals.write_req_src}) <= 1) else $fatal("Got more than one read/write request for intermediate results memory");
+        assert ($countones({params_access_signals.read_req_src, params_access_signals.write_req_src}) <= 1) else $fatal("Got more than one read/write request for params memory");
     end
 endmodule
 

@@ -63,8 +63,6 @@ CLIP_INDEX = 1 # Clip index to be used for the test
 TEMP_RES_STORAGE_SIZE_CIM = 848 
 PARAMS_STORAGE_SIZE_CIM = 528
 
-params_file = h5py.File("../../func_sim/reference_data/model_weights.h5", "r")
-
 num_Q_storage = FXfamily(NUM_FRACT_BITS, NUM_INT_BITS_STORAGE)
 num_Q_comp = FXfamily(NUM_FRACT_BITS, NUM_INT_BITS_COMP)
 
@@ -139,7 +137,7 @@ def random_input():
     elif val < -MAX_VAL: val = -MAX_VAL
     return val
 
-def params(param_name:str):
+def params(param_name:str, params_file:h5py.File):
     if (param_name == "patch_proj_kernel"):                 return params_file["patch_projection_dense"]["vision_transformer"]["patch_projection_dense"]["kernel:0"] # Patch projection kernel
     elif (param_name == "pos_emb"):                         return params_file["top_level_model_weights"]["pos_emb:0"] # Positional embedding
     elif (param_name == "enc_Q_dense_kernel"):              return params_file["Encoder_1"]["mhsa_query_dense"]["kernel:0"] # Encoder Q dense kernel

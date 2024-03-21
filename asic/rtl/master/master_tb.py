@@ -7,8 +7,9 @@ import cocotb
 import cocotb.triggers
 from cocotb.clock import Clock
 
-#----- EEG -----#
+#----- .h5 files -----#
 eeg = h5py.File("../../func_sim/reference_data/eeg.h5", "r")
+params_file = h5py.File("../../func_sim/reference_data/model_weights.h5", "r")
 
 #----- EXTERNAL MEMORY -----#
 READ_LATENCY = 3 # Number of clock cycles to read from external memory
@@ -66,33 +67,33 @@ def read_param_from_ext_mem(dut):
         row = math.floor(int(dut.ext_mem_addr.value) / 64)
         col = int(dut.ext_mem_addr.value) % 64
 
-        if (ext_mem_param_map["patch_proj_kernel"] <= row < ext_mem_param_map["pos_emb"]):                                  dut.ext_mem_data.value = BinToDec(params("patch_proj_kernel")[row - ext_mem_param_map["patch_proj_kernel"]][col], num_Q_storage) # Patch projection kernel
-        elif (ext_mem_param_map["pos_emb"] <= row < ext_mem_param_map["enc_Q_dense_kernel"]):                               dut.ext_mem_data.value = BinToDec(params("pos_emb")[0][row - ext_mem_param_map["pos_emb"]][col], num_Q_storage) # Positional embedding
-        elif (ext_mem_param_map["enc_Q_dense_kernel"] <= row < ext_mem_param_map["enc_K_dense_kernel"]):                    dut.ext_mem_data.value = BinToDec(params("enc_Q_dense_kernel")[row - ext_mem_param_map["enc_Q_dense_kernel"]][col], num_Q_storage) # Encoder Q dense kernel
-        elif (ext_mem_param_map["enc_K_dense_kernel"] <= row < ext_mem_param_map["enc_V_dense_kernel"]):                    dut.ext_mem_data.value = BinToDec(params("enc_K_dense_kernel")[row - ext_mem_param_map["enc_K_dense_kernel"]][col], num_Q_storage) # Encoder K dense kernel
-        elif (ext_mem_param_map["enc_V_dense_kernel"] <= row < ext_mem_param_map["mhsa_combine_head_dense_kernel"]):        dut.ext_mem_data.value = BinToDec(params("enc_V_dense_kernel")[row - ext_mem_param_map["enc_V_dense_kernel"]][col], num_Q_storage) # Encoder V dense kernel
-        elif (ext_mem_param_map["mhsa_combine_head_dense_kernel"] <= row < ext_mem_param_map["mlp_head_dense_1_kernel"]):   dut.ext_mem_data.value = BinToDec(params("mhsa_combine_head_dense_kernel")[row - ext_mem_param_map["mhsa_combine_head_dense_kernel"]][col], num_Q_storage) # MHSA combine head dense kernel
-        elif (ext_mem_param_map["mlp_head_dense_1_kernel"] <= row < ext_mem_param_map["mlp_dense_2_kernel"] and (col>=32)): dut.ext_mem_data.value = BinToDec(params("mlp_head_dense_1_kernel")[row - ext_mem_param_map["mlp_dense_1_kernel"]][col-32], num_Q_storage) # Encoder MLP dense 1 kernel
-        elif (ext_mem_param_map["mlp_dense_1_kernel"] <= row < ext_mem_param_map["mlp_dense_2_kernel"] and (col<32)):       dut.ext_mem_data.value = BinToDec(params("mlp_dense_1_kernel")[row - ext_mem_param_map["mlp_head_dense_1_kernel"]][col], num_Q_storage) # MLP head dense 1 kernel
-        elif (ext_mem_param_map["mlp_dense_2_kernel"] <= row < ext_mem_param_map["class_emb"]):                             dut.ext_mem_data.value = BinToDec(params("mlp_dense_2_kernel")[row - ext_mem_param_map["mlp_dense_2_kernel"]][col], num_Q_storage) # Encoder MLP dense 2 kernel
-        elif (row == ext_mem_param_map["class_emb"]):                                                                       dut.ext_mem_data.value = BinToDec(params("class_emb")[0][col], num_Q_storage) # Class embedding
-        elif (row == ext_mem_param_map["patch_proj_bias"]):                                                                 dut.ext_mem_data.value = BinToDec(params("patch_proj_bias")[row - ext_mem_param_map["patch_proj_bias"]], num_Q_storage) # Patch projection bias
-        elif (row == ext_mem_param_map["enc_Q_dense_bias"]):                                                                dut.ext_mem_data.value = BinToDec(params("enc_Q_dense_bias")[col], num_Q_storage) # Encoder Q dense bias
-        elif (row == ext_mem_param_map["enc_K_dense_bias"]):                                                                dut.ext_mem_data.value = BinToDec(params("enc_K_dense_bias")[col], num_Q_storage) # Encoder K dense bias
-        elif (row == ext_mem_param_map["enc_V_dense_bias"]):                                                                dut.ext_mem_data.value = BinToDec(params("enc_V_dense_bias")[col], num_Q_storage) # Encoder V dense bias
-        elif (row == ext_mem_param_map["mhsa_combine_head_dense_bias"]):                                                    dut.ext_mem_data.value = BinToDec(params("mhsa_combine_head_dense_bias")[col], num_Q_storage) # MHSA combine head dense bias
-        elif (row == ext_mem_param_map["mlp_head_dense_1_bias"] and (col<32)):                                              dut.ext_mem_data.value = BinToDec(params("mlp_head_dense_1_bias")[col], num_Q_storage) # MLP head dense 1 bias
-        elif (row == ext_mem_param_map["mlp_head_softmax_bias"] and (32<=col<37)):                                          dut.ext_mem_data.value = BinToDec(params("mlp_head_softmax_bias")[col - 32], num_Q_storage) # MLP head softmax bias
-        elif (row == ext_mem_param_map["sqrt_num_heads"] and (col==37)):                                                    dut.ext_mem_data.value = BinToDec(params("sqrt_num_heads"), num_Q_storage) # sqrt(# heads)
-        elif (row == ext_mem_param_map["mlp_dense_2_bias"]):                                                                dut.ext_mem_data.value = BinToDec(params("mlp_dense_2_bias")[col], num_Q_storage) # Encoder MLP dense 2 bias
-        elif (row == ext_mem_param_map["enc_layernorm_1_beta"]):                                                            dut.ext_mem_data.value = BinToDec(params("enc_layernorm_1_beta")[col], num_Q_storage) # Encoder LayerNorm 1 beta
-        elif (row == ext_mem_param_map["enc_layernorm_1_gamma"]):                                                           dut.ext_mem_data.value = BinToDec(params("enc_layernorm_1_gamma")[col], num_Q_storage) # Encoder LayerNorm 1 gamma
-        elif (row == ext_mem_param_map["enc_layernorm_2_beta"]):                                                            dut.ext_mem_data.value = BinToDec(params("enc_layernorm_2_beta")[col], num_Q_storage) # Encoder LayerNorm 2 beta
-        elif (row == ext_mem_param_map["enc_layernorm_2_gamma"]):                                                           dut.ext_mem_data.value = BinToDec(params("enc_layernorm_2_gamma")[col], num_Q_storage) # Encoder LayerNorm 2 gamma
-        elif (row == ext_mem_param_map["mlp_head_layernorm_beta"]):                                                         dut.ext_mem_data.value = BinToDec(params("mlp_head_layernorm_beta")[col], num_Q_storage) # MLP head LayerNorm beta
-        elif (row == ext_mem_param_map["mlp_head_layernorm_gamma"]):                                                        dut.ext_mem_data.value = BinToDec(params("mlp_head_layernorm_gamma")[col], num_Q_storage) # MLP head LayerNorm gamma
-        elif (row == ext_mem_param_map["mlp_dense_1_bias"]):                                                                dut.ext_mem_data.value = BinToDec(params("mlp_dense_1_bias")[col], num_Q_storage) # Encoder MLP dense 1 bias
-        elif (ext_mem_param_map["mlp_head_softmax_kernel"] <= row < ext_mem_param_map["mlp_head_softmax_kernel"]+5):        dut.ext_mem_data.value = BinToDec(params("mlp_head_softmax_kernel")[col][row - ext_mem_param_map["mlp_head_softmax_kernel"]], num_Q_storage) # MLP head softmax kernel
+        if (ext_mem_param_map["patch_proj_kernel"] <= row < ext_mem_param_map["pos_emb"]):                                  dut.ext_mem_data.value = BinToDec(params("patch_proj_kernel", params_file)[row - ext_mem_param_map["patch_proj_kernel"]][col], num_Q_storage) # Patch projection kernel
+        elif (ext_mem_param_map["pos_emb"] <= row < ext_mem_param_map["enc_Q_dense_kernel"]):                               dut.ext_mem_data.value = BinToDec(params("pos_emb", params_file)[0][row - ext_mem_param_map["pos_emb"]][col], num_Q_storage) # Positional embedding
+        elif (ext_mem_param_map["enc_Q_dense_kernel"] <= row < ext_mem_param_map["enc_K_dense_kernel"]):                    dut.ext_mem_data.value = BinToDec(params("enc_Q_dense_kernel", params_file)[row - ext_mem_param_map["enc_Q_dense_kernel"]][col], num_Q_storage) # Encoder Q dense kernel
+        elif (ext_mem_param_map["enc_K_dense_kernel"] <= row < ext_mem_param_map["enc_V_dense_kernel"]):                    dut.ext_mem_data.value = BinToDec(params("enc_K_dense_kernel", params_file)[row - ext_mem_param_map["enc_K_dense_kernel"]][col], num_Q_storage) # Encoder K dense kernel
+        elif (ext_mem_param_map["enc_V_dense_kernel"] <= row < ext_mem_param_map["mhsa_combine_head_dense_kernel"]):        dut.ext_mem_data.value = BinToDec(params("enc_V_dense_kernel", params_file)[row - ext_mem_param_map["enc_V_dense_kernel"]][col], num_Q_storage) # Encoder V dense kernel
+        elif (ext_mem_param_map["mhsa_combine_head_dense_kernel"] <= row < ext_mem_param_map["mlp_head_dense_1_kernel"]):   dut.ext_mem_data.value = BinToDec(params("mhsa_combine_head_dense_kernel", params_file)[row - ext_mem_param_map["mhsa_combine_head_dense_kernel"]][col], num_Q_storage) # MHSA combine head dense kernel
+        elif (ext_mem_param_map["mlp_head_dense_1_kernel"] <= row < ext_mem_param_map["mlp_dense_2_kernel"] and (col>=32)): dut.ext_mem_data.value = BinToDec(params("mlp_head_dense_1_kernel", params_file)[row - ext_mem_param_map["mlp_dense_1_kernel"]][col-32], num_Q_storage) # Encoder MLP dense 1 kernel
+        elif (ext_mem_param_map["mlp_dense_1_kernel"] <= row < ext_mem_param_map["mlp_dense_2_kernel"] and (col<32)):       dut.ext_mem_data.value = BinToDec(params("mlp_dense_1_kernel", params_file)[row - ext_mem_param_map["mlp_head_dense_1_kernel"]][col], num_Q_storage) # MLP head dense 1 kernel
+        elif (ext_mem_param_map["mlp_dense_2_kernel"] <= row < ext_mem_param_map["class_emb"]):                             dut.ext_mem_data.value = BinToDec(params("mlp_dense_2_kernel", params_file)[row - ext_mem_param_map["mlp_dense_2_kernel"]][col], num_Q_storage) # Encoder MLP dense 2 kernel
+        elif (row == ext_mem_param_map["class_emb"]):                                                                       dut.ext_mem_data.value = BinToDec(params("class_emb", params_file)[0][col], num_Q_storage) # Class embedding
+        elif (row == ext_mem_param_map["patch_proj_bias"]):                                                                 dut.ext_mem_data.value = BinToDec(params("patch_proj_bias", params_file)[row - ext_mem_param_map["patch_proj_bias"]], num_Q_storage) # Patch projection bias
+        elif (row == ext_mem_param_map["enc_Q_dense_bias"]):                                                                dut.ext_mem_data.value = BinToDec(params("enc_Q_dense_bias", params_file)[col], num_Q_storage) # Encoder Q dense bias
+        elif (row == ext_mem_param_map["enc_K_dense_bias"]):                                                                dut.ext_mem_data.value = BinToDec(params("enc_K_dense_bias", params_file)[col], num_Q_storage) # Encoder K dense bias
+        elif (row == ext_mem_param_map["enc_V_dense_bias"]):                                                                dut.ext_mem_data.value = BinToDec(params("enc_V_dense_bias", params_file)[col], num_Q_storage) # Encoder V dense bias
+        elif (row == ext_mem_param_map["mhsa_combine_head_dense_bias"]):                                                    dut.ext_mem_data.value = BinToDec(params("mhsa_combine_head_dense_bias", params_file)[col], num_Q_storage) # MHSA combine head dense bias
+        elif (row == ext_mem_param_map["mlp_head_dense_1_bias"] and (col<32)):                                              dut.ext_mem_data.value = BinToDec(params("mlp_head_dense_1_bias", params_file)[col], num_Q_storage) # MLP head dense 1 bias
+        elif (row == ext_mem_param_map["mlp_head_softmax_bias"] and (32<=col<37)):                                          dut.ext_mem_data.value = BinToDec(params("mlp_head_softmax_bias", params_file)[col - 32], num_Q_storage) # MLP head softmax bias
+        elif (row == ext_mem_param_map["sqrt_num_heads"] and (col==37)):                                                    dut.ext_mem_data.value = BinToDec(params("sqrt_num_heads", params_file), num_Q_storage) # sqrt(# heads)
+        elif (row == ext_mem_param_map["mlp_dense_2_bias"]):                                                                dut.ext_mem_data.value = BinToDec(params("mlp_dense_2_bias", params_file)[col], num_Q_storage) # Encoder MLP dense 2 bias
+        elif (row == ext_mem_param_map["enc_layernorm_1_beta"]):                                                            dut.ext_mem_data.value = BinToDec(params("enc_layernorm_1_beta", params_file)[col], num_Q_storage) # Encoder LayerNorm 1 beta
+        elif (row == ext_mem_param_map["enc_layernorm_1_gamma"]):                                                           dut.ext_mem_data.value = BinToDec(params("enc_layernorm_1_gamma", params_file)[col], num_Q_storage) # Encoder LayerNorm 1 gamma
+        elif (row == ext_mem_param_map["enc_layernorm_2_beta"]):                                                            dut.ext_mem_data.value = BinToDec(params("enc_layernorm_2_beta", params_file)[col], num_Q_storage) # Encoder LayerNorm 2 beta
+        elif (row == ext_mem_param_map["enc_layernorm_2_gamma"]):                                                           dut.ext_mem_data.value = BinToDec(params("enc_layernorm_2_gamma", params_file)[col], num_Q_storage) # Encoder LayerNorm 2 gamma
+        elif (row == ext_mem_param_map["mlp_head_layernorm_beta"]):                                                         dut.ext_mem_data.value = BinToDec(params("mlp_head_layernorm_beta", params_file)[col], num_Q_storage) # MLP head LayerNorm beta
+        elif (row == ext_mem_param_map["mlp_head_layernorm_gamma"]):                                                        dut.ext_mem_data.value = BinToDec(params("mlp_head_layernorm_gamma", params_file)[col], num_Q_storage) # MLP head LayerNorm gamma
+        elif (row == ext_mem_param_map["mlp_dense_1_bias"]):                                                                dut.ext_mem_data.value = BinToDec(params("mlp_dense_1_bias", params_file)[col], num_Q_storage) # Encoder MLP dense 1 bias
+        elif (ext_mem_param_map["mlp_head_softmax_kernel"] <= row < ext_mem_param_map["mlp_head_softmax_kernel"]+5):        dut.ext_mem_data.value = BinToDec(params("mlp_head_softmax_kernel", params_file)[col][row - ext_mem_param_map["mlp_head_softmax_kernel"]], num_Q_storage) # MLP head softmax kernel
         elif (int(dut.ext_mem_addr.value) == 64*(ext_mem_param_map["mlp_head_softmax_kernel"]+5-1)+64):
             print(f"Received the address of 64 + max ({int(dut.ext_mem_addr.value)}), but that's OK since it simplifies the logic")
         else:
@@ -107,7 +108,7 @@ def read_param_from_ext_mem(dut):
         data_inst_index += 1
         data_inst_index %= 3
 
-    if (dut.bus_op_write.value == 4): # Data stream start
+    if (dut.bus_op_write.value == BusOp.PARAM_STREAM_START_OP.value): # Param stream start
         data_inst_index = 0
         for i in range(3): data_last_inst[i] = 0
 
@@ -116,7 +117,7 @@ def read_param_from_ext_mem(dut):
 def param_load_assertions(dut):
     # Assertions associated with parameters loading
     global data_last_inst
-    if ((dut.bus_op_write.value) == 5):
+    if ((dut.bus_op_write.value) == BusOp.PARAM_STREAM_OP.value):
         if (dut.gen_cnt_2b_cnt.value == 0):
             d0 = dut.bus_data_write.value[32:47]
             assert (d0 == data_last_inst[0]), f"Data sent on internal bus ({d0}) doesn't match last element loaded from external memory ({data_last_inst[0]})"

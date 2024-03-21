@@ -20,7 +20,7 @@ enum PARAM_NAME { // Master goes through these layers sequentially, loading weig
 
 enum SINGLE_PARAM_OFFSET {
     PATCH_PROJ_BIAS_OFF,
-    CLASS_EMB_OFF,
+    CLASS_TOKEN_OFF,
     ENC_LAYERNORM_1_GAMMA_OFF,
     ENC_LAYERNORM_1_BETA_OFF,
     ENC_Q_DENSE_BIAS_0FF,

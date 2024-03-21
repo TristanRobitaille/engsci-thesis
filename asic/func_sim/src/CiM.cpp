@@ -217,11 +217,8 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
     case INFERENCE_RUNNING_CIM:
         switch (current_inf_step) {
         case CLASS_TOKEN_CONCAT_STEP:
-            intermediate_res[mem_map.at(CLASS_TOKEN_MEM)] = params[param_addr_map[SINGLE_PARAMS].addr+CLASS_EMB_OFF]; // Move classification token from parameters memory to intermediate storage
+            intermediate_res[mem_map.at(CLASS_TOKEN_MEM)] = params[param_addr_map[SINGLE_PARAMS].addr+CLASS_TOKEN_OFF]; // Move classification token from parameters memory to intermediate storage
             current_inf_step = POS_EMB_STEP;
-            word_rec_cnt.reset();
-            gen_cnt_7b.reset();
-            gen_reg_2b = 0;
             verify_computation(CLASS_TOKEN_VERIF, id, intermediate_res, mem_map.at(CLASS_TOKEN_MEM));
             break;
 

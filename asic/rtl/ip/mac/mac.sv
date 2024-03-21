@@ -19,11 +19,10 @@ module mac
     output logic busy, done,
 
     // Memory access signals
+    input MemAccessSignals int_res_access_signals,
+    input MemAccessSignals params_access_signals,
     input wire signed [N_STORAGE-1:0] param_data,
     input wire signed [N_STORAGE-1:0] intermediate_res_data,
-    output logic int_res_mem_access_req, params_mem_access_req,
-    output logic [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] param_addr,
-    output logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] intermediate_res_addr,
 
     // Computation signals
     output logic signed [N_COMP-1:0] computation_result,
@@ -57,31 +56,31 @@ module mac
                     if (start) begin
                         state <= COMPUTE_MUL_IN1;
                         busy <= 1'b1;
-                        intermediate_res_addr <= start_addr1;
-                        int_res_mem_access_req <= 1'b1;
+                        int_res_access_signals.addr_table[MAC] <= start_addr1;
+                        int_res_access_signals.read_req_src[MAC] <= 1'b1;
                         compute_temp <= 'd0;
                     end else begin
                         done <= 1'b0;
                         index <= 'd0;
                         mult_refresh <= 1'b0;
                         add_refresh <= 1'b0;
-                        int_res_mem_access_req <= 1'b0;
+                        int_res_access_signals.read_req_src[MAC] <= 1'b0;
                         delay_signal <= 2'b0;
                     end
                 end 
                 COMPUTE_MUL_IN1: begin
                     index <= index + 1;
-                    intermediate_res_addr   <= (param_type == INTERMEDIATE_RES) ? (start_addr2 + {3'd0, index}) : (intermediate_res_addr);
-                    param_addr              <= (param_type == MODEL_PARAM) ? (start_addr2 + {3'd0, index}) : (param_addr);
-                    int_res_mem_access_req  <= (param_type == INTERMEDIATE_RES);
-                    params_mem_access_req   <= (param_type == MODEL_PARAM);
+                    int_res_access_signals.addr_table[MAC] <= (param_type == INTERMEDIATE_RES) ? (start_addr2 + {3'd0, index}) : (int_res_access_signals.addr_table[MAC]);
+                    params_access_signals.addr_table[MAC] <= (param_type == MODEL_PARAM) ? (start_addr2 + {3'd0, index}) : (params_access_signals.addr_table[MAC]);
+                    int_res_access_signals.read_req_src[MAC] <= (param_type == INTERMEDIATE_RES);
+                    params_access_signals.read_req_src[MAC] <= (param_type == MODEL_PARAM);
                     state <= COMPUTE_MUL_IN2;
                 end
                 COMPUTE_MUL_IN2: begin
                     compute_temp <= (index > 1) ? add_output_q : compute_temp; // Grab data from previous iteration (unless it's the first iteration)
                     mult_input_q_1 <= {{(N_COMP-N_STORAGE){intermediate_res_data[N_STORAGE-1]}}, intermediate_res_data}; // Sign extend
-                    int_res_mem_access_req <= 1'b0;
-                    params_mem_access_req <= 1'b0;
+                    int_res_access_signals.read_req_src[MAC] <= 1'b0;
+                    params_access_signals.read_req_src[MAC] <= 1'b0;
                     state <= COMPUTE_MUL_OUT;
                     add_refresh <= 1'b0;
                 end
@@ -99,8 +98,8 @@ module mac
                         state <= (index == len) ? BASIC_MAC_DONE : COMPUTE_MUL_IN1;
                     end
                     // In case we need to go back to COMPUTE_MUL_IN1
-                    intermediate_res_addr <= start_addr1 + {3'd0, index};
-                    int_res_mem_access_req <= (index != len);
+                    int_res_access_signals.addr_table[MAC] <= start_addr1 + {3'd0, index};
+                    int_res_access_signals.read_req_src[MAC] <= (index != len);
                 end
                 BASIC_MAC_DONE: begin
                     add_refresh <= 1'b0;
@@ -109,8 +108,8 @@ module mac
                         done <= 1'b1;
                         state <= IDLE;
                     end else if (activation == LINEAR_ACTIVATION) begin
-                        param_addr <= (activation == LINEAR_ACTIVATION) ? bias_addr : param_addr;
-                        params_mem_access_req <= (activation == LINEAR_ACTIVATION);
+                        params_access_signals.addr_table[MAC] <= (activation == LINEAR_ACTIVATION) ? bias_addr : params_access_signals.addr_table[MAC];
+                        params_access_signals.read_req_src[MAC] <= (activation == LINEAR_ACTIVATION);
                         delay_signal <= {delay_signal[0], 1'b1}; // Need to delay signal by 1 cycle while we wait for bias
                         state <= (delay_signal[1]) ? COMPUTE_LINEAR_ACTIVATION : BASIC_MAC_DONE;
                     end else if (activation == SWISH_ACTIVATION) begin
@@ -121,7 +120,7 @@ module mac
                 COMPUTE_LINEAR_ACTIVATION: begin
                     add_input_q_1 <= add_output_q;
                     add_input_q_2 <= {{(N_COMP-N_STORAGE){param_data[N_STORAGE-1]}}, param_data}; // Sign extend;
-                    params_mem_access_req <= 1'b0;
+                    params_access_signals.read_req_src[MAC] <= 1'b0;
                     add_refresh <= 1'b1;
                     delay_signal <= {delay_signal[0], 1'b0}; // Need to delay signal by 1 cycle while we wait for add
 

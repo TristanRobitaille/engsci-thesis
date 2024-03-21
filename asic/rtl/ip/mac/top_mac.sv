@@ -1,27 +1,27 @@
 `include "../../types.svh"
+`include "../../cim/cim.svh"
 
 module top_mac # () (
     input wire clk, rst_n
 );
-    ParamInfo_t param_addr_map[PARAMS_NUM-1];
     `include "../../top_init.sv"
 
     // CiM memory
     logic [N_STORAGE-1:0] params [PARAMS_STORAGE_SIZE_CIM-1:0];
-    logic [N_STORAGE-1:0] intermediate_res [TEMP_RES_STORAGE_SIZE_CIM-1:0];
+    logic [N_STORAGE-1:0] int_res [TEMP_RES_STORAGE_SIZE_CIM-1:0];
 
-    logic [N_STORAGE-1:0] param_data, intermediate_res_data = 'd0;
-    wire [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] param_addr;
-    wire [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] intermediate_res_addr;
+    logic [N_STORAGE-1:0] param_data, int_res_data = 'd0;
+    MemAccessSignals params_access_signals();
+    MemAccessSignals int_res_access_signals();
     always_comb begin
     end
     always_ff @ (posedge clk) begin : memory_ctrl
         if (!rst_n) begin
             param_data <= 'd0;
-            intermediate_res_data <= 'd0;
+            int_res_data <= 'd0;
         end else begin
-            param_data <= (params_mem_access_req) ? params[param_addr] : param_data;
-            intermediate_res_data <= (int_res_mem_access_req) ? intermediate_res[intermediate_res_addr] : intermediate_res_data;
+            param_data <= (params_access_signals.read_req_src[MAC]) ? params[params_access_signals.addr_table[MAC]] : param_data;
+            int_res_data <= (int_res_access_signals.read_req_src[MAC]) ? int_res[int_res_access_signals.addr_table[MAC]] : int_res_data;
         end
     end
 
@@ -53,16 +53,14 @@ module top_mac # () (
         .len(len),
         .start_addr1(start_addr1),
         .start_addr2(start_addr2),
-        .bias_addr(param_addr_map[SINGLE_PARAMS].addr + PATCH_PROJ_BIAS_PARAMS),
+        .bias_addr(param_addr_map[SINGLE_PARAMS].addr + PATCH_PROJ_BIAS_OFF),
         .activation(activation),
         .busy(busy),
         .done(done),
-        .int_res_mem_access_req(int_res_mem_access_req),
-        .params_mem_access_req(params_mem_access_req),
         .param_data(param_data),
-        .intermediate_res_data(intermediate_res_data),
-        .param_addr(param_addr),
-        .intermediate_res_addr(intermediate_res_addr),
+        .intermediate_res_data(int_res_data),
+        .params_access_signals(params_access_signals),
+        .int_res_access_signals(int_res_access_signals),
         .computation_result(computation_result),
         .add_output_q(add_output_q),
         .add_input_q_1(add_input_q_1),

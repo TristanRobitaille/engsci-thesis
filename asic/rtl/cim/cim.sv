@@ -90,9 +90,8 @@ module cim # (
     ACTIVATION_TYPE_T mac_activation;
     mac mac_inst    (.clk(clk), .rst_n(rst_n), .start(mac_start), .done(mac_done), .busy(mac_compute_in_progress), .param_type(mac_param_type), .len(mac_len), .activation(mac_activation), 
                      .start_addr1(mac_start_addr1), .start_addr2(mac_start_addr2), .bias_addr(mac_bias_addr),
-                     .param_addr(params_access_signals.addr_table[MAC]), .intermediate_res_addr(int_res_access_signals.addr_table[MAC]),
+                     .params_access_signals(params_access_signals), .int_res_access_signals(int_res_access_signals),                     
                      .param_data(params_read_data), .intermediate_res_data(int_res_read_data), .computation_result(mac_out),
-                     .int_res_mem_access_req(int_res_access_signals.read_req_src[MAC]), .params_mem_access_req(params_access_signals.read_req_src[MAC]),
                      .add_input_q_1(add_input_q_1), .add_input_q_2(add_input_q_2), .add_output_q(add_output_q), .add_refresh(add_refresh), 
                      .mult_input_q_1(mult_input_q_1), .mult_input_q_2(mult_input_q_2), .mult_output_q(mult_output_q), .mult_refresh(mult_refresh));
 
@@ -199,7 +198,7 @@ module cim # (
                                 mac_len <= PATCH_LEN;
                                 mac_param_type <= MODEL_PARAM;
                                 mac_activation <= LINEAR_ACTIVATION;
-                                mac_bias_addr <= param_addr_map[SINGLE_PARAMS].addr + PATCH_PROJ_BIAS_PARAMS;
+                                mac_bias_addr <= param_addr_map[SINGLE_PARAMS].addr + PATCH_PROJ_BIAS_OFF;
                             end
                         end
                         'd1: begin
@@ -220,6 +219,36 @@ module cim # (
                     is_ready <= (gen_cnt_7b_2_cnt == NUM_PATCHES);
                     cim_state <= (gen_cnt_7b_2_cnt == NUM_PATCHES) ? CIM_INFERENCE_RUNNING : cim_state;
                     gen_cnt_7b_2_rst_n <= (gen_cnt_7b_2_cnt == NUM_PATCHES) ? RST : RUN;
+                end
+                CIM_INFERENCE_RUNNING: begin
+                    unique case (current_inf_step)
+                        CLASS_TOKEN_CONCAT_STEP : begin // Move classification token from parameters memory to intermediate storage
+                            gen_reg_2b <= gen_reg_2b + 'd1;
+                            if (gen_reg_2b == 0) begin // Read from model parameters memory
+                                params_access_signals.addr_table[LOGIC_FSM] <= param_addr_map[SINGLE_PARAMS].addr + CLASS_TOKEN_OFF;
+                                params_access_signals.read_req_src[LOGIC_FSM] <= 1'b1;
+                            end else if (gen_reg_2b == 2) begin
+                                params_access_signals.read_req_src[LOGIC_FSM] <= 1'b0;
+                                int_res_access_signals.write_req_src[LOGIC_FSM] <= 1'b1;
+                                int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[CLASS_TOKEN_MEM];
+                                int_res_access_signals.write_data[LOGIC_FSM] <= params_read_data;
+                            end else if (gen_reg_2b == 3) begin
+                                int_res_access_signals.write_req_src[LOGIC_FSM] <= 1'b0;
+                                gen_reg_2b <= 'd0;
+                                current_inf_step <= POS_EMB_STEP;
+                            end
+                        end
+
+                        POS_EMB_STEP : begin
+                            // TODO
+                        end
+                        default: begin
+                            $fatal("Invalid current_inf_step value in CIM_INFERENCE_RUNNING state");
+                        end
+                    endcase
+                end
+                CIM_INVALID: begin
+                    $fatal("Invalid state in CIM!");
                 end
                 default: begin
                     cim_state <= CIM_IDLE;
