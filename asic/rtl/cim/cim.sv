@@ -69,9 +69,22 @@ module cim # (
 
     // Adder module
     wire add_overflow;
-    logic add_refresh;
-    logic [N_COMP-1:0] add_input_q_1, add_input_q_2, add_output_q;
-    adder add_inst (.clk(clk), .rst_n(rst_n), .refresh(add_refresh), .overflow(add_overflow),
+    logic cim_add_refresh;
+    logic [N_COMP-1:0] add_input_q_1, add_input_q_2, cim_add_input_q_1, cim_add_input_q_2, add_output_q, add_out_flipped;
+    always_latch begin : adder_input_MUX
+        if (cim_add_refresh) begin
+            add_input_q_1 = cim_add_input_q_1;
+            add_input_q_2 = cim_add_input_q_2;
+        end else if (mac_add_refresh) begin
+            add_input_q_1 = mac_add_input_q_1;
+            add_input_q_2 = mac_add_input_q_2;
+        end 
+    end
+
+    always_ff @ (posedge clk) begin : adder_assertions
+        assert (~(cim_add_refresh & mac_add_refresh)) else $fatal("Adder refresh signals from both CiM's FSM and MAC modules are asserted simultaneously!");
+    end
+    adder add_inst (.clk(clk), .rst_n(rst_n), .refresh((cim_add_refresh || mac_add_refresh)), .overflow(add_overflow),
                     .input_q_1(add_input_q_1), .input_q_2(add_input_q_2), .output_q(add_output_q));
 
     // Multiplier module
@@ -81,18 +94,18 @@ module cim # (
                             .input_q_1(mult_input_q_1), .input_q_2(mult_input_q_2), .output_q(mult_output_q));
 
     // MAC module
-    logic mac_start, mac_done, mac_compute_in_progress;
+    logic mac_start, mac_done, mac_compute_in_progress, mac_add_refresh;
     logic [$clog2(MAC_MAX_LEN+1)-1:0] mac_len;
     logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] mac_start_addr1, mac_start_addr2;
     logic [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] mac_params_addr, mac_bias_addr;
-    logic [N_COMP-1:0] mac_out, mac_out_flipped;
+    logic [N_COMP-1:0] mac_out, mac_out_flipped, mac_add_input_q_1, mac_add_input_q_2;
     PARAM_TYPE_T mac_param_type;
     ACTIVATION_TYPE_T mac_activation;
     mac mac_inst    (.clk(clk), .rst_n(rst_n), .start(mac_start), .done(mac_done), .busy(mac_compute_in_progress), .param_type(mac_param_type), .len(mac_len), .activation(mac_activation), 
                      .start_addr1(mac_start_addr1), .start_addr2(mac_start_addr2), .bias_addr(mac_bias_addr),
                      .params_access_signals(params_access_signals), .int_res_access_signals(int_res_access_signals),                     
                      .param_data(params_read_data), .intermediate_res_data(int_res_read_data), .computation_result(mac_out),
-                     .add_input_q_1(add_input_q_1), .add_input_q_2(add_input_q_2), .add_output_q(add_output_q), .add_refresh(add_refresh), 
+                     .add_input_q_1(mac_add_input_q_1), .add_input_q_2(mac_add_input_q_2), .add_output_q(add_output_q), .add_refresh(mac_add_refresh), 
                      .mult_input_q_1(mult_input_q_1), .mult_input_q_2(mult_input_q_2), .mult_output_q(mult_output_q), .mult_refresh(mult_refresh));
 
     CIM_STATE_T cim_state;
@@ -205,7 +218,7 @@ module cim # (
                             mac_start <= 1'b0;
                             if (mac_done) begin
                                 int_res_access_signals.addr_table[LOGIC_FSM] <= {3'd0, gen_cnt_7b_2_cnt} + mem_map[PATCH_MEM];
-                                int_res_access_signals.write_data[LOGIC_FSM] <= (mac_out[N_COMP-1]) ? mac_out_flipped[N_STORAGE-1:0] : mac_out[N_STORAGE-1:0]; // Selecting the bottom N_STORAGE bits requires converting to positive two's complement if the number is negative, selecting, and converting back
+                                int_res_access_signals.write_data[LOGIC_FSM] <= (mac_out[N_COMP-1]) ? (~mac_out_flipped[N_STORAGE-1:0]+1'd1) : mac_out[N_STORAGE-1:0]; // Selecting the bottom N_STORAGE bits requires converting to positive two's complement if the number is negative, selecting, and converting back
                                 gen_reg_2b <= 'd0;
                                 gen_cnt_7b_2_inc <= 'd1;
                             end
@@ -240,7 +253,41 @@ module cim # (
                         end
 
                         POS_EMB_STEP : begin
-                            // TODO
+                            if (gen_cnt_7b_cnt < (NUM_PATCHES+1)) begin
+                                if (gen_reg_2b == 'd0) begin // Read from intermediate result and model parameter memories
+                                    params_access_signals.read_req_src[LOGIC_FSM] <= 1'b1;
+                                    params_access_signals.addr_table[LOGIC_FSM] <= param_addr_map[POS_EMB_PARAMS].addr + {3'd0, gen_cnt_7b_cnt};
+                                    int_res_access_signals.read_req_src[LOGIC_FSM] <= 1'b1;
+                                    int_res_access_signals.write_req_src[LOGIC_FSM] <= 1'b0;
+                                    int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[POS_EMB_MEM] + {3'd0, gen_cnt_7b_cnt};
+                                    gen_reg_2b <= 'd1;
+                                end else if (gen_reg_2b == 'd1) begin // Start addition
+                                    cim_add_input_q_1 <= {{(N_COMP-N_STORAGE){'0}}, params_read_data};
+                                    cim_add_input_q_2 <= {{(N_COMP-N_STORAGE){'0}}, int_res_read_data};
+                                    params_access_signals.read_req_src[LOGIC_FSM] <= 1'b0;
+                                    int_res_access_signals.read_req_src[LOGIC_FSM] <= 1'b0;
+                                    gen_reg_2b <= 'd2;
+                                end else if (gen_reg_2b == 'd2) begin // Save results
+                                    int_res_access_signals.write_req_src[LOGIC_FSM] <= 1'b1;
+                                    int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[POS_EMB_MEM] + {3'd0, gen_cnt_7b_cnt};
+                                    int_res_access_signals.write_data[LOGIC_FSM] <= (add_output_q[N_COMP-1]) ? (~add_out_flipped[N_STORAGE-1:0]+1'd1) : add_output_q[N_STORAGE-1:0];;
+                                    gen_reg_2b <= 'd0;
+                                end
+                                gen_cnt_7b_inc <= {6'd0, (gen_reg_2b == 'd2)};
+                            end else begin
+                                gen_cnt_7b_inc <= 'd0;
+                                gen_reg_2b <= 'd0;
+                                int_res_access_signals.write_req_src[LOGIC_FSM] <= 1'b0;
+                                current_inf_step <= (gen_cnt_7b_cnt == (NUM_PATCHES+1)) ? ENC_LAYERNORM_1_1ST_HALF_STEP : POS_EMB_STEP;
+                                $display("Done with POS_EMB_STEP");
+                            end
+                            gen_cnt_7b_rst_n <= (gen_cnt_7b_cnt == (NUM_PATCHES+1)) ? RST : RUN;
+                            cim_add_refresh <= (gen_cnt_7b_cnt != (NUM_PATCHES+1));
+                        end
+
+                        ENC_LAYERNORM_1_1ST_HALF_STEP,
+                        ENC_LAYERNORM_2_1ST_HALF_STEP,
+                        ENC_LAYERNORM_3_1ST_HALF_STEP: begin
                         end
                         default: begin
                             $fatal("Invalid current_inf_step value in CIM_INFERENCE_RUNNING state");
@@ -260,6 +307,7 @@ module cim # (
     // Miscellanous combinational logic
     always_comb begin : computation_twos_comp_flip
         mac_out_flipped = ~mac_out + 'd1;
+        add_out_flipped = ~add_output_q + 'd1;
     end
     
 endmodule

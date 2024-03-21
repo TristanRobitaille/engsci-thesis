@@ -80,6 +80,11 @@ module cim_mem (
         assert (!params_access_signals.write_req_src[MAC]) else $fatal("MAC is not allowed to write to model parameters memory");
 
         // Only one request at a time
+        // if ($countones({int_res_access_signals.read_req_src, int_res_access_signals.write_req_src}) > 1)
+        //     $display("Got more than one read/write request for intermediate results memory");
+        // if ($countones({params_access_signals.read_req_src, params_access_signals.write_req_src}) > 1)
+        //     $display("Got more than one read/write request for params memory");
+
         assert ($countones({int_res_access_signals.read_req_src, int_res_access_signals.write_req_src}) <= 1) else $fatal("Got more than one read/write request for intermediate results memory");
         assert ($countones({params_access_signals.read_req_src, params_access_signals.write_req_src}) <= 1) else $fatal("Got more than one read/write request for params memory");
     end

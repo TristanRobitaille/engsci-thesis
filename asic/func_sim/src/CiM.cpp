@@ -228,7 +228,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     intermediate_res[gen_cnt_7b.get_cnt() + mem_map.at(POS_EMB_MEM)] = computation_result;
                     gen_cnt_7b.inc();
                 }
-                ADD(PATCH_LEN+gen_cnt_7b.get_cnt(), param_addr_map[POS_EMB_PARAMS].addr+gen_cnt_7b.get_cnt(), MODEL_PARAM);
+                ADD(mem_map.at(CLASS_TOKEN_MEM)+gen_cnt_7b.get_cnt(), param_addr_map[POS_EMB_PARAMS].addr+gen_cnt_7b.get_cnt(), MODEL_PARAM);
                 gen_reg_2b = 1;
             } else if ((compute_in_progress == false) && (gen_cnt_7b.get_cnt() == NUM_PATCHES+1)) { // Done with positional embedding
                 intermediate_res[gen_cnt_7b.get_cnt() + mem_map.at(POS_EMB_MEM)] = computation_result; // Save the last result
