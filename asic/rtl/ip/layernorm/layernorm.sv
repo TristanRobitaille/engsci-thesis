@@ -5,6 +5,8 @@ module layernorm (
     // Control signals
     input wire start, half_select,
     input wire [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] start_addr,
+    input wire [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] beta_addr,
+    input wire [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] gamma_addr,
     output logic busy, done,
 
     // Memory access signals
@@ -14,7 +16,7 @@ module layernorm (
     input wire signed [N_STORAGE-1:0] int_res_data,
 
     // Adder signals
-    input wire signed [N_COMP-1:0] add_output_q,
+    input wire signed [N_COMP-1:0] add_output_q, add_output_flipped,
     output logic signed [N_COMP-1:0] add_input_q_1, add_input_q_2,
     output logic add_refresh,
 
@@ -37,13 +39,14 @@ module layernorm (
 );
 
     /*----- LOGIC -----*/
-    localparam len = 64; // len must be a power of 2 since we divide by bit shifting
+    localparam  LEN_FIRST_HALF = 64, // LEN_FIRST_HALF must be a power of 2 since we divide by bit shifting
+                LEN_SECOND_HALF = 61;
     logic [2:0] gen_reg_3b;
     logic [$clog2(EMB_DEPTH+1)-1:0] index;
     logic signed [N_COMP-1:0] compute_temp, compute_temp_2, compute_temp_3; // TODO: Consider if it should be shared with other modules in CiM
 
     enum logic [1:0] {MEAN_SUM, VARIANCE, PARTIAL_NORM_FIRST_HALF} loop_sum_type;
-    enum logic [2:0] {IDLE, LOOP_SUM, VARIANCE_LOOP, VARIANCE_SQRT, NORM_FIRST_HALF, NORM_SECOND_HALF, DONE} state;
+    enum logic [3:0] {IDLE, LOOP_SUM, VARIANCE_LOOP, VARIANCE_SQRT, NORM_FIRST_HALF, BETA_LOAD, GAMMA_LOAD, SECOND_HALF_LOOP, DONE} state;
 
     always_ff @ (posedge clk) begin : layernorm_fsm
         if (!rst_n) begin
@@ -52,7 +55,13 @@ module layernorm (
             unique case (state)
                 IDLE : begin
                     if (start) begin
-                        state <= (half_select == FIRST_HALF) ? LOOP_SUM : NORM_SECOND_HALF;
+                        if (half_select == FIRST_HALF) begin
+                            state <= LOOP_SUM;
+                        end else if (half_select == SECOND_HALF) begin
+                            params_access_signals.addr_table[LAYERNORM] <= gamma_addr;
+                            params_access_signals.read_req_src[LAYERNORM] <= 1'b1;
+                            state <= GAMMA_LOAD;
+                        end
                         busy <= 1'b1;
                     end else begin
                         done <= 1'b0;
@@ -69,14 +78,14 @@ module layernorm (
                         busy <= 1'b0;
                     end
                 end
-                LOOP_SUM : begin // Can reuse this state whenever we need to sum over len addresses
-                    if (index < len) begin
+                LOOP_SUM : begin // Can reuse this state whenever we need to sum over LEN_FIRST_HALF addresses
+                    if (index < LEN_FIRST_HALF) begin
                         if (gen_reg_3b == 'd0) begin // Set int_res addr and read request
                             int_res_access_signals.addr_table[LAYERNORM] <= start_addr + {3'd0, index};
                             int_res_access_signals.read_req_src[LAYERNORM] <= 1'b1;
                             if (int_res_access_signals.read_req_src[LAYERNORM] == 1'b1) gen_reg_3b <= 'd1;
                         end else if (gen_reg_3b == 'd1) begin
-                            add_input_q_1 <= {{(N_COMP-N_STORAGE){1'b0}}, int_res_data};
+                            add_input_q_1 <= {{(N_COMP-N_STORAGE){int_res_data[N_STORAGE-1]}}, int_res_data};
                             add_input_q_2 <= ((loop_sum_type == VARIANCE) || (loop_sum_type == PARTIAL_NORM_FIRST_HALF)) ? (~compute_temp + 1'd1) : compute_temp; // Can subtract by adding the flipped version (data is 2's complement)
                             int_res_access_signals.read_req_src[LAYERNORM] <= 1'b0;
                             add_refresh <= 1'b1;
@@ -126,9 +135,9 @@ module layernorm (
                         index <= 'd0;
                         if (loop_sum_type == MEAN_SUM) begin
                             state <= VARIANCE_LOOP;
-                            compute_temp <= (compute_temp >>> $clog2(len)); // Divide by len (shift right by log2(len) bits.
+                            compute_temp <= (compute_temp >>> $clog2(LEN_FIRST_HALF)); // Divide by LEN_FIRST_HALF (shift right by log2(LEN_FIRST_HALF) bits.
                         end else if (loop_sum_type == VARIANCE) begin
-                            compute_temp_2 <= (compute_temp_2 >>> $clog2(len)); // Divide by len (shift right by log2(len) bits
+                            compute_temp_2 <= (compute_temp_2 >>> $clog2(LEN_FIRST_HALF)); // Divide by LEN_FIRST_HALF (shift right by log2(LEN_FIRST_HALF) bits
                             state <= VARIANCE_SQRT;
                             mult_input_q_1 <= compute_temp_3;
                             mult_input_q_2 <= compute_temp_3;
@@ -151,8 +160,57 @@ module layernorm (
                     state <= LOOP_SUM;
                     loop_sum_type <= PARTIAL_NORM_FIRST_HALF;
                 end
-                NORM_SECOND_HALF: begin
-                    $display("NORM_SECOND_HALF in LayerNorm Not implemented yet");
+                GAMMA_LOAD: begin // Following states are for second-half
+                    gen_reg_3b <= gen_reg_3b + 'd1;
+                    if (gen_reg_3b == 'd1) begin
+                        compute_temp_2 <= {{(N_COMP-N_STORAGE){param_data[N_STORAGE-1]}}, param_data}; // gamma (w/ sign extension)
+                        params_access_signals.addr_table[LAYERNORM] <= beta_addr;
+                        state <= BETA_LOAD;
+                    end
+                end
+                BETA_LOAD: begin
+                    params_access_signals.read_req_src[LAYERNORM] <= 1'b0;
+                    gen_reg_3b <= 'd0;
+                    if (gen_reg_3b == 'd0) begin
+                        compute_temp_3 <= {{(N_COMP-N_STORAGE){param_data[N_STORAGE-1]}}, param_data}; // beta (w/ sign extension)
+                        state <= SECOND_HALF_LOOP;
+                    end
+                end
+                SECOND_HALF_LOOP: begin
+                    if (index < LEN_SECOND_HALF) begin
+                        if (gen_reg_3b == 'd0) begin // Set int_res addr and read request
+                            int_res_access_signals.addr_table[LAYERNORM] <= start_addr + {3'd0, index};
+                            int_res_access_signals.read_req_src[LAYERNORM] <= 1'b1;
+                            if (int_res_access_signals.read_req_src[LAYERNORM] == 1'b1) gen_reg_3b <= 'd1;
+                        end else if (gen_reg_3b == 'd1) begin
+                            int_res_access_signals.read_req_src[LAYERNORM] <= 1'b0;
+                            mult_input_q_1 <= compute_temp_2; // gamma
+                            mult_input_q_2 <= {{(N_COMP-N_STORAGE){int_res_data[N_STORAGE-1]}}, int_res_data};
+                            mult_refresh <= 1'b1;
+                            if (mult_refresh) begin
+                                gen_reg_3b <= 'd2;
+                            end
+                        end else if (gen_reg_3b == 'd2) begin
+                            mult_refresh <= 1'b0;
+                            add_input_q_1 <= mult_output_q;
+                            add_input_q_2 <= compute_temp_3; // beta
+                            add_refresh <= 1'b1;
+                            if (add_refresh) begin
+                                gen_reg_3b <= 'd3;
+                            end
+                        end else if (gen_reg_3b == 'd3) begin
+                            add_refresh <= 1'b0;
+                            int_res_access_signals.write_req_src[LAYERNORM] <= 1'b1;
+                            int_res_access_signals.write_data[LAYERNORM] <= (add_output_q[N_COMP-1]) ? (~add_output_flipped[N_STORAGE-1:0] + {{(N_STORAGE-1){1'b0}}, 1'd1}) : add_output_q[N_STORAGE-1:0];;
+                            gen_reg_3b <= 'd4;
+                        end else begin
+                            int_res_access_signals.write_req_src[LAYERNORM] <= 1'b0;
+                            gen_reg_3b <= 'd0;
+                            index <= index + 'd1;
+                        end
+                    end else begin
+                        state <= DONE;
+                    end
                 end
                 DONE: begin
                     done <= 1'b1;

@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Fri Mar 22 00:48:39 2024
+[*] Fri Mar 22 04:20:19 2024
 [*]
 [dumpfile] "dump.vcd"
-[dumpfile_mtime] "Fri Mar 22 00:33:19 2024"
-[dumpfile_size] 100385
+[dumpfile_mtime] "Fri Mar 22 04:18:49 2024"
+[dumpfile_size] 702444
 [savefile] "layernorm_top.gtkw"
-[timestart] 0
-[size] 2320 1100
-[pos] 1746 314
-*-13.999914 5000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[timestart] 4548230
+[size] 2224 1100
+[pos] 1786 222
+*-13.999913 4621000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -39,17 +39,20 @@
 [treeopen] top_layernorm.
 [treeopen] top_layernorm.layernorm_inst.
 [sst_width] 253
-[signals_width] 239
+[signals_width] 259
 [sst_expanded] 1
-[sst_vpaned_height] 495
+[sst_vpaned_height] 248
 @28
 clk
 top_layernorm.start
 top_layernorm.done
+@22
+top_layernorm.layernorm_inst.state[3:0]
 @24
-top_layernorm.layernorm_inst.state[2:0]
 top_layernorm.layernorm_inst.loop_sum_type[1:0]
 top_layernorm.layernorm_inst.gen_reg_3b[2:0]
+@28
+top_layernorm.layernorm_inst.half_select
 @200
 -
 @28
@@ -107,13 +110,62 @@ top_layernorm.layernorm_inst.add_refresh
 @200
 -
 -
-@420
+@421
 [color] 3
 top_layernorm.layernorm_inst.mult_input_q_1[21:0]
 [color] 3
 top_layernorm.layernorm_inst.mult_input_q_2[21:0]
+@c00421
 [color] 3
 top_layernorm.layernorm_inst.mult_output_q[21:0]
+@28
+[color] 3
+(0)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(1)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(2)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(3)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(4)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(5)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(6)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(7)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(8)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(9)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(10)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(11)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(12)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(13)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(14)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(15)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(16)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(17)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(18)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(19)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(20)top_layernorm.layernorm_inst.mult_output_q[21:0]
+[color] 3
+(21)top_layernorm.layernorm_inst.mult_output_q[21:0]
+@1401601
+-group_end
+@420
 [color] 3
 top_layernorm.layernorm_inst.mult_refresh
 @200
@@ -141,21 +193,79 @@ top_layernorm.div.start
 top_layernorm.layernorm_inst.index[6:0]
 [color] 2
 top_layernorm.layernorm_inst.compute_temp[21:0]
+@c00420
 [color] 2
 top_layernorm.layernorm_inst.compute_temp_2[21:0]
+@28
+[color] 2
+(0)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(1)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(2)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(3)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(4)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(5)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(6)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(7)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(8)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(9)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(10)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(11)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(12)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(13)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(14)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(15)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(16)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(17)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(18)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(19)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(20)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+[color] 2
+(21)top_layernorm.layernorm_inst.compute_temp_2[21:0]
+@1401200
+-group_end
+@420
 [color] 2
 top_layernorm.layernorm_inst.compute_temp_3[21:0]
 @200
 -
 -
-@22
+@420
+top_layernorm.layernorm_inst.param_data[15:0]
+@c00022
 top_layernorm.layernorm_inst.int_res_access_signals.read_req_src[4:0]
-@421
-top_layernorm.layernorm_inst.int_res_data[15:0]
-top_layernorm.layernorm_inst.int_res_access_signals.write_data[3][15:0]
+@28
+(0)top_layernorm.layernorm_inst.int_res_access_signals.read_req_src[4:0]
+(1)top_layernorm.layernorm_inst.int_res_access_signals.read_req_src[4:0]
+(2)top_layernorm.layernorm_inst.int_res_access_signals.read_req_src[4:0]
+(3)top_layernorm.layernorm_inst.int_res_access_signals.read_req_src[4:0]
+(4)top_layernorm.layernorm_inst.int_res_access_signals.read_req_src[4:0]
+@1401200
+-group_end
 @22
 top_layernorm.layernorm_inst.int_res_access_signals.write_req_src[4:0]
 @24
-top_layernorm.int_res_access_signals.addr_table[3][9:0]
+top_layernorm.layernorm_inst.params_access_signals.addr_table[3][9:0]
+@22
+top_layernorm.layernorm_inst.params_access_signals.read_req_src[4:0]
 [pattern_trace] 1
 [pattern_trace] 0

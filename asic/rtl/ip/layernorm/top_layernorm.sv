@@ -38,6 +38,8 @@ module top_layernorm # () (
 
     // Control signals
     logic start, half_select;
+    logic [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] beta_addr = 'd0;
+    logic [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] gamma_addr = 'd0;
     logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] start_addr = 'd0;
 
     // LayerNorm outputs
@@ -48,9 +50,11 @@ module top_layernorm # () (
     wire add_overflow, mul_overflow, add_refresh, mul_refresh, div_start, div_done, div_busy, div_dbz, div_overflow, sqrt_neg_rad, sqrt_start, sqrt_done, sqrt_busy;
     wire signed [N_COMP-1:0] mul_input_q_1, mul_input_q_2, mul_output_q;
     wire signed [N_COMP-1:0] add_input_q_1, add_input_q_2, add_output_q;
+    logic signed [N_COMP-1:0] add_output_flipped;
     wire signed [N_COMP-1:0] div_dividend, divisor, div_output_q;
     logic signed [N_COMP-1:0] div_out_flipped;
     wire signed [N_COMP-1:0] sqrt_rad_q, sqrt_root_q;
+    
     adder       add (.clk(clk), .rst_n(rst_n), .refresh(add_refresh), .input_q_1(add_input_q_1), .input_q_2(add_input_q_2), .output_q(add_output_q), .overflow(add_overflow));
     multiplier  mul (.clk(clk), .rst_n(rst_n), .refresh(mul_refresh), .input_q_1(mul_input_q_1), .input_q_2(mul_input_q_2), .output_q(mul_output_q), .overflow(mul_overflow));
     divider     div (.clk(clk), .rst_n(rst_n), .start(div_start), .dividend(div_dividend), .divisor(divisor), .done(div_done), .busy(div_busy), .output_q(div_output_q), .dbz(div_dbz), .overflow(div_overflow));
@@ -66,9 +70,12 @@ module top_layernorm # () (
         .done(done),
         .int_res_access_signals(int_res_access_signals),
         .params_access_signals(params_access_signals),
+        .beta_addr(beta_addr),
+        .gamma_addr(gamma_addr),
         .param_data(param_data),
         .int_res_data(int_res_data),
         .add_output_q(add_output_q),
+        .add_output_flipped(add_output_flipped),
         .add_input_q_1(add_input_q_1),
         .add_input_q_2(add_input_q_2),
         .mult_refresh(mul_refresh),
@@ -92,6 +99,7 @@ module top_layernorm # () (
 
     always_comb begin : computation_twos_comp_flip
         div_out_flipped = ~div_output_q + 'd1;
+        add_output_flipped = ~add_output_q + 'd1;
     end
 
 endmodule;
