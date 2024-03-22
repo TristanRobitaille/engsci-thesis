@@ -31,4 +31,10 @@ cim cim (   .clk(clk), .rst_n(rst_n), .is_ready(cim_is_ready),
             .bus_op(bus_op), .bus_data(bus_data), .bus_target_or_sender(bus_target_or_sender), // Bus interface
 );
 
+always_ff @ (posedge clk) begin : top_assertions
+    if ($countones(EMB_DEPTH) != 1) begin
+        $fatal(1, "EMB_DEPTH must be a power of two");
+    end
+end
+
 endmodule

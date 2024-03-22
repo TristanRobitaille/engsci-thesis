@@ -32,6 +32,10 @@ class ActivationType(Enum):
     LINEAR_ACTIVATION = 1
     SWISH_ACTIVATION = 2
 
+class LayerNormHalfSelect(Enum):
+    FIRST_HALF = 0
+    SECOND_HALF = 1
+
 class broadcast_op():
     def __init__(self, op:BusOp, len:int, num_cim:int, num_runs:int=1, start_cim:int=1):
         self.op = op
@@ -131,10 +135,10 @@ def BinToDec(dec:float, num_type:FXfamily):
     z2_str = z2.toBinaryString(logBase=1, twosComp=True).replace(".","")
     return int(z2_str, base=2)
 
-def random_input():
-    val = random.normalvariate(mu = 0.0, sigma = (MAX_VAL/5)) # Random number from a normal distribution (max. value at 5 std. dev.)
-    if val > MAX_VAL: val = MAX_VAL
-    elif val < -MAX_VAL: val = -MAX_VAL
+def random_input(min, max):
+    val = random.normalvariate(mu = 0.0, sigma = (max/5)) # Random number from a normal distribution (max. value at 5 std. dev.)
+    if val > max: val = max
+    elif val < min: val = min
     return val
 
 def params(param_name:str, params_file:h5py.File):

@@ -15,7 +15,7 @@
     parameter   NUM_CIMS            = 64,
                 NUM_PATCHES         = 60,
                 PATCH_LEN           = 64,
-                EMB_DEPTH           = 64,
+                EMB_DEPTH           = 64, // Note: Must be a power of two as we are bit-shifting instead of dividing in the LayerNorm module based on this
                 MLP_DIM             = 32,
                 NUM_SLEEP_STAGES    = 5,
                 NUM_HEADS           = 8,

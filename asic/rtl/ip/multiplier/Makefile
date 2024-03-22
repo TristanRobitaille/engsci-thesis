@@ -3,7 +3,7 @@ WAVES = 1
 TOPLEVEL_LANG ?= verilog
 EXTRA_ARGS += --trace --trace-structs --Wall
 
-VERILOG_SOURCES = multiplier.sv
+VERILOG_SOURCES = multiplier.sv ../../types.svh
 TOPLEVEL = multiplier
 MODULE = multiplier_tb
 

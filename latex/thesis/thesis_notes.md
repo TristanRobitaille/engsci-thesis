@@ -26,6 +26,11 @@
     - Op codes supported
 - Compute modules
     - Area, latency, approximations, features, energy per compute
+- Software-hardware co-design
+    - Number of CiM == EMB_DEPTH (which is a dimension in most matrices) --> Each CiM only has to perform one vector multiplication per matrix multiply, saving overhead and data movement
+    - Number of patches + classification embedding token == 61 --> This is close to # of CiM, giving very high utilization.
+    - EMB_DEPTH is a power of two and am using fixed-point arithmetic, meaning we can simply bit-shift during LayerNorms instead of performing a full divide, which reduces LayerNorm latency (and energy consumption) by xyz %.
+    - [NOT DONE, should investigate]: Square root of number of heads should be a power of two so we again don't have to divide but can rather just bit-shift.
 - Fixed-point accuracy study
     - Number of clock cyles per operation
 - Discussion about memory

@@ -23,34 +23,25 @@ module cim_mem (
 
     always_latch begin : memory_addr_MUX
         // Intermediate results memory
-        case ({int_res_access_signals.read_req_src, int_res_access_signals.write_req_src})
-            6'b000001, // Bus FSM write
-            6'b001000: // Bus FSM read
-                int_res_addr = int_res_access_signals.addr_table[BUS_FSM];
-            6'b000010, // Logic FSM write
-            6'b010000: // Logic FSM read
-                int_res_addr = int_res_access_signals.addr_table[LOGIC_FSM];
-            6'b000100, // MAC write
-            6'b100000: // MAC read
-                int_res_addr = int_res_access_signals.addr_table[MAC];
-            default:
-                int_res_addr = int_res_addr; // No change
-        endcase
+        if (int_res_access_signals.read_req_src[BUS_FSM] || int_res_access_signals.write_req_src[BUS_FSM]) begin
+            int_res_addr = int_res_access_signals.addr_table[BUS_FSM];
+        end else if (int_res_access_signals.read_req_src[LOGIC_FSM] || int_res_access_signals.write_req_src[LOGIC_FSM]) begin
+            int_res_addr = int_res_access_signals.addr_table[LOGIC_FSM];
+        end else if (int_res_access_signals.read_req_src[MAC] || int_res_access_signals.write_req_src[MAC]) begin
+            int_res_addr = int_res_access_signals.addr_table[MAC];
+        end else if (int_res_access_signals.read_req_src[LAYERNORM] || int_res_access_signals.write_req_src[LAYERNORM]) begin
+            int_res_addr = int_res_access_signals.addr_table[LAYERNORM];
+        end
 
-        // Model parameters memory
-        case ({params_access_signals.read_req_src, params_access_signals.write_req_src})
-            6'b000001, // Bus FSM write
-            6'b001000: // Bus FSM read
-                params_addr = params_access_signals.addr_table[BUS_FSM];
-            6'b000010, // Logic FSM write
-            6'b010000: // Logic FSM read
-                params_addr = params_access_signals.addr_table[LOGIC_FSM];
-            6'b000100, // MAC write
-            6'b100000: // MAC read
-                params_addr = params_access_signals.addr_table[MAC];
-            default:
-                params_addr = params_addr; // No change
-        endcase
+        if (params_access_signals.read_req_src[BUS_FSM] || params_access_signals.write_req_src[BUS_FSM]) begin
+            params_addr = params_access_signals.addr_table[BUS_FSM];
+        end else if (params_access_signals.read_req_src[LOGIC_FSM] || params_access_signals.write_req_src[LOGIC_FSM]) begin
+            params_addr = params_access_signals.addr_table[LOGIC_FSM];
+        end else if (params_access_signals.read_req_src[MAC] || params_access_signals.write_req_src[MAC]) begin
+            params_addr = params_access_signals.addr_table[MAC];
+        end else if (params_access_signals.read_req_src[LAYERNORM] || params_access_signals.write_req_src[LAYERNORM]) begin
+            params_addr = params_access_signals.addr_table[LAYERNORM];
+        end
     end
 
     always_comb begin : memory_wen
@@ -80,11 +71,6 @@ module cim_mem (
         assert (!params_access_signals.write_req_src[MAC]) else $fatal("MAC is not allowed to write to model parameters memory");
 
         // Only one request at a time
-        // if ($countones({int_res_access_signals.read_req_src, int_res_access_signals.write_req_src}) > 1)
-        //     $display("Got more than one read/write request for intermediate results memory");
-        // if ($countones({params_access_signals.read_req_src, params_access_signals.write_req_src}) > 1)
-        //     $display("Got more than one read/write request for params memory");
-
         assert ($countones({int_res_access_signals.read_req_src, int_res_access_signals.write_req_src}) <= 1) else $fatal("Got more than one read/write request for intermediate results memory");
         assert ($countones({params_access_signals.read_req_src, params_access_signals.write_req_src}) <= 1) else $fatal("Got more than one read/write request for params memory");
     end

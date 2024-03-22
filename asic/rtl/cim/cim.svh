@@ -89,12 +89,19 @@ logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] mem_map [PREV_SOFTMAX_OUTPUT_MEM+'
 ParamInfo_t param_addr_map[PARAMS_NUM-1];
 
 /*----- INTERFACE -----*/
-typedef enum logic [1:0] {
+typedef enum logic [2:0] {
     BUS_FSM,
     LOGIC_FSM,
     MAC,
+    LAYERNORM,
+    SOFTMAX,
     MEM_ACCESS_SRC_NUM
 } MEM_ACCESS_SRC_T;
+
+typedef enum logic {
+    FIRST_HALF = 1'b0,
+    SECOND_HALF = 1'b1
+} LAYERNORM_HALF_SELECT_T;
 
 /* verilator lint_off DECLFILENAME */
 interface MemAccessSignals;

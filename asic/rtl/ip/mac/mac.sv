@@ -29,23 +29,20 @@ module mac
 
     // Adder signals
     input wire signed [N_COMP-1:0] add_output_q,
-    output logic signed [N_COMP-1:0] add_input_q_1,
-    output logic signed [N_COMP-1:0] add_input_q_2,
+    output logic signed [N_COMP-1:0] add_input_q_1, add_input_q_2,
     output logic add_refresh,
 
     // Multiplier signals
     input wire signed [N_COMP-1:0] mult_output_q,
-    output logic signed [N_COMP-1:0] mult_input_q_1,
-    output logic signed [N_COMP-1:0] mult_input_q_2,
+    output logic signed [N_COMP-1:0] mult_input_q_1, mult_input_q_2,
     output logic mult_refresh
 );
 
    /*----- LOGIC -----*/
-    logic signed [N_COMP-1:0] compute_temp; // TODO: Consider if it should be shared with other modules in CiM
-    logic signed [N_COMP-1:0] compute_temp_2; // TODO: Consider if it should be shared with other modules in CiM
     logic [1:0] delay_signal;
-
     logic [$clog2(MAC_MAX_LEN+1)-1:0] index;
+    logic signed [N_COMP-1:0] compute_temp, compute_temp_2; // TODO: Consider if it should be shared with other modules in CiM
+
     enum logic [2:0] {IDLE, COMPUTE_MUL_IN1, COMPUTE_MUL_IN2, COMPUTE_MUL_OUT, COMPUTE_ADD, BASIC_MAC_DONE, COMPUTE_LINEAR_ACTIVATION} state;
     always_ff @ (posedge clk) begin : mac_fsm
         if (!rst_n) begin

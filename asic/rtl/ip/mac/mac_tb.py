@@ -9,7 +9,6 @@ import cocotb
 from cocotb.triggers import RisingEdge
 
 #----- CONSTANTS -----#
-# Rough figures from functional simulation
 MAX_LEN = 64
 NUM_TESTS = 100
 params_file = h5py.File("../../../func_sim/reference_data/model_weights.h5", "r")
@@ -37,9 +36,9 @@ async def test_MAC(dut, activation=ActivationType.NO_ACTIVATION.value):
 
     expected_result = 0
     for i in range(len):
-        in1 = random_input()
-        in2 = random_input()
-        bias = random_input()
+        in1 = random_input(-MAX_VAL, MAX_VAL)
+        in2 = random_input(-MAX_VAL, MAX_VAL)
+        bias = random_input(-MAX_VAL, MAX_VAL)
         dut.int_res[start_addr1+i].value = BinToDec(in1, num_Q_storage)
         dut.int_res[start_addr2+i].value = BinToDec(in2, num_Q_storage)
         dut.params[param_addr_map["single_params"]["start_addr"]+0].value = BinToDec(bias, num_Q_storage) # patch_project_bias is at address 0 from the start of the single_params

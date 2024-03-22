@@ -736,7 +736,7 @@ void CiM::LAYERNORM_1ST_HALF(uint16_t input_addr) {
 
     compute_temp_fp = large_fp_t { 0.0f }; // Mean
     compute_temp_fp_2 = large_fp_t { 0.0f }; // Variance
-    compute_temp_fp_3 = large_fp_t { 0.0f };
+    compute_temp_fp_3 = large_fp_t { 0.0f }; // Variance
 
     // Mean
     for (uint16_t i = 0; i < EMB_DEPTH; i++) { compute_temp_fp += large_fp_t { intermediate_res[input_addr+i] }; } 

@@ -13,8 +13,6 @@ module top_mac # () (
     logic [N_STORAGE-1:0] param_data, int_res_data = 'd0;
     MemAccessSignals params_access_signals();
     MemAccessSignals int_res_access_signals();
-    always_comb begin
-    end
     always_ff @ (posedge clk) begin : memory_ctrl
         if (!rst_n) begin
             param_data <= 'd0;
@@ -32,18 +30,16 @@ module top_mac # () (
     logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] start_addr1 = 'd0;
     logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] start_addr2 = 'd0;
 
-    // Compute signals
-    logic signed [N_COMP-1:0] compute_temp, compute_temp_2, computation_result;
-
     // MAC outputs
     wire busy, done, int_res_mem_access_req, params_mem_access_req;
+    wire [N_COMP-1:0] computation_result;
 
     // Adder and multiplier
-    wire add_overflow, add_refresh, mul_refresh;
+    wire add_overflow, mul_overflow, add_refresh, mul_refresh;
     wire signed [N_COMP-1:0] mul_input_q_1, mul_input_q_2, mul_output_q;
     wire signed [N_COMP-1:0] add_input_q_1, add_input_q_2, add_output_q;
     adder       add (.clk(clk), .rst_n(rst_n), .refresh(add_refresh), .input_q_1(add_input_q_1), .input_q_2(add_input_q_2), .output_q(add_output_q), .overflow(add_overflow));
-    multiplier  mul (.clk(clk), .rst_n(rst_n), .refresh(mul_refresh), .input_q_1(mul_input_q_1), .input_q_2(mul_input_q_2), .output_q(mul_output_q));
+    multiplier  mul (.clk(clk), .rst_n(rst_n), .refresh(mul_refresh), .input_q_1(mul_input_q_1), .input_q_2(mul_input_q_2), .output_q(mul_output_q), .overflow(mul_overflow));
 
     mac mac_inst (
         .clk(clk),

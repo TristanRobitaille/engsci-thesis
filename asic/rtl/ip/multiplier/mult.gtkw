@@ -1,0 +1,56 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Thu Mar 21 23:03:50 2024
+[*]
+[dumpfile] "dump.vcd"
+[dumpfile_mtime] "Thu Mar 21 23:03:49 2024"
+[dumpfile_size] 310820
+[savefile] "mult.gtkw"
+[timestart] 0
+[size] 3440 1387
+[pos] 1680 0
+*-12.000000 5000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[markername] AA
+[markername] BB
+[markername] CC
+[markername] DD
+[markername] EE
+[markername] FF
+[markername] GG
+[markername] HH
+[markername] II
+[markername] JJ
+[markername] KK
+[markername] LL
+[markername] MM
+[markername] NN
+[markername] OO
+[markername] PP
+[markername] QQ
+[markername] RR
+[markername] SS
+[markername] TT
+[markername] UU
+[markername] VV
+[markername] WW
+[markername] XX
+[markername] YY
+[markername] ZZ
+[sst_width] 253
+[signals_width] 152
+[sst_expanded] 1
+[sst_vpaned_height] 434
+@28
+clk
+@420
+input_q_1[21:0]
+input_q_2[21:0]
+output_q[21:0]
+@28
+refresh
+multiplier.refresh_delayed
+overflow
+@29
+rst_n
+[pattern_trace] 1
+[pattern_trace] 0

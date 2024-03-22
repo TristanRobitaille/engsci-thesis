@@ -6,10 +6,8 @@
 */
 
 module cim # (
-    /* verilator lint_off UNUSEDPARAM */
     parameter ID = 0,
     parameter STANDALONE_TB = 1
-    /* verilator lint_on UNUSEDPARAM */
 )(
     input wire clk,
     input wire rst_n,
@@ -88,9 +86,9 @@ module cim # (
                     .input_q_1(add_input_q_1), .input_q_2(add_input_q_2), .output_q(add_output_q));
 
     // Multiplier module
-    logic mult_refresh;
+    logic mult_refresh, mul_overflow;
     logic [N_COMP-1:0] mult_input_q_1, mult_input_q_2, mult_output_q;
-    multiplier mult_inst (  .clk(clk), .rst_n(rst_n), .refresh(mult_refresh),
+    multiplier mult_inst (  .clk(clk), .rst_n(rst_n), .refresh(mult_refresh), .overflow(mul_overflow),
                             .input_q_1(mult_input_q_1), .input_q_2(mult_input_q_2), .output_q(mult_output_q));
 
     // MAC module

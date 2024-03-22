@@ -44,7 +44,7 @@ async def param_load(dut, cim_id:int):
         for i in range(math.ceil(param_info["len"]/3)):
             for j in range(3): # 3 parameters per transaction
                 dut.bus_op_read.value = BusOp.PARAM_STREAM_OP.value
-                param = random_input()
+                param = random_input(-MAX_VAL, MAX_VAL)
                 write_to_data_bus(dut, j, BinToDec(param, num_Q_storage))
                 await RisingEdge(dut.clk)
                 dut.bus_op_read.value = BusOp.NOP.value
@@ -58,11 +58,11 @@ async def patch_load(dut):
     # Fill patch project bias parameters with random data
     patch_proj_kernel = []
     for i in range(PATCH_LEN):
-        param = random_input()
+        param = random_input(-MAX_VAL, MAX_VAL)
         patch_proj_kernel.append(FXnum(param, num_Q_comp))
         dut.mem.params[i].value = BinToDec(param, num_Q_storage)
     
-    bias = random_input()
+    bias = random_input(-MAX_VAL, MAX_VAL)
     patch_proj_bias = FXnum(bias, num_Q_comp)
     dut.mem.params[param_addr_map["single_params"]["start_addr"]+0].value = BinToDec(bias, num_Q_storage) # Patch projection bias has zero offset from single_params start address
 
