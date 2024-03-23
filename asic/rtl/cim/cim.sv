@@ -99,16 +99,15 @@ module cim # (
     logic [N_COMP-1:0] mac_out, mac_out_flipped, mac_add_input_q_1, mac_add_input_q_2;
     PARAM_TYPE_T mac_param_type;
     ACTIVATION_TYPE_T mac_activation;
-        mac mac_inst    (.clk(clk), .rst_n(rst_n), .start(mac_start), .done(mac_done), .busy(mac_compute_in_progress), .param_type(mac_param_type), .len(mac_len), .activation(mac_activation),
-                        .start_addr1(mac_start_addr1), .start_addr2(mac_start_addr2), .bias_addr(mac_bias_addr),
-                        .params_access_signals(params_access_signals), .int_res_access_signals(int_res_access_signals),
-                        .param_data(params_read_data), .intermediate_res_data(int_res_read_data), .computation_result(mac_out),
-                        .add_input_q_1(mac_add_input_q_1), .add_input_q_2(mac_add_input_q_2), .add_output_q(add_output_q), .add_refresh(mac_add_refresh),
-                        .mult_input_q_1(mult_input_q_1), .mult_input_q_2(mult_input_q_2), .mult_output_q(mult_output_q), .mult_refresh(mult_refresh));
+    mac mac_inst    (.clk(clk), .rst_n(rst_n), .start(mac_start), .done(mac_done), .busy(mac_compute_in_progress), .param_type(mac_param_type), .len(mac_len), .activation(mac_activation),
+                    .start_addr1(mac_start_addr1), .start_addr2(mac_start_addr2), .bias_addr(mac_bias_addr),
+                    .params_access_signals(params_access_signals), .int_res_access_signals(int_res_access_signals),
+                    .param_data(params_read_data), .intermediate_res_data(int_res_read_data), .computation_result(mac_out),
+                    .add_input_q_1(mac_add_input_q_1), .add_input_q_2(mac_add_input_q_2), .add_output_q(add_output_q), .add_refresh(mac_add_refresh),
+                    .mult_input_q_1(mult_input_q_1), .mult_input_q_2(mult_input_q_2), .mult_output_q(mult_output_q), .mult_refresh(mult_refresh));
 
-    CIM_STATE_T cim_state;
-    INFERENCE_STEP_T current_inf_step;
     // Comms FSM
+    logic signed [N_STORAGE-1:0] bus_data_copy_1, bus_data_copy_2;
     always_ff @ (posedge clk) begin : cim_comms_fsm
         if (!rst_n) begin
             word_rec_cnt_rst_n <= RST;
@@ -147,39 +146,58 @@ module cim # (
                     rx_addr <= bus_data_read[2][$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0];
                     sender_id <= {1'd0, bus_target_or_sender_read};
                     word_snt_cnt_rst_n <= RST;
+                    is_ready <= 1'b0;
                 end
 
-                DENSE_BROADCAST_DATA_OP: begin
-                    word_snt_cnt_rst_n <= RUN;
-                end
-                
+                DENSE_BROADCAST_DATA_OP,
                 TRANS_BROADCAST_DATA_OP: begin
                     word_snt_cnt_rst_n <= RUN;
                     word_snt_cnt_inc <= 'd3;
-                    word_rec_cnt_inc <= {6'd0, has_my_data(word_snt_cnt, ID) || (current_inf_step == MLP_HEAD_DENSE_2_STEP)};
+                    word_rec_cnt_inc <= {6'd0, has_my_data(word_snt_cnt, ID) || (current_inf_step == MLP_HEAD_DENSE_2_STEP) || (bus_op_read == DENSE_BROADCAST_DATA_OP)};
 
                     // Grab appropriate data
-                    if (has_my_data(word_snt_cnt, ID)) begin
-                        int_res_access_signals.addr_table[BUS_FSM] <= rx_addr + {4'd0, bus_target_or_sender_read};
-                        if ((word_snt_cnt+3) <= data_len) begin // More than 3 word left to receive
-                            int_res_access_signals.write_data[BUS_FSM] <= bus_data_read[ID - word_snt_cnt];
-                        end else if (word_snt_cnt == ID) begin
-                            int_res_access_signals.write_data[BUS_FSM] <= bus_data_read[2];
+                    if (bus_op_read == TRANS_BROADCAST_DATA_OP) begin
+                        if (has_my_data(word_snt_cnt, ID)) begin
+                            int_res_access_signals.write_req_src[BUS_FSM] <= 1'b1;
+                            int_res_access_signals.addr_table[BUS_FSM] <= rx_addr + {4'd0, bus_target_or_sender_read};
+                            if ((word_snt_cnt+3) <= data_len) begin // More than 3 word left to receive
+                                int_res_access_signals.write_data[BUS_FSM] <= bus_data_read[ID - word_snt_cnt];
+                            end else if (word_snt_cnt == ID) begin
+                                int_res_access_signals.write_data[BUS_FSM] <= bus_data_read[2];
+                            end
+                        end
+                        // For a transpose broadcast, there is only one word to save so we can start sending immediately
+                        start_inst_fill <= (bus_target_or_sender_read == ID) && (word_snt_cnt+3 < data_len);
+                    end else if (bus_op_read == DENSE_BROADCAST_DATA_OP) begin
+                        logic [6:0] num_words_left = data_len - word_snt_cnt;
+                        int_res_access_signals.write_req_src[BUS_FSM] <= 1'b1;
+                        int_res_access_signals.write_data[BUS_FSM] <= bus_data_read[2];
+                        save_dense_broadcast_start <= (word_snt_cnt < data_len);
+                        need_to_send_dense <= (bus_target_or_sender_read == ID);
+                        if ((num_words_left) >= 3) begin
+                            int_res_access_signals.addr_table[BUS_FSM] <= rx_addr + {3'd0, word_snt_cnt} + 'd2;
+                            bus_data_copy_1 <= bus_data_read[1];
+                            bus_data_copy_2 <= bus_data_read[0];
+                            save_dense_broadcast_num_words <= 3;
+                        end else if (num_words_left == 2) begin
+                            int_res_access_signals.addr_table[BUS_FSM] <= rx_addr + {3'd0, word_snt_cnt} + 'd1;
+                            bus_data_copy_1 <= bus_data_read[1];
+                            save_dense_broadcast_num_words <= 2;
+                        end else if (num_words_left == 1) begin
+                            int_res_access_signals.addr_table[BUS_FSM] <= rx_addr + {3'd0, word_snt_cnt};
+                            save_dense_broadcast_num_words <= 1;
                         end
                     end
 
-                    // Send data
-                    if ((bus_target_or_sender_read == ID) && (word_snt_cnt+3 < data_len)) begin
-                        is_ready <= 1'b0;
+                    if ((bus_target_or_sender_read == ID) && (word_snt_cnt+3 < data_len)) begin // Need to send
                         data_fill_start_addr <= tx_addr + {3'd0, word_snt_cnt} + 'd3;
-                        bus_op_write <= TRANS_BROADCAST_DATA_OP;
-                        start_inst_fill <= 1'b1;
                         if ((word_snt_cnt+6) <= data_len) begin
                             num_words_to_fill <= 'd3;
                         end else begin
                             num_words_to_fill <= data_len - word_snt_cnt - 3;
                         end
                     end
+                    is_ready <= ~((bus_target_or_sender_read == ID) && (word_snt_cnt+3 < data_len));
                 end
 
                 PARAM_STREAM_START_OP: begin
@@ -218,6 +236,7 @@ module cim # (
                     word_rec_cnt_inc <= 'd0;
                     word_snt_cnt_inc <= 'd0;
                     start_inst_fill <= 1'b0;
+                    save_dense_broadcast_start <= 1'b0;
                 end
                 PISTOL_START_OP,
                 INFERENCE_RESULT_OP: begin
@@ -229,6 +248,9 @@ module cim # (
     end
 
     // Compute control FSM
+    CIM_STATE_T cim_state;
+    INFERENCE_STEP_T current_inf_step;
+
     always_ff @ (posedge clk) begin : cim_compute_control_fsm
         if (!rst_n) begin
             cim_state <= CIM_IDLE;
@@ -354,23 +376,24 @@ module cim # (
     end
 
     // Data fill and send FSM (small FSM to fill a register with data and send it to the bus)
-    logic start_inst_fill, inst_fill_substate;
+    logic start_inst_fill, inst_fill_substate, need_to_send_dense;
     logic [1:0] addr_offset_counter, addr_offset_counter_delayed;
     logic [6:0] num_words_to_fill;
     logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] data_fill_start_addr;
 
-    enum logic {IDLE, FILL_INST} data_fill_state;
+    enum logic {FILL_INST_IDLE, FILL_INST} data_fill_state;
     always_ff @ (posedge clk) begin : data_inst_fill_and_send_fsm
         if (!rst_n) begin
+            data_fill_state <= FILL_INST_IDLE;
         end else begin
             unique case (data_fill_state)
-                IDLE: begin
-                    if (start_inst_fill) begin
+                FILL_INST_IDLE: begin
+                    if (start_inst_fill || (done_dense_save_broadcast && need_to_send_dense)) begin
                         int_res_access_signals.addr_table[DATA_FILL_FSM] <= data_fill_start_addr;
                         int_res_access_signals.read_req_src[DATA_FILL_FSM] <= 1'b1;
                         data_fill_state <= FILL_INST;
                     end
-                    is_ready <= ~start_inst_fill;
+                    // is_ready <= ~(start_inst_fill || (done_dense_save_broadcast && need_to_send_dense));
                     addr_offset_counter <= 'd0;
                     addr_offset_counter_delayed <= 'd0;
                     bus_drive <= 1'b0;
@@ -394,13 +417,52 @@ module cim # (
                         addr_offset_counter <= addr_offset_counter + 'd1;
                         int_res_access_signals.addr_table[DATA_FILL_FSM] <= data_fill_start_addr + {8'd0, addr_offset_counter + 2'd1};
                         int_res_access_signals.read_req_src[DATA_FILL_FSM] <= ~(addr_offset_counter_delayed == (num_words_to_fill[1:0]-2'd1));
-                        data_fill_state <= (addr_offset_counter_delayed == (num_words_to_fill[1:0]-2'd1)) ? IDLE : FILL_INST;
+                        data_fill_state <= (addr_offset_counter_delayed == (num_words_to_fill[1:0]-2'd1)) ? FILL_INST_IDLE : FILL_INST;
                         bus_drive <= (addr_offset_counter_delayed == (num_words_to_fill[1:0]-2'd1));
                     end
                     addr_offset_counter_delayed <= addr_offset_counter;
                 end
                 default:
                     $fatal("Invalid data_fill_state value in data_inst_fill_and_send_fsm");
+            endcase
+        end
+    end
+
+    // FSM to save words from dense broadcast instruction
+    logic save_dense_broadcast_start, done_dense_save_broadcast;
+    logic [1:0] save_dense_broadcast_num_words;
+    enum logic {SAVE_WORD_DENSE_BROADCAST_IDLE, SAVE_WORD} dense_broadcast_save_state;
+    always_ff @ (posedge clk) begin
+        if (!rst_n) begin
+            dense_broadcast_save_state <= SAVE_WORD_DENSE_BROADCAST_IDLE;
+        end else begin
+            unique case (dense_broadcast_save_state)
+                SAVE_WORD_DENSE_BROADCAST_IDLE: begin
+                    if (save_dense_broadcast_start) begin
+                        if (save_dense_broadcast_num_words > 'd1) begin // When we get here, the first word has already been saved, so we can start with the second word
+                            int_res_access_signals.addr_table[DENSE_BROADCAST_SAVE_FSM] <= int_res_access_signals.addr_table[BUS_FSM] - 'd1;
+                            int_res_access_signals.write_req_src[DENSE_BROADCAST_SAVE_FSM] <= 1'b1;
+                            int_res_access_signals.write_data[DENSE_BROADCAST_SAVE_FSM] <= bus_data_copy_1;
+                        end
+                        dense_broadcast_save_state <= (save_dense_broadcast_num_words == 'd3) ? SAVE_WORD : SAVE_WORD_DENSE_BROADCAST_IDLE; // Only go to next state if there's a third word to save
+                        done_dense_save_broadcast <= (save_dense_broadcast_num_words != 'd3); // If finished saving, start sending data to the bus
+                    end else begin
+                        int_res_access_signals.write_req_src[DENSE_BROADCAST_SAVE_FSM] <= 1'b0;
+                        done_dense_save_broadcast <= 1'b0;
+                    end
+                end
+                SAVE_WORD: begin
+                    if (save_dense_broadcast_num_words == 'd3) begin
+                        int_res_access_signals.addr_table[DENSE_BROADCAST_SAVE_FSM] <= int_res_access_signals.addr_table[DENSE_BROADCAST_SAVE_FSM] - 'd1;
+                        int_res_access_signals.write_data[DENSE_BROADCAST_SAVE_FSM] <= bus_data_copy_2;
+                        int_res_access_signals.write_req_src[DENSE_BROADCAST_SAVE_FSM] <= 1'b1;
+                    end
+                    dense_broadcast_save_state <= SAVE_WORD_DENSE_BROADCAST_IDLE;
+                    done_dense_save_broadcast <= 1'b1;
+                end
+                default: begin
+                    $fatal("Invalid dense_broadcast_save_state value in dense broadcast save data FSM");
+                end
             endcase
         end
     end

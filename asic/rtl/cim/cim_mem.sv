@@ -33,6 +33,8 @@ module cim_mem (
             int_res_addr = int_res_access_signals.addr_table[LAYERNORM];
         end else if (int_res_access_signals.read_req_src[DATA_FILL_FSM] || int_res_access_signals.write_req_src[DATA_FILL_FSM]) begin
             int_res_addr = int_res_access_signals.addr_table[DATA_FILL_FSM];
+        end else if (int_res_access_signals.read_req_src[DENSE_BROADCAST_SAVE_FSM] || int_res_access_signals.write_req_src[DENSE_BROADCAST_SAVE_FSM]) begin
+            int_res_addr = int_res_access_signals.addr_table[DENSE_BROADCAST_SAVE_FSM];
         end
 
         if (params_access_signals.read_req_src[BUS_FSM] || params_access_signals.write_req_src[BUS_FSM]) begin
@@ -45,6 +47,8 @@ module cim_mem (
             params_addr = params_access_signals.addr_table[LAYERNORM];
         end else if (params_access_signals.read_req_src[DATA_FILL_FSM] || params_access_signals.write_req_src[DATA_FILL_FSM]) begin
             params_addr = params_access_signals.addr_table[DATA_FILL_FSM];
+        end else if (params_access_signals.read_req_src[DENSE_BROADCAST_SAVE_FSM] || params_access_signals.write_req_src[DENSE_BROADCAST_SAVE_FSM]) begin
+            params_addr = params_access_signals.addr_table[DENSE_BROADCAST_SAVE_FSM];
         end
     end
 

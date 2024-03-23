@@ -93,6 +93,7 @@ typedef enum logic [2:0] {
     BUS_FSM,
     LOGIC_FSM,
     DATA_FILL_FSM,
+    DENSE_BROADCAST_SAVE_FSM,
     MAC,
     LAYERNORM,
     SOFTMAX,

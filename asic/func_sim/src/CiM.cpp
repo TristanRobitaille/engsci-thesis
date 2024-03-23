@@ -146,7 +146,6 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()+1] = inst.data[2];
             } else if (num_words_left == 1) {
                 intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()] = inst.data[2];
-            
             }
         }
 
@@ -171,7 +170,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
         word_snt_cnt.inc(3); // Increment data that was sent on the bus
         break;
-    
+
     case INFERENCE_RESULT_OP:
     case PISTOL_START_OP:
     case NOP:
@@ -620,7 +619,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
         case INFERENCE_COMPLETE:
             if (inst.op == PISTOL_START_OP) {
-                if (id == 0) { 
+                if (id == 0) {
                     struct instruction inst = {/*op*/ INFERENCE_RESULT_OP, /*target_or_sender*/ 0, /*data*/ {computation_result, 0, 0}};
                     bus->push_inst(inst);
                 }
@@ -699,7 +698,7 @@ void CiM::DIV(uint16_t num_addr, uint16_t in2, INPUT_TYPE in2_type) {
     if (in2_type == MODEL_PARAM) { compute_temp_fp = large_fp_t { intermediate_res[num_addr] } / large_fp_t { params[in2] }; } // Second input is a model parameter
     else if (in2_type == IMMEDIATE_VAL) { compute_temp_fp = large_fp_t { intermediate_res[num_addr] } / large_fp_t { in2 }; } // Second input is an immediate value
     else if (in2_type == ADC_INPUT) { compute_temp_fp = large_fp_t { intermediate_res[num_addr] / in2 }; } // Second input is a ADC input (16b)
-    else { 
+    else {
         cout << "Received unknown parameter type " << in2_type << endl;
         exit(-1);
     }
@@ -717,7 +716,7 @@ void CiM::ADD(uint16_t in1_addr, uint16_t in2_addr, INPUT_TYPE in2_type) {
 
     if (in2_type == INTERMEDIATE_RES) { compute_temp_fp = large_fp_t { intermediate_res[in2_addr] }; }
     else if (in2_type == MODEL_PARAM) { compute_temp_fp = large_fp_t { params[in2_addr] }; }
-    else { 
+    else {
         cout << "Received unknown parameter type " << in2_type << endl;
         exit(-1);
     }
@@ -735,7 +734,7 @@ void CiM::LAYERNORM_1ST_HALF(uint16_t input_addr) {
     compute_temp_fp_3 = large_fp_t { 0.0f }; // Variance
 
     // Mean
-    for (uint16_t i = 0; i < EMB_DEPTH; i++) { compute_temp_fp += large_fp_t { intermediate_res[input_addr+i] }; } 
+    for (uint16_t i = 0; i < EMB_DEPTH; i++) { compute_temp_fp += large_fp_t { intermediate_res[input_addr+i] }; }
     compute_temp_fp /= EMB_DEPTH;
     verify_result(MEAN, static_cast<float> (compute_temp_fp), intermediate_res, input_addr, EMB_DEPTH, id);
 
@@ -815,7 +814,7 @@ void CiM::ARGMAX(uint16_t input_addr, uint16_t len) {
 
 large_fp_t CiM::exp_approx(large_fp_t input) {
     /* Approximation of exp(x) as used in the ASIC
-       Uses the identy exp(x) = 2^(x/ln(2)), float/int exponent splitting and Taylor approximation of the fractional part. 
+       Uses the identy exp(x) = 2^(x/ln(2)), float/int exponent splitting and Taylor approximation of the fractional part.
     */
 
     large_fp_t ln_2 = log(large_fp_t{2});
