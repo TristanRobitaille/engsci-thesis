@@ -92,6 +92,7 @@ ParamInfo_t param_addr_map[PARAMS_NUM-1];
 typedef enum logic [2:0] {
     BUS_FSM,
     LOGIC_FSM,
+    DATA_FILL_FSM,
     MAC,
     LAYERNORM,
     SOFTMAX,

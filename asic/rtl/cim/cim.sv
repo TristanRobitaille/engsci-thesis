@@ -76,7 +76,7 @@ module cim # (
         end else if (mac_add_refresh) begin
             add_input_q_1 = mac_add_input_q_1;
             add_input_q_2 = mac_add_input_q_2;
-        end 
+        end
     end
 
     always_ff @ (posedge clk) begin : adder_assertions
@@ -99,12 +99,12 @@ module cim # (
     logic [N_COMP-1:0] mac_out, mac_out_flipped, mac_add_input_q_1, mac_add_input_q_2;
     PARAM_TYPE_T mac_param_type;
     ACTIVATION_TYPE_T mac_activation;
-    mac mac_inst    (.clk(clk), .rst_n(rst_n), .start(mac_start), .done(mac_done), .busy(mac_compute_in_progress), .param_type(mac_param_type), .len(mac_len), .activation(mac_activation), 
-                     .start_addr1(mac_start_addr1), .start_addr2(mac_start_addr2), .bias_addr(mac_bias_addr),
-                     .params_access_signals(params_access_signals), .int_res_access_signals(int_res_access_signals),                     
-                     .param_data(params_read_data), .intermediate_res_data(int_res_read_data), .computation_result(mac_out),
-                     .add_input_q_1(mac_add_input_q_1), .add_input_q_2(mac_add_input_q_2), .add_output_q(add_output_q), .add_refresh(mac_add_refresh), 
-                     .mult_input_q_1(mult_input_q_1), .mult_input_q_2(mult_input_q_2), .mult_output_q(mult_output_q), .mult_refresh(mult_refresh));
+        mac mac_inst    (.clk(clk), .rst_n(rst_n), .start(mac_start), .done(mac_done), .busy(mac_compute_in_progress), .param_type(mac_param_type), .len(mac_len), .activation(mac_activation),
+                        .start_addr1(mac_start_addr1), .start_addr2(mac_start_addr2), .bias_addr(mac_bias_addr),
+                        .params_access_signals(params_access_signals), .int_res_access_signals(int_res_access_signals),
+                        .param_data(params_read_data), .intermediate_res_data(int_res_read_data), .computation_result(mac_out),
+                        .add_input_q_1(mac_add_input_q_1), .add_input_q_2(mac_add_input_q_2), .add_output_q(add_output_q), .add_refresh(mac_add_refresh),
+                        .mult_input_q_1(mult_input_q_1), .mult_input_q_2(mult_input_q_2), .mult_output_q(mult_output_q), .mult_refresh(mult_refresh));
 
     CIM_STATE_T cim_state;
     INFERENCE_STEP_T current_inf_step;
@@ -131,10 +131,57 @@ module cim # (
                 end
                 DENSE_BROADCAST_START_OP,
                 TRANS_BROADCAST_START_OP: begin
+                    if (bus_target_or_sender_read == ID) begin // Start broadcasting data
+                        tx_addr <= bus_data_read[0][$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0];
+                        data_fill_start_addr <= bus_data_read[0][$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0];
+                        bus_op_write <= (bus_op_read == DENSE_BROADCAST_START_OP) ? DENSE_BROADCAST_DATA_OP : TRANS_BROADCAST_DATA_OP;
+                        start_inst_fill <= 1'b1;
+                        num_words_to_fill <= (bus_data_read[1] == 'd1) ? 'd1 : 'd3;
+                    end
+                    if (current_inf_step == ENC_MHSA_MULT_V_STEP) begin
+                        gen_cnt_7b_2_inc <= {6'd0, (bus_target_or_sender_read == 'd0)}; // Count matrix
+                        word_rec_cnt_rst_n <= RST;
+                    end
+
+                    data_len <= bus_data_read[1][$clog2(NUM_CIMS+1)-1:0];
+                    rx_addr <= bus_data_read[2][$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0];
+                    sender_id <= {1'd0, bus_target_or_sender_read};
+                    word_snt_cnt_rst_n <= RST;
                 end
-                DENSE_BROADCAST_DATA_OP,
+
+                DENSE_BROADCAST_DATA_OP: begin
+                    word_snt_cnt_rst_n <= RUN;
+                end
+                
                 TRANS_BROADCAST_DATA_OP: begin
+                    word_snt_cnt_rst_n <= RUN;
+                    word_snt_cnt_inc <= 'd3;
+                    word_rec_cnt_inc <= {6'd0, has_my_data(word_snt_cnt, ID) || (current_inf_step == MLP_HEAD_DENSE_2_STEP)};
+
+                    // Grab appropriate data
+                    if (has_my_data(word_snt_cnt, ID)) begin
+                        int_res_access_signals.addr_table[BUS_FSM] <= rx_addr + {4'd0, bus_target_or_sender_read};
+                        if ((word_snt_cnt+3) <= data_len) begin // More than 3 word left to receive
+                            int_res_access_signals.write_data[BUS_FSM] <= bus_data_read[ID - word_snt_cnt];
+                        end else if (word_snt_cnt == ID) begin
+                            int_res_access_signals.write_data[BUS_FSM] <= bus_data_read[2];
+                        end
+                    end
+
+                    // Send data
+                    if ((bus_target_or_sender_read == ID) && (word_snt_cnt+3 < data_len)) begin
+                        is_ready <= 1'b0;
+                        data_fill_start_addr <= tx_addr + {3'd0, word_snt_cnt} + 'd3;
+                        bus_op_write <= TRANS_BROADCAST_DATA_OP;
+                        start_inst_fill <= 1'b1;
+                        if ((word_snt_cnt+6) <= data_len) begin
+                            num_words_to_fill <= 'd3;
+                        end else begin
+                            num_words_to_fill <= data_len - word_snt_cnt - 3;
+                        end
+                    end
                 end
+
                 PARAM_STREAM_START_OP: begin
                     rx_addr <= bus_data_read[0][$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0];
                     word_rec_cnt_rst_n <= RST;
@@ -167,7 +214,10 @@ module cim # (
                 end
                 NOP: begin
                     int_res_access_signals.write_req_src[BUS_FSM] <= 1'b0;
+                    params_access_signals.write_req_src[BUS_FSM] <= 1'b0;
                     word_rec_cnt_inc <= 'd0;
+                    word_snt_cnt_inc <= 'd0;
+                    start_inst_fill <= 1'b0;
                 end
                 PISTOL_START_OP,
                 INFERENCE_RESULT_OP: begin
@@ -198,7 +248,7 @@ module cim # (
                     end
                 end
                 CIM_PATCH_LOAD: begin
-                    unique case (gen_reg_2b) 
+                    unique case (gen_reg_2b)
                         'd0: begin
                             if (~MAC_compute_in_progress && (word_rec_cnt == PATCH_LEN)) begin
                                 gen_reg_2b <= 'd1;
@@ -277,6 +327,7 @@ module cim # (
                                 gen_reg_2b <= 'd0;
                                 int_res_access_signals.write_req_src[LOGIC_FSM] <= 1'b0;
                                 current_inf_step <= (gen_cnt_7b_cnt == (NUM_PATCHES+1)) ? ENC_LAYERNORM_1_1ST_HALF_STEP : POS_EMB_STEP;
+                                int_res_access_signals.read_req_src[LOGIC_FSM] <= 1'b0;
                                 $display("Done with POS_EMB_STEP");
                             end
                             gen_cnt_7b_rst_n <= (gen_cnt_7b_cnt == (NUM_PATCHES+1)) ? RST : RUN;
@@ -302,10 +353,62 @@ module cim # (
         end
     end
 
+    // Data fill and send FSM (small FSM to fill a register with data and send it to the bus)
+    logic start_inst_fill, inst_fill_substate;
+    logic [1:0] addr_offset_counter, addr_offset_counter_delayed;
+    logic [6:0] num_words_to_fill;
+    logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] data_fill_start_addr;
+
+    enum logic {IDLE, FILL_INST} data_fill_state;
+    always_ff @ (posedge clk) begin : data_inst_fill_and_send_fsm
+        if (!rst_n) begin
+        end else begin
+            unique case (data_fill_state)
+                IDLE: begin
+                    if (start_inst_fill) begin
+                        int_res_access_signals.addr_table[DATA_FILL_FSM] <= data_fill_start_addr;
+                        int_res_access_signals.read_req_src[DATA_FILL_FSM] <= 1'b1;
+                        data_fill_state <= FILL_INST;
+                    end
+                    is_ready <= ~start_inst_fill;
+                    addr_offset_counter <= 'd0;
+                    addr_offset_counter_delayed <= 'd0;
+                    bus_drive <= 1'b0;
+                    bus_data_write <= 'd0;
+                end
+
+                FILL_INST: begin
+                    if (inst_fill_substate == 'd0) begin
+                        inst_fill_substate <= 'd1;
+                    end else if (inst_fill_substate == 'd1) begin // Data has come back from intermediate results memory
+                        /* verilator lint_off WIDTHEXPAND */
+                        if (num_words_to_fill[1:0] == 'd1) begin
+                            bus_data_write['d2] <= int_res_read_data;
+                        end else if (num_words_to_fill[1:0] == 'd2) begin
+                            bus_data_write[2'd1 + addr_offset_counter] <= int_res_read_data;
+                        end else begin
+                            bus_data_write[addr_offset_counter] <= int_res_read_data;
+                        end
+                        /* verilator lint_on WIDTHEXPAND */
+                        inst_fill_substate <= 'd0;
+                        addr_offset_counter <= addr_offset_counter + 'd1;
+                        int_res_access_signals.addr_table[DATA_FILL_FSM] <= data_fill_start_addr + {8'd0, addr_offset_counter + 2'd1};
+                        int_res_access_signals.read_req_src[DATA_FILL_FSM] <= ~(addr_offset_counter_delayed == (num_words_to_fill[1:0]-2'd1));
+                        data_fill_state <= (addr_offset_counter_delayed == (num_words_to_fill[1:0]-2'd1)) ? IDLE : FILL_INST;
+                        bus_drive <= (addr_offset_counter_delayed == (num_words_to_fill[1:0]-2'd1));
+                    end
+                    addr_offset_counter_delayed <= addr_offset_counter;
+                end
+                default:
+                    $fatal("Invalid data_fill_state value in data_inst_fill_and_send_fsm");
+            endcase
+        end
+    end
+
     // Miscellanous combinational logic
     always_comb begin : computation_twos_comp_flip
         mac_out_flipped = ~mac_out + 'd1;
         add_out_flipped = ~add_output_q + 'd1;
     end
-    
+
 endmodule

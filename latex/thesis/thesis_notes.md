@@ -36,6 +36,8 @@
 - Discussion about memory
     - Amount of memory (intermediate results and params storage)
     - Overhead in storing LuTs for memory locations, lengths, etc.
+- Clock gating
+    - Use "-gate_clock" in command, but should be done automatically by default. Try to disable and see difference
 
 ## Results
 - Area, power, latency (w/ and w/o parameters load)

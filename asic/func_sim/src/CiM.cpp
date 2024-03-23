@@ -99,11 +99,15 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
     case DENSE_BROADCAST_START_OP:
     case TRANS_BROADCAST_START_OP:
+        rx_addr_reg = static_cast<uint16_t> (inst.data[2]); // Save address where to store data
+        data_len_reg = inst.data[1]; // Save length of data to send/receive
+        sender_id = inst.target_or_sender; // Save sender's id
+
         if (inst.target_or_sender == id) { // Master controller tells me to start broadcasting some data
             struct instruction new_inst;
             tx_addr_reg = static_cast<uint16_t> (inst.data[0]);
             OP op = (inst.op == DENSE_BROADCAST_START_OP) ? DENSE_BROADCAST_DATA_OP : TRANS_BROADCAST_DATA_OP;
-            if (inst.data[1] == 1) { new_inst = {op, id, /*data*/{0, 0, intermediate_res[tx_addr_reg]},}; } // Special case to only send one data and have the correct alignment
+            if (data_len_reg == 1) { new_inst = {op, id, /*data*/{0, 0, intermediate_res[tx_addr_reg]}}; } // Special case to only send one data and have the correct alignment
             else { new_inst = {op, id, /*data*/{intermediate_res[tx_addr_reg], intermediate_res[tx_addr_reg+1], intermediate_res[tx_addr_reg+2]}}; }
             bus->push_inst(new_inst);
         }
@@ -112,68 +116,60 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             if (inst.target_or_sender == 0) { gen_cnt_7b_2.inc(); } // Counts matrix
             word_rec_cnt.reset(); // We also want to reset this counter here because the CiM that don't have to multiply anything for this matrix could overflow the counter
         }
-
-        rx_addr_reg = static_cast<uint16_t> (inst.data[2]); // Save address where to store data
-        data_len_reg = inst.data[1]; // Save length of data to send/receive
-        sender_id = inst.target_or_sender; // Save sender's id
         word_snt_cnt.reset();
         break;
 
     case DENSE_BROADCAST_DATA_OP:
     case TRANS_BROADCAST_DATA_OP:
-        word_snt_cnt.inc(3); // Increment data that was sent on the bus
-
         // Data grab
         if (inst.op == TRANS_BROADCAST_DATA_OP) { // Grab the data that corresponds to my data (note this will also move the data to the correct location for the id that is currently sending)
-            if (current_inf_step == MLP_HEAD_DENSE_2_STEP) { // This step is special. Each of CiM's #0-#31 send a single element and every CiM's must grab it, so there is no check to do
+            if (HAS_MY_DATA(word_snt_cnt.get_cnt()) || (current_inf_step == MLP_HEAD_DENSE_2_STEP)) { // MLP_HEAD_DENSE_2_STEP is special. Each of CiM's #0-#31 send a single element and every CiM's must grab it, so there is no check to do
                 word_rec_cnt.inc();
-            } else {
-                if (HAS_MY_DATA(word_snt_cnt.get_cnt())) { word_rec_cnt.inc(); } // Increment data received
             }
-            if (id < data_len_reg) { // Avoid overwriting data for CiMs that should receive the data
-                if (word_snt_cnt.get_cnt() <= data_len_reg) {
-                    intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 1) ? (inst.data[2]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
-                    intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 2) ? (inst.data[1]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
-                    intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 3) ? (inst.data[0]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
-                } else {
-                    intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 1) ? (inst.data[0]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
-                    intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 2) ? (inst.data[1]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
-                    intermediate_res[rx_addr_reg+inst.target_or_sender] = ((word_snt_cnt.get_cnt() - id) == 3) ? (inst.data[2]) : (intermediate_res[rx_addr_reg+inst.target_or_sender]);
+            if (HAS_MY_DATA(word_snt_cnt.get_cnt())) {
+                if ((word_snt_cnt.get_cnt()+3) <= data_len_reg) { // More than 3 word left to receive
+                    intermediate_res[rx_addr_reg+inst.target_or_sender] = inst.data[id-word_snt_cnt.get_cnt()];
+                } else if (word_snt_cnt.get_cnt() == id) {
+                    intermediate_res[rx_addr_reg+inst.target_or_sender] = inst.data[2]; // Only one word left (only possible because some broadcasts are single-word)
                 }
+                // We'll never get into a situation where we have 2 words left, so no need to check for it.
             }
         } else if (inst.op == DENSE_BROADCAST_DATA_OP) { // Always move data (even my own) to the correct location to perform operations later
             word_rec_cnt.inc(3); // Increment data received
-            if (word_snt_cnt.get_cnt() <= data_len_reg) {
-                intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-3] = inst.data[0];
-                intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-2] = inst.data[1];
-                intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-1] = inst.data[2];
-            } else { // Will either have 1 or 2 left if we are over the data_len_reg
-                uint16_t num_data_left = data_len_reg - (word_snt_cnt.get_cnt()-3);
-                intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-3] = (num_data_left == 1) ? inst.data[2] : inst.data[1];
-                intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-2] = (num_data_left == 1) ? (intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()-2]) : (inst.data[2]);
+            int num_words_left = data_len_reg - word_snt_cnt.get_cnt();
+            if (num_words_left >= 3) {
+                intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()] = inst.data[0];
+                intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()+1] = inst.data[1];
+                intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()+2] = inst.data[2];
+            } else if (num_words_left == 2) {
+                intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()] = inst.data[1];
+                intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()+1] = inst.data[2];
+            } else if (num_words_left == 1) {
+                intermediate_res[rx_addr_reg+word_snt_cnt.get_cnt()] = inst.data[2];
+            
             }
         }
 
         // Prep new instruction to send
         if (inst.target_or_sender == id) {
-            if (word_snt_cnt.get_cnt() < data_len_reg) { // If last time was me and I have more data to send
-                struct instruction new_inst = {/*op*/ inst.op, /*target_or_sender*/ id, /*data*/ {0, 0, 0}};
+            if ((word_snt_cnt.get_cnt()+3) < data_len_reg) { // If last time was me and I have more data to send
+                struct instruction new_inst = {inst.op, id, {0, 0, 0}};
 
-                if ((data_len_reg - word_snt_cnt.get_cnt() == 2)) { // Only two bytes left
-                    new_inst.data = {0, intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()]};
-                    new_inst.data[2] = intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()+1];
-                } else if ((data_len_reg - word_snt_cnt.get_cnt() == 1)) { // Only one byte left
-                    new_inst.data[2] = intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()];
+                if (data_len_reg - word_snt_cnt.get_cnt() == 5) { // Only two word left
+                    new_inst.data = {0, intermediate_res[tx_addr_reg+(word_snt_cnt.get_cnt()+3)], intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()+4]};
+                } else if (data_len_reg - word_snt_cnt.get_cnt() == 4) { // Only one word left
+                    new_inst.data = {0, 0, intermediate_res[tx_addr_reg+(word_snt_cnt.get_cnt()+3)]};
                 } else {
-                    new_inst.data = {intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()], intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()+1]};
-                    new_inst.data[2] = intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()+2];
+                    new_inst.data = {intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()+3], intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()+4], intermediate_res[tx_addr_reg+word_snt_cnt.get_cnt()+5]};
                 }
                 bus->push_inst(new_inst);
             } else {
-                struct instruction inst = {NOP, id, /*data*/ {0, 0, 0}};
+                struct instruction inst = {NOP, id, {0, 0, 0}};
                 bus->push_inst(inst);
             }
         }
+
+        word_snt_cnt.inc(3); // Increment data that was sent on the bus
         break;
     
     case INFERENCE_RESULT_OP:

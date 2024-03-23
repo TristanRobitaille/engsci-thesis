@@ -93,7 +93,7 @@ module layernorm (
                                 gen_reg_3b <= 'd2;
                             end
                         end else if (gen_reg_3b == 'd2) begin
-                            if (loop_sum_type == MEAN_SUM) begin // Move to next 
+                            if (loop_sum_type == MEAN_SUM) begin // Move to next
                                 compute_temp <= add_output_q;
                                 gen_reg_3b <= 'd0;
                                 index <= index + 'd1;

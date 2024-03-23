@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Thu Mar 21 05:43:18 2024
+[*] Sat Mar 23 17:36:58 2024
 [*]
 [dumpfile] "dump.vcd"
-[dumpfile_mtime] "Thu Mar 21 05:42:26 2024"
-[dumpfile_size] 10825249
+[dumpfile_mtime] "Sat Mar 23 17:36:22 2024"
+[dumpfile_size] 29489
 [savefile] "cim.gtkw"
-[timestart] 546253100
+[timestart] 1026550
 [size] 2384 1387
 [pos] 1769 53
-*-15.599998 546430000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+*-12.600001 1070000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -37,7 +37,7 @@
 [markername] YY
 [markername] ZZ
 [treeopen] cim.
-[treeopen] cim.mem.
+[treeopen] cim.mac_inst.
 [sst_width] 299
 [signals_width] 347
 [sst_expanded] 1
@@ -48,6 +48,8 @@ clk
 cim.cim_state[2:0]
 @22
 cim.current_inf_step[5:0]
+@28
+cim.is_ready
 @200
 -
 @24
@@ -55,6 +57,7 @@ cim.current_inf_step[5:0]
 cim.bus_target_or_sender_read[5:0]
 [color] 2
 cim.bus_op_read[3:0]
+@421
 [color] 2
 cim.bus_data_read[0][15:0]
 [color] 2
@@ -63,6 +66,15 @@ cim.bus_data_read[1][15:0]
 cim.bus_data_read[2][15:0]
 @200
 -
+@24
+cim.bus_op[3:0]
+cim.bus_target_or_sender[5:0]
+@420
+cim.bus_data[0][15:0]
+cim.bus_data[1][15:0]
+cim.bus_data[2][15:0]
+cim.data_len[6:0]
+@200
 -
 @24
 cim.gen_reg_2b[1:0]
@@ -105,17 +117,15 @@ cim.mem.int_res_access_signals.addr_table[2][9:0]
 cim.mem.params_access_signals.addr_table[2][9:0]
 @28
 [color] 5
-(0)cim.mem.params_access_signals.read_req_src[2:0]
-[color] 5
-(0)cim.mem.int_res_access_signals.read_req_src[2:0]
-[color] 5
 cim.mem.int_res_wen
-@24
+@420
 [color] 5
 cim.mem.int_res_read_data[15:0]
+@24
 [color] 5
 cim.mem.int_res_addr[9:0]
 @200
+-
 -
 [pattern_trace] 1
 [pattern_trace] 0

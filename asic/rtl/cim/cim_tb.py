@@ -10,11 +10,17 @@ import cocotb
 import cocotb.triggers
 from cocotb.clock import Clock
 
+params_loaded = dict()
+
 #----- HELPERS -----#
-def write_full_bus(dut, op:Enum, target_or_sender, data:list):
+async def write_full_bus(dut, op:Enum, target_or_sender, data:list):
     dut.bus_op_read.value = op.value
     dut.bus_target_or_sender_read.value = target_or_sender
     write_to_data_bus_multi(dut, data)
+    await cocotb.triggers.RisingEdge(dut.clk)
+    dut.bus_op_read.value = 0
+    dut.bus_target_or_sender_read.value = 0
+    dut.bus_data_read.value = 0
 
 def write_to_data_bus_multi(dut, data:list):
     # Overwrite all three words
@@ -33,21 +39,30 @@ INTERDATA_DELAY = 5
 #----- EEG -----#
 eeg = h5py.File("../../func_sim/reference_data/eeg.h5", "r")
 
+#----- FUNCTIONS -----#
 async def param_load(dut, cim_id:int):
-    # Load parameters (only sending for CiM #0 and #1, to see whether CiM #0 ignores it)
+    # Load parameters
+    global params_loaded
     for param_info in param_addr_map.values():
-        write_full_bus(dut, op=BusOp.PARAM_STREAM_START_OP, target_or_sender=cim_id, data=[param_info["start_addr"], param_info["len"], 0]) #[start_addr, len, N/A]
-        await RisingEdge(dut.clk)
-        dut.bus_op_read.value = BusOp.NOP.value
+        await write_full_bus(dut, op=BusOp.PARAM_STREAM_START_OP, target_or_sender=cim_id, data=[param_info["start_addr"], param_info["len"], 0]) #[start_addr, len, N/A]
         await cocotb.triggers.ClockCycles(dut.clk, INTERDATA_DELAY-1)
 
         for i in range(math.ceil(param_info["len"]/3)):
             for j in range(3): # 3 parameters per transaction
-                dut.bus_op_read.value = BusOp.PARAM_STREAM_OP.value
+                param_addr = param_info["start_addr"]+3*i+j
                 param = random_input(-MAX_VAL, MAX_VAL)
+                if (cim_id == 0): params_loaded[param_addr] = param
+                #Send instruction to load parameter
+                dut.bus_op_read.value = BusOp.PARAM_STREAM_OP.value
+                dut.bus_target_or_sender_read.value = cim_id
                 write_to_data_bus(dut, j, BinToDec(param, num_Q_storage))
                 await RisingEdge(dut.clk)
                 dut.bus_op_read.value = BusOp.NOP.value
+                await cocotb.triggers.ClockCycles(dut.clk, 3)
+                # Check parameter loaded in memory
+                if (param_addr < 528):
+                    if (cim_id == 0): assert (dut.mem.params[param_addr].value == BinToDec(param, num_Q_storage)), f"Parameter load failed. Expected: {BinToDec(param, num_Q_storage)}, got: {dut.mem.params[3*i+j].value}"
+                    else: assert (dut.mem.params[param_addr].value == BinToDec(params_loaded[param_addr], num_Q_storage)), f"Parameter load failed. Expected: {BinToDec(params_loaded[param_addr], num_Q_storage)}, got: {dut.mem.params[3*i+j].value}" # If we sent params to another CiM, CiM should not update its params memory
                 await cocotb.triggers.ClockCycles(dut.clk, INTERDATA_DELAY-1)
 
 async def patch_load(dut):
@@ -88,8 +103,9 @@ async def patch_load(dut):
 
 #----- TESTS -----#
 @cocotb.test()
-async def basic_reset(dut):
+async def basic_test(dut):
     cocotb.start_soon(Clock(dut.clk, 1/ASIC_FREQUENCY_MHZ, units="us").start()) # 100MHz clock
+    await cocotb.start(bus_mirror(dut))
     await reset(dut)
     await cocotb.triggers.ClockCycles(dut.clk, 100)
 
@@ -100,5 +116,19 @@ async def basic_reset(dut):
 
     # Simulate being the master and sending EEG patch data (note that this overwrites the parameters loaded above)
     await patch_load(dut)
+    await cocotb.triggers.ClockCycles(dut.clk, INTERLUDE_CLOCK_CYCLES)
+
+    # Start transpose broadcast
+    tx_addr = 20
+    rx_addr = 100
+    data_len = [6, 1, 60, 61, 64, 32]
+    for i in range(100):
+        dut.mem.int_res[tx_addr+i].value = i+1 # Fill memory with fake data to send
+
+    for len in data_len:
+        await write_full_bus(dut, op=BusOp.TRANS_BROADCAST_START_OP, target_or_sender=0, data=[tx_addr, len, rx_addr]) # tx_addr, data_len, rx_addr
+        await cocotb.triggers.RisingEdge(dut.clk)
+        while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+        await cocotb.triggers.ClockCycles(dut.clk, 1000)
 
     await cocotb.triggers.ClockCycles(dut.clk, INTERLUDE_CLOCK_CYCLES)

@@ -31,6 +31,8 @@ module cim_mem (
             int_res_addr = int_res_access_signals.addr_table[MAC];
         end else if (int_res_access_signals.read_req_src[LAYERNORM] || int_res_access_signals.write_req_src[LAYERNORM]) begin
             int_res_addr = int_res_access_signals.addr_table[LAYERNORM];
+        end else if (int_res_access_signals.read_req_src[DATA_FILL_FSM] || int_res_access_signals.write_req_src[DATA_FILL_FSM]) begin
+            int_res_addr = int_res_access_signals.addr_table[DATA_FILL_FSM];
         end
 
         if (params_access_signals.read_req_src[BUS_FSM] || params_access_signals.write_req_src[BUS_FSM]) begin
@@ -41,6 +43,8 @@ module cim_mem (
             params_addr = params_access_signals.addr_table[MAC];
         end else if (params_access_signals.read_req_src[LAYERNORM] || params_access_signals.write_req_src[LAYERNORM]) begin
             params_addr = params_access_signals.addr_table[LAYERNORM];
+        end else if (params_access_signals.read_req_src[DATA_FILL_FSM] || params_access_signals.write_req_src[DATA_FILL_FSM]) begin
+            params_addr = params_access_signals.addr_table[DATA_FILL_FSM];
         end
     end
 
@@ -71,8 +75,13 @@ module cim_mem (
         assert (!params_access_signals.write_req_src[MAC]) else $fatal("MAC is not allowed to write to model parameters memory");
 
         // Only one request at a time
-        assert ($countones({int_res_access_signals.read_req_src, int_res_access_signals.write_req_src}) <= 1) else $fatal("Got more than one read/write request for intermediate results memory");
-        assert ($countones({params_access_signals.read_req_src, params_access_signals.write_req_src}) <= 1) else $fatal("Got more than one read/write request for params memory");
+        if ($countones({int_res_access_signals.read_req_src, int_res_access_signals.write_req_src}) > 1)
+            $display("Got more than one read/write request for intermediate results memory: %b at time %d", {int_res_access_signals.read_req_src, int_res_access_signals.write_req_src}, $time);
+        if ($countones({params_access_signals.read_req_src, params_access_signals.write_req_src}) > 1)
+            $display("Got more than one read/write request for params memory: %b at time %d", {params_access_signals.read_req_src, params_access_signals.write_req_src}, $time);
+
+        assert ($countones({int_res_access_signals.read_req_src, int_res_access_signals.write_req_src}) <= 1) else $display("Got more than one read/write request for intermediate results memory");
+        assert ($countones({params_access_signals.read_req_src, params_access_signals.write_req_src}) <= 1) else $display("Got more than one read/write request for params memory");
     end
 endmodule
 

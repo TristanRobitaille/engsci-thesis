@@ -130,8 +130,9 @@ def param_load_assertions(dut):
 
 #----- TESTS -----#
 @cocotb.test()
-async def load_params(dut):
+async def basic_test(dut):
     cocotb.start_soon(Clock(dut.clk, 1/ASIC_FREQUENCY_MHZ, units="us").start()) # 100MHz clock
+    await cocotb.start(bus_mirror(dut))
     await reset(dut)
 
     # Load params and distribute to CiMs

@@ -13,7 +13,7 @@
 #define CIM_INT_RES_SIZE_NUM_ELEM 848 // We need 835, but it needs to be divisible by 16. We can choose size of 848 and the additional sleep stages in here
 #define COMPUTE_CNT_THRESHOLD 5 // Used to simulate the delay in the computation to match the real hardware
 
-#define HAS_MY_DATA(x) ((id >= (x-3)) && (id < (x))) // Determines whether the current broadcast transaction contains data I need
+#define HAS_MY_DATA(x) ((id >= (x)) && (id < (x+3))) // Determines whether the current broadcast transaction contains data I need
 #define IS_MY_MATRIX(x) ((id >= (x)*NUM_HEADS) && (id < (x+1)*NUM_HEADS)) // Returns whether a given count corresponds to my matrix (for the *V matmul in encoder's MHSA)
 
 /*----- CLASS -----*/

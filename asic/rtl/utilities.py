@@ -192,3 +192,16 @@ def send_eeg_from_master(dut, eeg_file):
     dut.bus_data_read.value = val
     eeg_index += 1
     return scaled_raw_eeg
+
+#----- COROUTINES -----#
+@cocotb.coroutine
+def bus_mirror(dut):
+    # Writes on bus_x_read was is on bus_x, as would be done in the ASIC. This is needed because the CiM sometimes reacts to what it itself sends.
+    while True:
+        # Wait for a change on the bus
+        yield [ cocotb.triggers.Edge(dut.bus_op),
+                cocotb.triggers.Edge(dut.bus_target_or_sender),
+                cocotb.triggers.Edge(dut.bus_data)]
+        dut.bus_op_read.value = dut.bus_op.value
+        dut.bus_target_or_sender_read.value = dut.bus_target_or_sender.value
+        dut.bus_data_read.value = dut.bus_data.value

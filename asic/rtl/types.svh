@@ -37,18 +37,18 @@ typedef struct packed {
 
 /*----- ENUMS -----*/
 typedef enum reg [BUS_OP_WIDTH-1:0] {
-    NOP,
-    PATCH_LOAD_BROADCAST_START_OP,
-    PATCH_LOAD_BROADCAST_OP,
-    DENSE_BROADCAST_START_OP,
-    DENSE_BROADCAST_DATA_OP,
-    PARAM_STREAM_START_OP,
-    PARAM_STREAM_OP,
-    TRANS_BROADCAST_START_OP,
-    TRANS_BROADCAST_DATA_OP,
-    PISTOL_START_OP,
-    INFERENCE_RESULT_OP,
-    OP_NUM // Number of ops
+    NOP                             = 'd0,
+    PATCH_LOAD_BROADCAST_START_OP   = 'd1,
+    PATCH_LOAD_BROADCAST_OP         = 'd2,
+    DENSE_BROADCAST_START_OP        = 'd3,
+    DENSE_BROADCAST_DATA_OP         = 'd4,
+    PARAM_STREAM_START_OP           = 'd5,
+    PARAM_STREAM_OP                 = 'd6,
+    TRANS_BROADCAST_START_OP        = 'd7,
+    TRANS_BROADCAST_DATA_OP         = 'd8,
+    PISTOL_START_OP                 = 'd9,
+    INFERENCE_RESULT_OP             = 'd10,
+    OP_NUM                          = 'd11 // Number of ops
 } BUS_OP_T;
 
 typedef enum logic {
