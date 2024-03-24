@@ -54,7 +54,7 @@ module top_mac # () (
         .busy(busy),
         .done(done),
         .param_data(param_data),
-        .intermediate_res_data(int_res_data),
+        .int_res_data(int_res_data),
         .params_access_signals(params_access_signals),
         .int_res_access_signals(int_res_access_signals),
         .computation_result(computation_result),

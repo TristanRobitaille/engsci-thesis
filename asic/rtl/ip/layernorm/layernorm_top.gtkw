@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Fri Mar 22 04:20:19 2024
+[*] Sun Mar 24 05:16:09 2024
 [*]
 [dumpfile] "dump.vcd"
-[dumpfile_mtime] "Fri Mar 22 04:18:49 2024"
-[dumpfile_size] 702444
+[dumpfile_mtime] "Sun Mar 24 05:14:03 2024"
+[dumpfile_size] 296681
 [savefile] "layernorm_top.gtkw"
-[timestart] 4548230
-[size] 2224 1100
-[pos] 1786 222
-*-13.999913 4621000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[timestart] 797100
+[size] 2224 1387
+[pos] 1761 53
+*-15.499914 963000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -41,7 +41,7 @@
 [sst_width] 253
 [signals_width] 259
 [sst_expanded] 1
-[sst_vpaned_height] 248
+[sst_vpaned_height] 323
 @28
 clk
 top_layernorm.start
@@ -110,12 +110,12 @@ top_layernorm.layernorm_inst.add_refresh
 @200
 -
 -
-@421
+@420
 [color] 3
 top_layernorm.layernorm_inst.mult_input_q_1[21:0]
 [color] 3
 top_layernorm.layernorm_inst.mult_input_q_2[21:0]
-@c00421
+@c00420
 [color] 3
 top_layernorm.layernorm_inst.mult_output_q[21:0]
 @28
@@ -163,7 +163,7 @@ top_layernorm.layernorm_inst.mult_output_q[21:0]
 (20)top_layernorm.layernorm_inst.mult_output_q[21:0]
 [color] 3
 (21)top_layernorm.layernorm_inst.mult_output_q[21:0]
-@1401601
+@1401200
 -group_end
 @420
 [color] 3
@@ -181,6 +181,11 @@ top_layernorm.div.output_q[21:0]
 @28
 [color] 7
 top_layernorm.div.busy
+@23
+top_layernorm.layernorm_inst.int_res_access_signals.write_req_src[6:0]
+@420
+top_layernorm.layernorm_inst.int_res_access_signals.write_data[5][15:0]
+@28
 [color] 7
 top_layernorm.div.done
 [color] 7
@@ -249,23 +254,5 @@ top_layernorm.layernorm_inst.compute_temp_3[21:0]
 @200
 -
 -
-@420
-top_layernorm.layernorm_inst.param_data[15:0]
-@c00022
-top_layernorm.layernorm_inst.int_res_access_signals.read_req_src[4:0]
-@28
-(0)top_layernorm.layernorm_inst.int_res_access_signals.read_req_src[4:0]
-(1)top_layernorm.layernorm_inst.int_res_access_signals.read_req_src[4:0]
-(2)top_layernorm.layernorm_inst.int_res_access_signals.read_req_src[4:0]
-(3)top_layernorm.layernorm_inst.int_res_access_signals.read_req_src[4:0]
-(4)top_layernorm.layernorm_inst.int_res_access_signals.read_req_src[4:0]
-@1401200
--group_end
-@22
-top_layernorm.layernorm_inst.int_res_access_signals.write_req_src[4:0]
-@24
-top_layernorm.layernorm_inst.params_access_signals.addr_table[3][9:0]
-@22
-top_layernorm.layernorm_inst.params_access_signals.read_req_src[4:0]
 [pattern_trace] 1
 [pattern_trace] 0

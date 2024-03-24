@@ -37,8 +37,10 @@ class LayerNormHalfSelect(Enum):
     SECOND_HALF = 1
 
 class broadcast_op():
-    def __init__(self, op:BusOp, len:int, num_cim:int, num_runs:int=1, start_cim:int=1):
+    def __init__(self, op:BusOp, tx_addr:int, rx_addr:int, len:int, num_cim:int, num_runs:int=1, start_cim:int=1):
         self.op = op
+        self.tx_addr = tx_addr
+        self.rx_addr = rx_addr
         self.len = len
         self.num_cim = num_cim
         self.num_runs = num_runs
@@ -71,31 +73,31 @@ num_Q_storage = FXfamily(NUM_FRACT_BITS, NUM_INT_BITS_STORAGE)
 num_Q_comp = FXfamily(NUM_FRACT_BITS, NUM_INT_BITS_COMP)
 
 inf_steps = [
-    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, len=NUM_PATCHES+1,  num_cim=NUM_CIM,            num_runs=1, start_cim=0),
-    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, len=EMB_DEPTH,      num_cim=NUM_PATCHES+1,      num_runs=1, start_cim=0),
-    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, len=NUM_PATCHES+1,  num_cim=NUM_CIM,            num_runs=1, start_cim=0),
-    broadcast_op(BusOp.DENSE_BROADCAST_DATA_OP, len=EMB_DEPTH,      num_cim=NUM_PATCHES+1,      num_runs=1, start_cim=0),
-    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, len=NUM_PATCHES+1,  num_cim=NUM_CIM,            num_runs=1, start_cim=0),
-    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, len=NUM_PATCHES+1,  num_cim=NUM_CIM,            num_runs=1, start_cim=0),
-    broadcast_op(BusOp.DENSE_BROADCAST_DATA_OP, len=NUM_HEADS,      num_cim=NUM_PATCHES+1,      num_runs=8, start_cim=0),
-    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, len=NUM_PATCHES+1,  num_cim=NUM_PATCHES+1,      num_runs=8, start_cim=0),
-    broadcast_op(BusOp.NOP,                     len=0,              num_cim=0,                  num_runs=1, start_cim=0), # Dummy
-    broadcast_op(BusOp.DENSE_BROADCAST_DATA_OP, len=NUM_PATCHES+1,  num_cim=NUM_PATCHES+1,      num_runs=8, start_cim=0),
-    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, len=NUM_PATCHES+1,  num_cim=NUM_CIM,            num_runs=1, start_cim=0),
-    broadcast_op(BusOp.DENSE_BROADCAST_DATA_OP, len=EMB_DEPTH,      num_cim=NUM_PATCHES+1,      num_runs=1, start_cim=0),
-    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, len=NUM_PATCHES+1,  num_cim=NUM_CIM,            num_runs=1, start_cim=0),
-    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, len=EMB_DEPTH,      num_cim=NUM_PATCHES+1,      num_runs=1, start_cim=0),
-    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, len=NUM_PATCHES+1,  num_cim=NUM_CIM,            num_runs=1, start_cim=0),
-    broadcast_op(BusOp.DENSE_BROADCAST_DATA_OP, len=EMB_DEPTH,      num_cim=NUM_CIM,            num_runs=1, start_cim=0),
-    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, len=1,              num_cim=MLP_DIM,            num_runs=1, start_cim=0),
-    broadcast_op(BusOp.DENSE_BROADCAST_DATA_OP, len=MLP_DIM,        num_cim=1,                  num_runs=1, start_cim=0),
-    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, len=1,              num_cim=NUM_CIM,            num_runs=1, start_cim=0),
-    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, len=EMB_DEPTH,      num_cim=1,                  num_runs=1, start_cim=0),
-    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, len=1,              num_cim=EMB_DEPTH,          num_runs=1, start_cim=0),
-    broadcast_op(BusOp.DENSE_BROADCAST_DATA_OP, len=EMB_DEPTH,      num_cim=1,                  num_runs=1, start_cim=0),
-    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, len=1,              num_cim=MLP_DIM,            num_runs=1, start_cim=MLP_DIM),
-    broadcast_op(BusOp.DENSE_BROADCAST_DATA_OP, len=MLP_DIM,        num_cim=1,                  num_runs=1, start_cim=0),
-    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, len=1,              num_cim=NUM_SLEEP_STAGES,   num_runs=1, start_cim=0)
+    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, tx_addr=0,                              rx_addr=NUM_PATCHES+1,                  len=NUM_PATCHES+1,  num_cim=NUM_CIM,            num_runs=1, start_cim=0),
+    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, tx_addr=NUM_PATCHES+1,                  rx_addr=NUM_PATCHES+1+EMB_DEPTH,        len=EMB_DEPTH,      num_cim=NUM_PATCHES+1,      num_runs=1, start_cim=0),
+    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, tx_addr=NUM_PATCHES+1+EMB_DEPTH,        rx_addr=2*EMB_DEPTH+3*(NUM_PATCHES+1),  len=NUM_PATCHES+1,  num_cim=NUM_CIM,            num_runs=1, start_cim=0),
+    broadcast_op(BusOp.DENSE_BROADCAST_DATA_OP, tx_addr=2*EMB_DEPTH+3*(NUM_PATCHES+1),  rx_addr=NUM_PATCHES+1+EMB_DEPTH,        len=EMB_DEPTH,      num_cim=NUM_PATCHES+1,      num_runs=1, start_cim=0),
+    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, tx_addr=2*EMB_DEPTH+NUM_PATCHES+1,      rx_addr=NUM_PATCHES+1+EMB_DEPTH,        len=NUM_PATCHES+1,  num_cim=NUM_CIM,            num_runs=1, start_cim=0),
+    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, tx_addr=2*(EMB_DEPTH+NUM_PATCHES+1),    rx_addr=2*EMB_DEPTH+NUM_PATCHES+1,      len=NUM_PATCHES+1,  num_cim=NUM_CIM,            num_runs=1, start_cim=0),
+    broadcast_op(BusOp.DENSE_BROADCAST_DATA_OP, tx_addr=NUM_PATCHES+1+EMB_DEPTH,        rx_addr=3*EMB_DEPTH+NUM_PATCHES+1,      len=NUM_HEADS,      num_cim=NUM_PATCHES+1,      num_runs=8, start_cim=0),
+    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, tx_addr=3*EMB_DEPTH+2*(NUM_PATCHES+1),  rx_addr=2*(EMB_DEPTH+NUM_PATCHES+1),    len=NUM_PATCHES+1,  num_cim=NUM_PATCHES+1,      num_runs=8, start_cim=0),
+    broadcast_op(BusOp.NOP,                     tx_addr=0,                              rx_addr=0,                              len=0,              num_cim=0,                  num_runs=1, start_cim=0), # Dummy
+    broadcast_op(BusOp.DENSE_BROADCAST_DATA_OP, tx_addr=2*(EMB_DEPTH+NUM_PATCHES+1),    rx_addr=NUM_PATCHES+1+EMB_DEPTH,        len=NUM_PATCHES+1,  num_cim=NUM_PATCHES+1,      num_runs=8, start_cim=0),
+    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, tx_addr=2*EMB_DEPTH+NUM_PATCHES+1,      rx_addr=NUM_PATCHES+1,                  len=NUM_PATCHES+1,  num_cim=NUM_CIM,            num_runs=1, start_cim=0),
+    broadcast_op(BusOp.DENSE_BROADCAST_DATA_OP, tx_addr=NUM_PATCHES+1,                  rx_addr=NUM_PATCHES+1+EMB_DEPTH,        len=EMB_DEPTH,      num_cim=NUM_PATCHES+1,      num_runs=1, start_cim=0),
+    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, tx_addr=2*EMB_DEPTH+NUM_PATCHES+1,      rx_addr=NUM_PATCHES+1,                  len=NUM_PATCHES+1,  num_cim=NUM_CIM,            num_runs=1, start_cim=0),
+    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, tx_addr=NUM_PATCHES+1,                  rx_addr=NUM_PATCHES+1+EMB_DEPTH,        len=EMB_DEPTH,      num_cim=NUM_PATCHES+1,      num_runs=1, start_cim=0),
+    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, tx_addr=NUM_PATCHES+1+EMB_DEPTH,        rx_addr=2*EMB_DEPTH+NUM_PATCHES+1,      len=NUM_PATCHES+1,  num_cim=NUM_CIM,            num_runs=1, start_cim=0),
+    broadcast_op(BusOp.DENSE_BROADCAST_DATA_OP, tx_addr=2*EMB_DEPTH+NUM_PATCHES+1,      rx_addr=NUM_PATCHES+1,                  len=EMB_DEPTH,      num_cim=NUM_CIM,            num_runs=1, start_cim=0),
+    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, tx_addr=NUM_PATCHES+1+EMB_DEPTH,        rx_addr=NUM_PATCHES+1,                  len=1,              num_cim=MLP_DIM,            num_runs=1, start_cim=0),
+    broadcast_op(BusOp.DENSE_BROADCAST_DATA_OP, tx_addr=NUM_PATCHES+1,                  rx_addr=NUM_PATCHES+1,                  len=MLP_DIM,        num_cim=1,                  num_runs=1, start_cim=0),
+    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, tx_addr=2*EMB_DEPTH+NUM_PATCHES+2,      rx_addr=0,                              len=1,              num_cim=NUM_CIM,            num_runs=1, start_cim=0),
+    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, tx_addr=0,                              rx_addr=EMB_DEPTH,                      len=EMB_DEPTH,          num_cim=1,                  num_runs=1, start_cim=0),
+    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, tx_addr=EMB_DEPTH,                      rx_addr=0,                              len=1,              num_cim=EMB_DEPTH,          num_runs=1, start_cim=0),
+    broadcast_op(BusOp.DENSE_BROADCAST_DATA_OP, tx_addr=0,                              rx_addr=EMB_DEPTH,                      len=EMB_DEPTH,      num_cim=1,                  num_runs=1, start_cim=0),
+    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, tx_addr=2*EMB_DEPTH,                    rx_addr=0,                              len=1,              num_cim=MLP_DIM,            num_runs=1, start_cim=MLP_DIM),
+    broadcast_op(BusOp.DENSE_BROADCAST_DATA_OP, tx_addr=MLP_DIM,                        rx_addr=EMB_DEPTH,                      len=MLP_DIM,        num_cim=1,                  num_runs=1, start_cim=0),
+    broadcast_op(BusOp.TRANS_BROADCAST_DATA_OP, tx_addr=2*EMB_DEPTH,                    rx_addr=MLP_DIM,                        len=1,              num_cim=NUM_SLEEP_STAGES,   num_runs=1, start_cim=0)
 ]
 
 param_addr_map = {

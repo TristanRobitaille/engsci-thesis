@@ -67,7 +67,7 @@ module cim # (
 
     // Adder module
     wire add_overflow;
-    logic cim_add_refresh;
+    logic add_refresh, cim_add_refresh;
     logic [N_COMP-1:0] add_input_q_1, add_input_q_2, cim_add_input_q_1, cim_add_input_q_2, add_output_q, add_out_flipped;
     always_latch begin : adder_input_MUX
         if (cim_add_refresh) begin
@@ -76,35 +76,83 @@ module cim # (
         end else if (mac_add_refresh) begin
             add_input_q_1 = mac_add_input_q_1;
             add_input_q_2 = mac_add_input_q_2;
+        end else if (layernorm_add_refresh) begin
+            add_input_q_1 = layernorm_add_input_q_1;
+            add_input_q_2 = layernorm_add_input_q_2;
         end
+        add_refresh = (cim_add_refresh || mac_add_refresh || layernorm_add_refresh);
     end
 
     always_ff @ (posedge clk) begin : adder_assertions
-        assert (~(cim_add_refresh & mac_add_refresh)) else $fatal("Adder refresh signals from both CiM's FSM and MAC modules are asserted simultaneously!");
+        assert ($countones(add_refresh) <= 1) else $fatal("Multipler add_refresh signals are asserted simultaneously!");
     end
-    adder add_inst (.clk(clk), .rst_n(rst_n), .refresh((cim_add_refresh || mac_add_refresh)), .overflow(add_overflow),
+    adder add_inst (.clk(clk), .rst_n(rst_n), .refresh(add_refresh), .overflow(add_overflow),
                     .input_q_1(add_input_q_1), .input_q_2(add_input_q_2), .output_q(add_output_q));
 
     // Multiplier module
     logic mult_refresh, mul_overflow;
-    logic [N_COMP-1:0] mult_input_q_1, mult_input_q_2, mult_output_q;
+    logic [N_COMP-1:0] mult_input_q_1, mult_input_q_2, mult_output_q, mult_out_flipped;
+    always_latch begin : mult_input_MUX
+        if (layernorm_mult_refresh) begin
+            mult_input_q_1 = layernorm_mult_input_q_1;
+            mult_input_q_2 = layernorm_mult_input_q_2;
+        end else if (mac_mult_refresh) begin
+            mult_input_q_1 = mac_mult_input_q_1;
+            mult_input_q_2 = mac_mult_input_q_2;
+        end
+        mult_refresh = (layernorm_mult_refresh || mac_mult_refresh);
+    end
+    always_ff @ (posedge clk) begin : mult_assertions
+        assert ($countones(mult_refresh) <= 1) else $fatal("Multiple mult_refresh signals are asserted simultaneously!");
+    end
     multiplier mult_inst (  .clk(clk), .rst_n(rst_n), .refresh(mult_refresh), .overflow(mul_overflow),
                             .input_q_1(mult_input_q_1), .input_q_2(mult_input_q_2), .output_q(mult_output_q));
 
+    // Divider module
+    logic div_dbz, div_overflow, div_done, div_busy, div_start;
+    logic [N_COMP-1:0] div_output_q, div_dividend, divisor;
+    divider div_inst (.clk(clk), .rst_n(rst_n), .start(div_start), .dividend(div_dividend), .divisor(divisor), .done(div_done), .busy(div_busy), .output_q(div_output_q), .dbz(div_dbz), .overflow(div_overflow));
+    
+    // Sqrt module
+    logic sqrt_start, sqrt_done, sqrt_busy, sqrt_neg_rad;
+    logic [N_COMP-1:0] sqrt_rad_q, sqrt_root_q;
+    sqrt sqrt_inst (.clk(clk), .rst_n(rst_n), .start(sqrt_start), .done(sqrt_done), .busy(sqrt_busy), .rad_q(sqrt_rad_q), .root_q(sqrt_root_q), .neg_rad(sqrt_neg_rad));
+
     // MAC module
-    logic mac_start, mac_done, mac_compute_in_progress, mac_add_refresh;
+    logic mac_start, mac_done, mac_busy, mac_add_refresh, mac_mult_refresh;
     logic [$clog2(MAC_MAX_LEN+1)-1:0] mac_len;
     logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] mac_start_addr1, mac_start_addr2;
     logic [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] mac_params_addr, mac_bias_addr;
     logic [N_COMP-1:0] mac_out, mac_out_flipped, mac_add_input_q_1, mac_add_input_q_2;
+    logic [N_COMP-1:0] mac_mult_input_q_1, mac_mult_input_q_2;
     PARAM_TYPE_T mac_param_type;
     ACTIVATION_TYPE_T mac_activation;
-    mac mac_inst    (.clk(clk), .rst_n(rst_n), .start(mac_start), .done(mac_done), .busy(mac_compute_in_progress), .param_type(mac_param_type), .len(mac_len), .activation(mac_activation),
-                    .start_addr1(mac_start_addr1), .start_addr2(mac_start_addr2), .bias_addr(mac_bias_addr),
-                    .params_access_signals(params_access_signals), .int_res_access_signals(int_res_access_signals),
-                    .param_data(params_read_data), .intermediate_res_data(int_res_read_data), .computation_result(mac_out),
-                    .add_input_q_1(mac_add_input_q_1), .add_input_q_2(mac_add_input_q_2), .add_output_q(add_output_q), .add_refresh(mac_add_refresh),
-                    .mult_input_q_1(mult_input_q_1), .mult_input_q_2(mult_input_q_2), .mult_output_q(mult_output_q), .mult_refresh(mult_refresh));
+    mac mac_inst (
+        .clk(clk), .rst_n(rst_n), .start(mac_start), .done(mac_done), .busy(mac_busy), .param_type(mac_param_type), .len(mac_len), .activation(mac_activation),
+        .start_addr1(mac_start_addr1), .start_addr2(mac_start_addr2), .bias_addr(mac_bias_addr),
+        .params_access_signals(params_access_signals), .int_res_access_signals(int_res_access_signals),
+        .param_data(params_read_data), .int_res_data(int_res_read_data), .computation_result(mac_out),
+        .add_input_q_1(mac_add_input_q_1), .add_input_q_2(mac_add_input_q_2), .add_output_q(add_output_q), .add_refresh(mac_add_refresh),
+        .mult_input_q_1(mac_mult_input_q_1), .mult_input_q_2(mac_mult_input_q_2), .mult_output_q(mult_output_q), .mult_refresh(mac_mult_refresh)
+    );
+
+    // LayerNorm module
+    logic layernorm_start, layernorm_half_select, layernorm_done, layernorm_busy, layernorm_add_refresh, layernorm_mult_refresh;
+    logic [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] beta_addr, gamma_addr;
+    logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] layernorm_start_addr;
+    logic [N_COMP-1:0] layernorm_add_input_q_1, layernorm_add_input_q_2, layernorm_mult_input_q_1, layernorm_mult_input_q_2;
+    layernorm layernorm_inst (
+        .clk(clk), .rst_n(rst_n),
+        .start(layernorm_start), .half_select(layernorm_half_select), .busy(layernorm_busy), .done(layernorm_done),
+        .start_addr(layernorm_start_addr), .beta_addr(beta_addr), .gamma_addr(gamma_addr),
+        .int_res_access_signals(int_res_access_signals), .params_access_signals(params_access_signals),
+        .param_data(params_read_data), .int_res_data(int_res_read_data),
+        .add_input_q_1(layernorm_add_input_q_1), .add_input_q_2(layernorm_add_input_q_2), .add_refresh(layernorm_add_refresh), .add_output_q(add_output_q), .add_output_flipped(add_out_flipped),
+        .mult_input_q_1(layernorm_mult_input_q_1), .mult_input_q_2(layernorm_mult_input_q_2), .mult_refresh(layernorm_mult_refresh), .mult_output_q(mult_output_q), .mult_output_flipped(mult_out_flipped),
+        .div_done(div_done), .div_busy(div_busy), .div_start(div_start),
+        .div_output_q(div_output_q), .div_dividend(div_dividend), .div_divisor(divisor),
+        .sqrt_done(sqrt_done), .sqrt_busy(sqrt_busy), .sqrt_start(sqrt_start), .sqrt_rad_q(sqrt_rad_q), .sqrt_root_q(sqrt_root_q)
+    );
 
     // Comms FSM
     logic signed [N_STORAGE-1:0] bus_data_copy_1, bus_data_copy_2;
@@ -146,7 +194,7 @@ module cim # (
                     rx_addr <= bus_data_read[2][$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0];
                     sender_id <= {1'd0, bus_target_or_sender_read};
                     word_snt_cnt_rst_n <= RST;
-                    is_ready <= 1'b0;
+                    is_ready_internal <= 1'b0;
                 end
 
                 DENSE_BROADCAST_DATA_OP,
@@ -197,7 +245,7 @@ module cim # (
                             num_words_to_fill <= data_len - word_snt_cnt - 3;
                         end
                     end
-                    is_ready <= ~((bus_target_or_sender_read == ID) && (word_snt_cnt+3 < data_len));
+                    is_ready_internal <= ~((bus_target_or_sender_read == ID) && (word_snt_cnt+3 < data_len));
                 end
 
                 PARAM_STREAM_START_OP: begin
@@ -211,7 +259,7 @@ module cim # (
                                 params_access_signals.addr_table[BUS_FSM] <= rx_addr + {3'd0, word_rec_cnt};
                                 params_access_signals.write_data[BUS_FSM] <= bus_data_read[0];
                                 gen_reg_2b <= 'd1;
-                                is_ready <= 1'b0;
+                                is_ready_internal <= 1'b0;
                             end
                             'd1: begin
                                 params_access_signals.addr_table[BUS_FSM] <= rx_addr + {3'd0, word_rec_cnt};
@@ -222,13 +270,13 @@ module cim # (
                                 params_access_signals.addr_table[BUS_FSM] <= rx_addr + {3'd0, word_rec_cnt};
                                 params_access_signals.write_data[BUS_FSM] <= bus_data_read[2];
                                 gen_reg_2b <= 'd0;
-                                is_ready <= 1'b1;
+                                is_ready_internal <= 1'b1;
                             end
                         endcase
                     end
                     params_access_signals.write_req_src[BUS_FSM] <= (bus_target_or_sender_read == ID);
                     word_rec_cnt_inc <= {6'd0, (bus_target_or_sender_read == ID)};
-                    word_rec_cnt_rst_n <= (bus_target_or_sender_read == ID) ? RUN : RST; // Hold under reset is CiM isn't recipient to save power
+                    word_rec_cnt_rst_n <= (bus_target_or_sender_read == ID) ? RUN : RST; // Hold under reset if CiM isn't recipient to save power
                 end
                 NOP: begin
                     int_res_access_signals.write_req_src[BUS_FSM] <= 1'b0;
@@ -299,7 +347,7 @@ module cim # (
                     endcase
                     word_rec_cnt_rst_n <= (~MAC_compute_in_progress && (word_rec_cnt == PATCH_LEN)) ? RST : RUN;
                     int_res_access_signals.write_req_src[LOGIC_FSM] <= (mac_done);
-                    is_ready <= (gen_cnt_7b_2_cnt == NUM_PATCHES);
+                    is_ready_internal <= (gen_cnt_7b_2_cnt == NUM_PATCHES);
                     cim_state <= (gen_cnt_7b_2_cnt == NUM_PATCHES) ? CIM_INFERENCE_RUNNING : cim_state;
                     gen_cnt_7b_2_rst_n <= (gen_cnt_7b_2_cnt == NUM_PATCHES) ? RST : RUN;
                 end
@@ -350,6 +398,7 @@ module cim # (
                                 int_res_access_signals.write_req_src[LOGIC_FSM] <= 1'b0;
                                 current_inf_step <= (gen_cnt_7b_cnt == (NUM_PATCHES+1)) ? ENC_LAYERNORM_1_1ST_HALF_STEP : POS_EMB_STEP;
                                 int_res_access_signals.read_req_src[LOGIC_FSM] <= 1'b0;
+                                params_access_signals.read_req_src[LOGIC_FSM] <= 1'b0;
                                 $display("Done with POS_EMB_STEP");
                             end
                             gen_cnt_7b_rst_n <= (gen_cnt_7b_cnt == (NUM_PATCHES+1)) ? RST : RUN;
@@ -359,7 +408,52 @@ module cim # (
                         ENC_LAYERNORM_1_1ST_HALF_STEP,
                         ENC_LAYERNORM_2_1ST_HALF_STEP,
                         ENC_LAYERNORM_3_1ST_HALF_STEP: begin
+                            layernorm_start <= (word_rec_cnt == EMB_DEPTH);
+                            word_rec_cnt_rst_n <= (word_rec_cnt == EMB_DEPTH) ? RST : RUN;
+
+                            if (current_inf_step == ENC_LAYERNORM_1_1ST_HALF_STEP)      layernorm_start_addr <= mem_map[ENC_LN1_1ST_HALF_MEM];
+                            else if (current_inf_step == ENC_LAYERNORM_2_1ST_HALF_STEP) layernorm_start_addr <= mem_map[ENC_LN2_1ST_HALF_MEM];
+                            else if (current_inf_step == ENC_LAYERNORM_3_1ST_HALF_STEP) layernorm_start_addr <= mem_map[MLP_HEAD_LN_1ST_HALF_MEM];
+                            
+                            if (bus_op_read == PISTOL_START_OP) begin
+                                current_inf_step <= INFERENCE_STEP_T'(current_inf_step + 6'd1);
+                                $display("Finished LayerNorm (1st half) step at time: %d", $time);
+                            end
                         end
+
+                        ENC_LAYERNORM_1_2ND_HALF_STEP,
+                        ENC_LAYERNORM_2_2ND_HALF_STEP,
+                        ENC_LAYERNORM_3_2ND_HALF_STEP: begin
+                            logic all_data_received = (word_rec_cnt == NUM_PATCHES+1) || ((word_rec_cnt == 1) && (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP));
+                            layernorm_start <= all_data_received;
+                            layernorm_half_select <= SECOND_HALF;
+                            word_rec_cnt_rst_n <= all_data_received ? RST : RUN;
+                            if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) begin
+                                layernorm_start_addr <= mem_map[ENC_LN1_2ND_HALF_MEM];
+                                beta_addr <= param_addr_map[SINGLE_PARAMS].addr + ENC_LAYERNORM_1_BETA_OFF;
+                                gamma_addr <= param_addr_map[SINGLE_PARAMS].addr + ENC_LAYERNORM_1_GAMMA_OFF;
+                            end else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) begin
+                                layernorm_start_addr <= mem_map[ENC_LN2_2ND_HALF_MEM];
+                                beta_addr <= param_addr_map[SINGLE_PARAMS].addr + ENC_LAYERNORM_2_BETA_OFF;
+                                gamma_addr <= param_addr_map[SINGLE_PARAMS].addr + ENC_LAYERNORM_2_GAMMA_OFF;
+                            end else if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) begin
+                                layernorm_start_addr <= mem_map[MLP_HEAD_LN_2ND_HALF_MEM];
+                                beta_addr <= param_addr_map[SINGLE_PARAMS].addr + ENC_LAYERNORM_3_BETA_OFF;
+                                gamma_addr <= param_addr_map[SINGLE_PARAMS].addr + ENC_LAYERNORM_3_GAMMA_OFF;
+                            end
+
+                            if (bus_op_read == PISTOL_START_OP) begin
+                                if      (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) current_inf_step <= POST_LAYERNORM_TRANSPOSE_STEP;
+                                else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) current_inf_step <= ENC_PRE_MLP_TRANSPOSE_STEP;
+                                else if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) current_inf_step <= MLP_HEAD_PRE_DENSE_1_TRANSPOSE_STEP;
+                                gen_reg_2b <= 'd0;
+                                $display("Finished LayerNorm (2nd half) step at time: %d", $time);
+                            end
+                        end
+
+                        POST_LAYERNORM_TRANSPOSE_STEP: begin
+                        end
+
                         default: begin
                             $fatal("Invalid current_inf_step value in CIM_INFERENCE_RUNNING state");
                         end
@@ -393,7 +487,6 @@ module cim # (
                         int_res_access_signals.read_req_src[DATA_FILL_FSM] <= 1'b1;
                         data_fill_state <= FILL_INST;
                     end
-                    // is_ready <= ~(start_inst_fill || (done_dense_save_broadcast && need_to_send_dense));
                     addr_offset_counter <= 'd0;
                     addr_offset_counter_delayed <= 'd0;
                     bus_drive <= 1'b0;
@@ -469,8 +562,14 @@ module cim # (
 
     // Miscellanous combinational logic
     always_comb begin : computation_twos_comp_flip
+        mult_out_flipped = ~mult_output_q + 'd1;
         mac_out_flipped = ~mac_out + 'd1;
         add_out_flipped = ~add_output_q + 'd1;
+    end
+
+    logic is_ready_internal;
+    always_comb begin : is_ready_comb
+        is_ready = is_ready_internal & ~(layernorm_busy | div_busy | sqrt_busy | mac_busy);
     end
 
 endmodule

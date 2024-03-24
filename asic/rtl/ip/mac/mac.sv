@@ -22,7 +22,7 @@ module mac
     input MemAccessSignals int_res_access_signals,
     input MemAccessSignals params_access_signals,
     input wire signed [N_STORAGE-1:0] param_data,
-    input wire signed [N_STORAGE-1:0] intermediate_res_data,
+    input wire signed [N_STORAGE-1:0] int_res_data,
 
     // Computation signals
     output logic signed [N_COMP-1:0] computation_result,
@@ -63,6 +63,7 @@ module mac
                         add_refresh <= 1'b0;
                         int_res_access_signals.read_req_src[MAC] <= 1'b0;
                         delay_signal <= 2'b0;
+                        busy <= 1'b0;
                     end
                 end 
                 COMPUTE_MUL_IN1: begin
@@ -75,14 +76,14 @@ module mac
                 end
                 COMPUTE_MUL_IN2: begin
                     compute_temp <= (index > 1) ? add_output_q : compute_temp; // Grab data from previous iteration (unless it's the first iteration)
-                    mult_input_q_1 <= {{(N_COMP-N_STORAGE){intermediate_res_data[N_STORAGE-1]}}, intermediate_res_data}; // Sign extend
+                    mult_input_q_1 <= {{(N_COMP-N_STORAGE){int_res_data[N_STORAGE-1]}}, int_res_data}; // Sign extend
                     int_res_access_signals.read_req_src[MAC] <= 1'b0;
                     params_access_signals.read_req_src[MAC] <= 1'b0;
                     state <= COMPUTE_MUL_OUT;
                     add_refresh <= 1'b0;
                 end
                 COMPUTE_MUL_OUT: begin
-                    mult_input_q_2 <= (param_type == INTERMEDIATE_RES) ? {{(N_COMP-N_STORAGE){intermediate_res_data[N_STORAGE-1]}}, intermediate_res_data} : {{(N_COMP-N_STORAGE){param_data[N_STORAGE-1]}}, param_data};
+                    mult_input_q_2 <= (param_type == INTERMEDIATE_RES) ? {{(N_COMP-N_STORAGE){int_res_data[N_STORAGE-1]}}, int_res_data} : {{(N_COMP-N_STORAGE){param_data[N_STORAGE-1]}}, param_data};
                     mult_refresh <= 1'b1;
                     state <= (mult_refresh) ? COMPUTE_ADD : COMPUTE_MUL_OUT;
                 end

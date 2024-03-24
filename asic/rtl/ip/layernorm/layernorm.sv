@@ -21,13 +21,13 @@ module layernorm (
     output logic add_refresh,
 
     // Multiplier signals
-    input wire signed [N_COMP-1:0] mult_output_q,
+    input wire signed [N_COMP-1:0] mult_output_q, mult_output_flipped,
     output logic signed [N_COMP-1:0] mult_input_q_1, mult_input_q_2,
     output logic mult_refresh,
 
     // Divider signals
     input wire div_done, div_busy,
-    input wire signed [N_COMP-1:0] div_output_q, div_output_flipped,
+    input wire signed [N_COMP-1:0] div_output_q,
     output logic div_start,
     output logic signed [N_COMP-1:0] div_dividend, div_divisor,
 
@@ -83,11 +83,13 @@ module layernorm (
                         if (gen_reg_3b == 'd0) begin // Set int_res addr and read request
                             int_res_access_signals.addr_table[LAYERNORM] <= start_addr + {3'd0, index};
                             int_res_access_signals.read_req_src[LAYERNORM] <= 1'b1;
-                            if (int_res_access_signals.read_req_src[LAYERNORM] == 1'b1) gen_reg_3b <= 'd1;
+                            if (int_res_access_signals.read_req_src[LAYERNORM] == 1'b1) begin 
+                                gen_reg_3b <= 'd1;
+                                int_res_access_signals.read_req_src[LAYERNORM] <= 1'b0;
+                            end
                         end else if (gen_reg_3b == 'd1) begin
                             add_input_q_1 <= {{(N_COMP-N_STORAGE){int_res_data[N_STORAGE-1]}}, int_res_data};
                             add_input_q_2 <= ((loop_sum_type == VARIANCE) || (loop_sum_type == PARTIAL_NORM_FIRST_HALF)) ? (~compute_temp + 1'd1) : compute_temp; // Can subtract by adding the flipped version (data is 2's complement)
-                            int_res_access_signals.read_req_src[LAYERNORM] <= 1'b0;
                             add_refresh <= 1'b1;
                             if (add_refresh) begin
                                 gen_reg_3b <= 'd2;
@@ -107,12 +109,10 @@ module layernorm (
                                     gen_reg_3b <= 'd3;
                                 end
                             end else if (loop_sum_type == PARTIAL_NORM_FIRST_HALF) begin
-                                div_dividend <= add_output_q;
-                                div_divisor <= sqrt_root_q;
-                                div_start <=  ~div_busy & ~div_done;
-                                gen_reg_3b <= (div_done) ? 'd4 : gen_reg_3b;
-                                int_res_access_signals.write_req_src[LAYERNORM] <= div_done;
-                                int_res_access_signals.write_data[LAYERNORM] <= (div_output_q[N_COMP-1]) ? (~div_output_flipped[N_STORAGE-1:0] + {{(N_STORAGE-1){1'b0}}, 1'd1}) : div_output_q[N_STORAGE-1:0];
+                                mult_input_q_1 <= compute_temp_3;
+                                mult_input_q_2 <= (mult_refresh) ? mult_input_q_2 : add_output_q; // Only output when mult_refresh is 0 to avoid false positive transient overflows
+                                mult_refresh <= 1'b1;
+                                gen_reg_3b <= (mult_refresh) ? 'd4 : 'd2;
                             end
                             add_refresh <= 1'b0;
                         end else if (gen_reg_3b == 'd3) begin
@@ -123,13 +123,14 @@ module layernorm (
                             gen_reg_3b <= 'd4;
                         end else if (gen_reg_3b == 'd4) begin
                             add_refresh <= 1'b0;
-                            if (~add_refresh) begin
+                            mult_refresh <= 1'b0;
+                            if (~add_refresh & ~mult_refresh) begin
                                 gen_reg_3b <= 'd0;
                                 index <= index + 'd1;
                                 compute_temp_2 <= add_output_q;
                             end
-                            int_res_access_signals.write_req_src[LAYERNORM] <= 1'd0;
-                            div_start <= 1'b0;
+                            int_res_access_signals.write_req_src[LAYERNORM] <= mult_refresh; // Just because add_refresh mult_refresh is 1 when arriving here so it's a convenient signal to use
+                            int_res_access_signals.write_data[LAYERNORM] <= (mult_output_q[N_COMP-1]) ? (~mult_output_flipped[N_STORAGE-1:0] + {{(N_STORAGE-1){1'b0}}, 1'd1}) : mult_output_q[N_STORAGE-1:0];
                         end
                     end else begin
                         index <= 'd0;
@@ -157,7 +158,13 @@ module layernorm (
                     state <= (sqrt_done) ? NORM_FIRST_HALF : VARIANCE_SQRT;
                 end
                 NORM_FIRST_HALF : begin
-                    state <= LOOP_SUM;
+                    // Compute 1.0/variance such that we can multiply by that instead of dividing
+                    compute_temp_3 <= div_output_q;
+                    state <= (div_done) ? LOOP_SUM : NORM_FIRST_HALF;
+                    div_dividend <= 1 << Q; // 1.0 in Q format
+                    div_divisor <= sqrt_root_q;
+                    div_start <= ~div_done & ~div_busy;
+                    mult_refresh <= 1'b0;
                     loop_sum_type <= PARTIAL_NORM_FIRST_HALF;
                 end
                 GAMMA_LOAD: begin // Following states are for second-half

@@ -48,7 +48,7 @@ async def test_run(dut):
     # Check results for 1st half
     for i in range(LEN_FIRST_HALF):
         expected_str = FXnum(float(mem_copy[i]), num_Q_storage).toBinaryString(logBase=1).replace(".","")
-        assert ((int(expected_str, base=2)-ABS_TOLERANCE) <= int(dut.int_res[start_addr+i].value) <= (int(expected_str, base=2)+ABS_TOLERANCE)), f"MAC output value is incorrect (1st half)! Expected: {int(expected_str, base=2)}, got: {int(dut.int_res[start_addr+i].value)}"
+        assert ((int(expected_str, base=2)-ABS_TOLERANCE) <= int(dut.int_res[start_addr+i].value) <= (int(expected_str, base=2)+ABS_TOLERANCE)), f"MAC output value is incorrect (1st half) at i={i}! Expected: {int(expected_str, base=2)}, got: {int(dut.int_res[start_addr+i].value)}"
 
     print(f"LayerNorm 1st half passed!")
     await cocotb.triggers.ClockCycles(dut.clk, 1000)
@@ -74,7 +74,7 @@ async def test_run(dut):
 
     for i in range(LEN_SECOND_HALF):
         expected_str = FXnum(float(mem_copy[i]), num_Q_storage).toBinaryString(logBase=1).replace(".","")
-        assert ((int(expected_str, base=2)-ABS_TOLERANCE) <= int(dut.int_res[start_addr+i].value) <= (int(expected_str, base=2)+ABS_TOLERANCE)), f"MAC output value is incorrect (2nd half)! Expected: {int(expected_str, base=2)}, got: {int(dut.int_res[start_addr+i].value)}"
+        assert ((int(expected_str, base=2)-ABS_TOLERANCE) <= int(dut.int_res[start_addr+i].value) <= (int(expected_str, base=2)+ABS_TOLERANCE)), f"MAC output value is incorrect (2nd half) at i={i}! Expected: {int(expected_str, base=2)}, got: {int(dut.int_res[start_addr+i].value)}"
 
     print(f"LayerNorm 2nd half passed!")
     await cocotb.triggers.ClockCycles(dut.clk, 10)

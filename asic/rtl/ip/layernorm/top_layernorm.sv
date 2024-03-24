@@ -52,7 +52,7 @@ module top_layernorm # () (
     wire signed [N_COMP-1:0] add_input_q_1, add_input_q_2, add_output_q;
     logic signed [N_COMP-1:0] add_output_flipped;
     wire signed [N_COMP-1:0] div_dividend, divisor, div_output_q;
-    logic signed [N_COMP-1:0] div_out_flipped;
+    logic signed [N_COMP-1:0] mult_out_flipped;
     wire signed [N_COMP-1:0] sqrt_rad_q, sqrt_root_q;
     
     adder       add (.clk(clk), .rst_n(rst_n), .refresh(add_refresh), .input_q_1(add_input_q_1), .input_q_2(add_input_q_2), .output_q(add_output_q), .overflow(add_overflow));
@@ -80,13 +80,13 @@ module top_layernorm # () (
         .add_input_q_2(add_input_q_2),
         .mult_refresh(mul_refresh),
         .mult_output_q(mul_output_q),
+        .mult_output_flipped(mult_out_flipped),
         .mult_input_q_1(mul_input_q_1),
         .mult_input_q_2(mul_input_q_2),
         .add_refresh(add_refresh),
         .div_done(div_done),
         .div_busy(div_busy),
         .div_output_q(div_output_q),
-        .div_output_flipped(div_out_flipped),
         .div_dividend(div_dividend),
         .div_divisor(divisor),
         .div_start(div_start),
@@ -98,7 +98,7 @@ module top_layernorm # () (
     );
 
     always_comb begin : computation_twos_comp_flip
-        div_out_flipped = ~div_output_q + 'd1;
+        mult_out_flipped = ~mul_output_q + 'd1;
         add_output_flipped = ~add_output_q + 'd1;
     end
 

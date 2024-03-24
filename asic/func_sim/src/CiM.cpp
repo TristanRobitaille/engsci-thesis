@@ -171,8 +171,11 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         word_snt_cnt.inc(3); // Increment data that was sent on the bus
         break;
 
-    case INFERENCE_RESULT_OP:
     case PISTOL_START_OP:
+        word_rec_cnt.reset();
+        break;
+
+    case INFERENCE_RESULT_OP:
     case NOP:
     default:
         break;
@@ -251,8 +254,6 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             if (inst.op == PISTOL_START_OP) {
                 if (id == 0) { cout << "CiM: Finished LayerNorm (1st half)" << endl; }
                 current_inf_step = static_cast<INFERENCE_STEP> (static_cast<int> (current_inf_step) + 1);
-                gen_reg_2b = 0;
-                word_rec_cnt.reset();
             }
             break;
 
@@ -285,7 +286,6 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 }
                 gen_reg_2b = 0;
                 if (id == 0) { cout << "CiM: Finished LayerNorm (2nd half)" << endl; }
-                word_rec_cnt.reset();
             }
             break;
 
@@ -377,7 +377,6 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 } else if (current_inf_step == MLP_HEAD_DENSE_2_STEP) { current_inf_step = MLP_HEAD_PRE_SOFTMAX_TRANSPOSE_STEP; }
                 gen_reg_2b = 0;
                 gen_cnt_7b_2.reset();
-                word_rec_cnt.reset();
             }
             break;
 
@@ -407,7 +406,6 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case MLP_HEAD_PRE_DENSE_1_TRANSPOSE_STEP:
         case MLP_HEAD_PRE_DENSE_2_TRANSPOSE_STEP:
             if (inst.op == PISTOL_START_OP) {
-                word_rec_cnt.reset();
                 word_snt_cnt.reset();
                 gen_cnt_7b.reset();
                 gen_cnt_7b_2.reset();
@@ -445,7 +443,6 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 if (id == 0) { cout << "CiM: Finished encoder's MHSA QK_T" << endl; }
                 if (id < NUM_PATCHES+1) { verify_computation(ENC_MHSA_DENSE_QK_T_VERIF, id, intermediate_res, mem_map.at(ENC_QK_T_MEM)); }
                 gen_cnt_7b_2.reset();
-                word_rec_cnt.reset();
                 current_inf_step = ENC_MHSA_PRE_SOFTMAX_TRANSPOSE_STEP;
             }
             break;
@@ -623,6 +620,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     struct instruction inst = {/*op*/ INFERENCE_RESULT_OP, /*target_or_sender*/ 0, /*data*/ {computation_result, 0, 0}};
                     bus->push_inst(inst);
                 }
+                word_rec_cnt.reset();
             }
             update_state(IDLE_CIM);
             break;
@@ -748,10 +746,11 @@ void CiM::LAYERNORM_1ST_HALF(uint16_t input_addr) {
     compute_temp_fp_2 /= EMB_DEPTH;
     verify_result(VARIANCE, static_cast<float> (compute_temp_fp_2), intermediate_res, input_addr, EMB_DEPTH, id);
     compute_temp_fp_2 = sqrt(compute_temp_fp_2); // Standard deviation
+    compute_temp_fp_3 = large_fp_t {1.0f} / compute_temp_fp_2; // Inverse standard deviation (so we can simply multiply instead of divide in the next step)
 
     // Partial normalization (excludes gamma and beta, which are applied in LAYERNORM_FINAL_NORM() since they need to be applied column-wise)
     for (uint16_t i = 0; i < EMB_DEPTH; i++) {
-        intermediate_res[input_addr+i] = static_cast<float> ( fix_pt_t { (large_fp_t { intermediate_res[input_addr+i] } - compute_temp_fp) / compute_temp_fp_2 } );
+        intermediate_res[input_addr+i] = static_cast<float> ( fix_pt_t { (large_fp_t { intermediate_res[input_addr+i] } - compute_temp_fp) * compute_temp_fp_3 } );
     }
 }
 
