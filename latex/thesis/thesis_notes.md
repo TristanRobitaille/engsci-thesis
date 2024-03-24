@@ -47,6 +47,7 @@
 ## Next steps
 - Potentially reduce number of data transpose needed (don't train beta and gamma in LayerNorm, etc.)
 - Architecture changes
+    - To speed up, split memory into 3 (or have 3 read ports) to reduce by ~3 transpose/dense broadcast delays
 - Training on different datasets
 - Evaluate dynamic fixed-point (different Q and N based on layer)
 - What else could we run this on?

@@ -452,8 +452,19 @@ module cim # (
                         end
 
                         POST_LAYERNORM_TRANSPOSE_STEP: begin
+                            if (bus_op_read == PISTOL_START_OP) begin
+                                word_rec_cnt_rst_n <= RST;
+                                gen_cnt_7b_rst_n <= RST;
+                                gen_cnt_7b_2_rst_n <= RST;
+                                current_inf_step <= INFERENCE_STEP_T'(current_inf_step + 6'd1);
+                            end
                         end
 
+                        ENC_MHSA_DENSE_STEP: begin
+                            word_rec_cnt_rst_n <= RUN;
+                            gen_cnt_7b_rst_n <= RUN;
+                            gen_cnt_7b_2_rst_n <= RUN;                            
+                        end
                         default: begin
                             $fatal("Invalid current_inf_step value in CIM_INFERENCE_RUNNING state");
                         end

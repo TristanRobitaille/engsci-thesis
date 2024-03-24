@@ -39,6 +39,7 @@ def write_linear_words_to_int_res(dut, len):
 #----- CONSTANTS -----#
 INTERDATA_DELAY = 5
 INTERTRANSPOSE_TRANSACTIONS_DELAY = 7
+INTERSTEP_CLOCK_CYCLES = 10
 
 #----- EEG -----#
 eeg = h5py.File("../../func_sim/reference_data/eeg.h5", "r")
@@ -68,6 +69,30 @@ async def full_transpose_broadcast_emulation(dut, tx_addr, rx_addr, data_len, nu
                 await write_full_bus(dut, op=BusOp.TRANS_BROADCAST_DATA_OP, target_or_sender=i, data=[word0, word1, word2])
         await cocotb.triggers.ClockCycles(dut.clk, 50)
             
+async def trigger_transpose_broadcast(dut):
+    data_len = [6, 1, 60, 61, EMB_DEPTH, 32]
+    for len in data_len:
+        (tx_addr, rx_addr, data_in_mem) = write_linear_words_to_int_res(dut, len)
+        await write_full_bus(dut, op=BusOp.TRANS_BROADCAST_START_OP, target_or_sender=0, data=[tx_addr, len, rx_addr]) # tx_addr, data_len, rx_addr
+        await cocotb.triggers.RisingEdge(dut.clk)
+        #TODO: Check that data being sent is correct
+        #TODO: On a CiM other than #0, check that data saved is correct
+        while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+        await cocotb.triggers.ClockCycles(dut.clk, 1000)
+
+async def trigger_dense_broadcast(dut):
+    data_len = [EMB_DEPTH, NUM_HEADS, MLP_DIM, NUM_PATCHES+1]
+    for len in data_len:
+        (tx_addr, rx_addr, data_in_mem) = write_linear_words_to_int_res(dut, len)
+        await write_full_bus(dut, op=BusOp.DENSE_BROADCAST_START_OP, target_or_sender=0, data=[tx_addr, len, rx_addr]) # tx_addr, data_len, rx_addr
+        await cocotb.triggers.RisingEdge(dut.clk)
+        while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+        await cocotb.triggers.ClockCycles(dut.clk, 2)
+        #TODO: On a CiM other than #0, check that data saved is correct
+        # Verify that data was moved correctly (here, we are just checking that the CiM that sends the data also moves its own data correctly)
+        for i in range(len): assert (dut.mem.int_res[rx_addr+i].value == data_in_mem[i]), f"Data mismatch following dense broadcast. Expected: {data_in_mem[i]} at addr: {rx_addr+i}, got: {dut.mem.int_res[rx_addr+i].value}"
+        await cocotb.triggers.ClockCycles(dut.clk, 1000)
+
 async def param_load(dut, cim_id:int):
     global params_loaded
     for param_info in param_addr_map.values():
@@ -147,30 +172,9 @@ async def basic_test(dut):
     await cocotb.triggers.ClockCycles(dut.clk, INTERLUDE_CLOCK_CYCLES)
 
     # Test tranpose broadcast and dense broadcast
-    # data_len = [6, 1, 60, 61, EMB_DEPTH, 32]
-    # for len in data_len:
-    #     (tx_addr, rx_addr, data_in_mem) = write_linear_words_to_int_res(dut, len)
-    #     await write_full_bus(dut, op=BusOp.TRANS_BROADCAST_START_OP, target_or_sender=0, data=[tx_addr, len, rx_addr]) # tx_addr, data_len, rx_addr
-    #     await cocotb.triggers.RisingEdge(dut.clk)
-    #     #TODO: Check that data being sent is correct
-    #     #TODO: On a CiM other than #0, check that data saved is correct
-    #     while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
-    #     await cocotb.triggers.ClockCycles(dut.clk, 1000)
-
+    # trigger_transpose_broadcast(dut)
     # await cocotb.triggers.ClockCycles(dut.clk, INTERLUDE_CLOCK_CYCLES)
-
-    # # Start dense broadcast
-    # data_len = [EMB_DEPTH, NUM_HEADS, MLP_DIM, NUM_PATCHES+1]
-    # for len in data_len:
-    #     (tx_addr, rx_addr, data_in_mem) = write_linear_words_to_int_res(dut, len)
-    #     await write_full_bus(dut, op=BusOp.DENSE_BROADCAST_START_OP, target_or_sender=0, data=[tx_addr, len, rx_addr]) # tx_addr, data_len, rx_addr
-    #     await cocotb.triggers.RisingEdge(dut.clk)
-    #     while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
-    #     await cocotb.triggers.ClockCycles(dut.clk, 2)
-    #     #TODO: On a CiM other than #0, check that data saved is correct
-    #     # Verify that data was moved correctly (here, we are just checking that the CiM that sends the data also moves its own data correctly)
-    #     for i in range(len): assert (dut.mem.int_res[rx_addr+i].value == data_in_mem[i]), f"Data mismatch following dense broadcast. Expected: {data_in_mem[i]} at addr: {rx_addr+i}, got: {dut.mem.int_res[rx_addr+i].value}"
-    #     await cocotb.triggers.ClockCycles(dut.clk, 1000)
+    # trigger_dense_broadcast(dut)
 
     # Go through inference steps
     await cocotb.triggers.ClockCycles(dut.clk, INTERLUDE_CLOCK_CYCLES)
@@ -179,9 +183,15 @@ async def basic_test(dut):
     while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
     await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
 
-    await cocotb.triggers.ClockCycles(dut.clk, 10)
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
 
     await full_transpose_broadcast_emulation(dut, inf_steps[1].tx_addr, inf_steps[1].rx_addr, inf_steps[1].len, inf_steps[1].num_cim) # Intra-LayerNorm #1
     while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
     await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
+
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
+
+    await full_transpose_broadcast_emulation(dut, inf_steps[2].tx_addr, inf_steps[2].rx_addr, inf_steps[2].len, inf_steps[2].num_cim) # Post-LayerNorm #1
+    await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
+
     await cocotb.triggers.ClockCycles(dut.clk, 100)
