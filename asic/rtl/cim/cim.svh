@@ -85,7 +85,7 @@ typedef enum logic [4:0] {
 } TEMP_DATA_NAME_T;
 
 /*----- LUT -----*/
-logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] mem_map [PREV_SOFTMAX_OUTPUT_MEM+'d1];
+TEMP_RES_ADDR_T mem_map [PREV_SOFTMAX_OUTPUT_MEM+'d1];
 ParamInfo_t param_addr_map[PARAMS_NUM-1];
 
 /*----- INTERFACE -----*/

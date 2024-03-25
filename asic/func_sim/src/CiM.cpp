@@ -375,7 +375,6 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     current_inf_step = MLP_HEAD_PRE_DENSE_2_TRANSPOSE_STEP;
                     if (id >= MLP_DIM) { verify_computation(MLP_HEAD_DENSE_1_VERIF, id-MLP_DIM, intermediate_res, mem_map.at(MLP_HEAD_DENSE_1_OUT_MEM)); }
                 } else if (current_inf_step == MLP_HEAD_DENSE_2_STEP) { current_inf_step = MLP_HEAD_PRE_SOFTMAX_TRANSPOSE_STEP; }
-                gen_reg_2b = 0;
                 gen_cnt_7b_2.reset();
             }
             break;

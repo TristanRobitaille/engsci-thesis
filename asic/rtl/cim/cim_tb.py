@@ -59,16 +59,32 @@ async def full_transpose_broadcast_emulation(dut, tx_addr, rx_addr, data_len, nu
         await write_full_bus(dut, op=BusOp.TRANS_BROADCAST_START_OP, target_or_sender=i, data=[tx_addr, data_len, rx_addr])
         if (i == 0): # CiM #0 is instantiated so it will actually send data so the testbench shouldn't do it
             await cocotb.triggers.RisingEdge(dut.clk)
-            while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+            # while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
         else:
-            for j in range(data_len):
+            for _ in range(math.ceil(data_len/3)):
                 await cocotb.triggers.ClockCycles(dut.clk, INTERTRANSPOSE_TRANSACTIONS_DELAY)
                 word0 = BinToDec(random_input(-MAX_VAL, MAX_VAL), num_Q_storage)
                 word1 = BinToDec(random_input(-MAX_VAL, MAX_VAL), num_Q_storage)
                 word2 = BinToDec(random_input(-MAX_VAL, MAX_VAL), num_Q_storage)
                 await write_full_bus(dut, op=BusOp.TRANS_BROADCAST_DATA_OP, target_or_sender=i, data=[word0, word1, word2])
-        await cocotb.triggers.ClockCycles(dut.clk, 50)
-            
+        await cocotb.triggers.ClockCycles(dut.clk, 10)
+
+async def full_dense_broadcast_emulation(dut, tx_addr, rx_addr, data_len, num_cim):
+    for i in range(num_cim):
+        await write_full_bus(dut, op=BusOp.DENSE_BROADCAST_START_OP, target_or_sender=i, data=[tx_addr, data_len, rx_addr])
+        if (i == 0): # CiM #0 is instantiated so it will actually send data so the testbench shouldn't do it
+            await cocotb.triggers.RisingEdge(dut.clk)
+            while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+
+        else:
+            for _ in range(math.ceil(data_len/3)):
+                await cocotb.triggers.ClockCycles(dut.clk, INTERTRANSPOSE_TRANSACTIONS_DELAY)
+                word0 = BinToDec(random_input(-MAX_VAL, MAX_VAL), num_Q_storage)
+                word1 = BinToDec(random_input(-MAX_VAL, MAX_VAL), num_Q_storage)
+                word2 = BinToDec(random_input(-MAX_VAL, MAX_VAL), num_Q_storage)
+                await write_full_bus(dut, op=BusOp.DENSE_BROADCAST_DATA_OP, target_or_sender=i, data=[word0, word1, word2])
+        while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+
 async def trigger_transpose_broadcast(dut):
     data_len = [6, 1, 60, 61, EMB_DEPTH, 32]
     for len in data_len:
@@ -128,7 +144,7 @@ async def patch_load(dut):
         param = random_input(-MAX_VAL, MAX_VAL)
         patch_proj_kernel.append(FXnum(param, num_Q_comp))
         dut.mem.params[i].value = BinToDec(param, num_Q_storage)
-    
+
     bias = random_input(-MAX_VAL, MAX_VAL)
     patch_proj_bias = FXnum(bias, num_Q_comp)
     dut.mem.params[param_addr_map["single_params"]["start_addr"]+0].value = BinToDec(bias, num_Q_storage) # Patch projection bias has zero offset from single_params start address
@@ -150,7 +166,7 @@ async def patch_load(dut):
             assert ((int(expected_str, base=2)-50) <= int(dut.mac_out.value) <= (int(expected_str, base=2)+50)), f"MAC result during patch load doesn't match expected. Expected: {BinToDec(mac_result, num_Q_comp)}, got: {int(dut.mac_out.value)}"
             eeg_vals = []
             mac_result = 0
-        
+
         cnt += 1
 
 #----- TESTS -----#
@@ -194,4 +210,10 @@ async def basic_test(dut):
     await full_transpose_broadcast_emulation(dut, inf_steps[2].tx_addr, inf_steps[2].rx_addr, inf_steps[2].len, inf_steps[2].num_cim) # Post-LayerNorm #1
     await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
 
-    await cocotb.triggers.ClockCycles(dut.clk, 100)
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
+
+    await full_dense_broadcast_emulation(dut, inf_steps[3].tx_addr, inf_steps[3].rx_addr, inf_steps[3].len, inf_steps[3].num_cim) # MHSA Dense #1
+    while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+    await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
+
+    await cocotb.triggers.ClockCycles(dut.clk, 1000)

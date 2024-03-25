@@ -38,9 +38,9 @@ module top_layernorm # () (
 
     // Control signals
     logic start, half_select;
-    logic [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] beta_addr = 'd0;
-    logic [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] gamma_addr = 'd0;
-    logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] start_addr = 'd0;
+    PARAMS_ADDR_T beta_addr = 'd0;
+    PARAMS_ADDR_T gamma_addr = 'd0;
+    TEMP_RES_ADDR_T start_addr = 'd0;
 
     // LayerNorm outputs
     wire busy, done, int_res_mem_access_req, params_mem_access_req;

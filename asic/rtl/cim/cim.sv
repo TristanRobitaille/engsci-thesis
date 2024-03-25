@@ -53,7 +53,7 @@ module cim # (
     wire MAC_compute_in_progress;
     logic [1:0] gen_reg_2b;
     logic [$clog2(NUM_CIMS+1)-1:0] sender_id, data_len;
-    logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] tx_addr, rx_addr;
+    TEMP_RES_ADDR_T tx_addr, rx_addr;
     logic [N_COMP-1:0] compute_temp, compute_temp_2, compute_temp_3, computation_result;
 
     // Counters
@@ -112,7 +112,7 @@ module cim # (
     logic div_dbz, div_overflow, div_done, div_busy, div_start;
     logic [N_COMP-1:0] div_output_q, div_dividend, divisor;
     divider div_inst (.clk(clk), .rst_n(rst_n), .start(div_start), .dividend(div_dividend), .divisor(divisor), .done(div_done), .busy(div_busy), .output_q(div_output_q), .dbz(div_dbz), .overflow(div_overflow));
-    
+
     // Sqrt module
     logic sqrt_start, sqrt_done, sqrt_busy, sqrt_neg_rad;
     logic [N_COMP-1:0] sqrt_rad_q, sqrt_root_q;
@@ -121,8 +121,8 @@ module cim # (
     // MAC module
     logic mac_start, mac_done, mac_busy, mac_add_refresh, mac_mult_refresh;
     logic [$clog2(MAC_MAX_LEN+1)-1:0] mac_len;
-    logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] mac_start_addr1, mac_start_addr2;
-    logic [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] mac_params_addr, mac_bias_addr;
+    TEMP_RES_ADDR_T mac_start_addr1, mac_start_addr2;
+    PARAMS_ADDR_T mac_params_addr, mac_bias_addr;
     logic [N_COMP-1:0] mac_out, mac_out_flipped, mac_add_input_q_1, mac_add_input_q_2;
     logic [N_COMP-1:0] mac_mult_input_q_1, mac_mult_input_q_2;
     PARAM_TYPE_T mac_param_type;
@@ -138,8 +138,8 @@ module cim # (
 
     // LayerNorm module
     logic layernorm_start, layernorm_half_select, layernorm_done, layernorm_busy, layernorm_add_refresh, layernorm_mult_refresh;
-    logic [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] beta_addr, gamma_addr;
-    logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] layernorm_start_addr;
+    PARAMS_ADDR_T beta_addr, gamma_addr;
+    TEMP_RES_ADDR_T layernorm_start_addr;
     logic [N_COMP-1:0] layernorm_add_input_q_1, layernorm_add_input_q_2, layernorm_mult_input_q_1, layernorm_mult_input_q_2;
     layernorm layernorm_inst (
         .clk(clk), .rst_n(rst_n),
@@ -201,10 +201,10 @@ module cim # (
                 TRANS_BROADCAST_DATA_OP: begin
                     word_snt_cnt_rst_n <= RUN;
                     word_snt_cnt_inc <= 'd3;
-                    word_rec_cnt_inc <= {6'd0, has_my_data(word_snt_cnt, ID) || (current_inf_step == MLP_HEAD_DENSE_2_STEP) || (bus_op_read == DENSE_BROADCAST_DATA_OP)};
 
                     // Grab appropriate data
                     if (bus_op_read == TRANS_BROADCAST_DATA_OP) begin
+                        word_rec_cnt_inc <= {6'd0, has_my_data(word_snt_cnt, ID) || (current_inf_step == MLP_HEAD_DENSE_2_STEP) || (bus_op_read == DENSE_BROADCAST_DATA_OP)};
                         if (has_my_data(word_snt_cnt, ID)) begin
                             int_res_access_signals.write_req_src[BUS_FSM] <= 1'b1;
                             int_res_access_signals.addr_table[BUS_FSM] <= rx_addr + {4'd0, bus_target_or_sender_read};
@@ -221,7 +221,8 @@ module cim # (
                         int_res_access_signals.write_req_src[BUS_FSM] <= 1'b1;
                         int_res_access_signals.write_data[BUS_FSM] <= bus_data_read[2];
                         save_dense_broadcast_start <= (word_snt_cnt < data_len);
-                        need_to_send_dense <= (bus_target_or_sender_read == ID);
+                        need_to_send_dense <= (bus_target_or_sender_read == ID) && (word_snt_cnt+3 < data_len);
+                        word_rec_cnt_inc <= 'd3; // Capture all three words in the bus instruction
                         if ((num_words_left) >= 3) begin
                             int_res_access_signals.addr_table[BUS_FSM] <= rx_addr + {3'd0, word_snt_cnt} + 'd2;
                             bus_data_copy_1 <= bus_data_read[1];
@@ -245,7 +246,6 @@ module cim # (
                             num_words_to_fill <= data_len - word_snt_cnt - 3;
                         end
                     end
-                    is_ready_internal <= ~((bus_target_or_sender_read == ID) && (word_snt_cnt+3 < data_len));
                 end
 
                 PARAM_STREAM_START_OP: begin
@@ -400,6 +400,7 @@ module cim # (
                                 int_res_access_signals.read_req_src[LOGIC_FSM] <= 1'b0;
                                 params_access_signals.read_req_src[LOGIC_FSM] <= 1'b0;
                                 $display("Done with POS_EMB_STEP");
+                                is_ready_internal <= 1'b1;
                             end
                             gen_cnt_7b_rst_n <= (gen_cnt_7b_cnt == (NUM_PATCHES+1)) ? RST : RUN;
                             cim_add_refresh <= (gen_cnt_7b_cnt != (NUM_PATCHES+1));
@@ -410,11 +411,12 @@ module cim # (
                         ENC_LAYERNORM_3_1ST_HALF_STEP: begin
                             layernorm_start <= (word_rec_cnt == EMB_DEPTH);
                             word_rec_cnt_rst_n <= (word_rec_cnt == EMB_DEPTH) ? RST : RUN;
+                            is_ready_internal <= 1'd1;
 
                             if (current_inf_step == ENC_LAYERNORM_1_1ST_HALF_STEP)      layernorm_start_addr <= mem_map[ENC_LN1_1ST_HALF_MEM];
                             else if (current_inf_step == ENC_LAYERNORM_2_1ST_HALF_STEP) layernorm_start_addr <= mem_map[ENC_LN2_1ST_HALF_MEM];
                             else if (current_inf_step == ENC_LAYERNORM_3_1ST_HALF_STEP) layernorm_start_addr <= mem_map[MLP_HEAD_LN_1ST_HALF_MEM];
-                            
+
                             if (bus_op_read == PISTOL_START_OP) begin
                                 current_inf_step <= INFERENCE_STEP_T'(current_inf_step + 6'd1);
                                 $display("Finished LayerNorm (1st half) step at time: %d", $time);
@@ -426,6 +428,7 @@ module cim # (
                         ENC_LAYERNORM_3_2ND_HALF_STEP: begin
                             logic all_data_received = (word_rec_cnt == NUM_PATCHES+1) || ((word_rec_cnt == 1) && (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP));
                             layernorm_start <= all_data_received;
+                            is_ready_internal <= (layernorm_done | is_ready_internal);
                             layernorm_half_select <= SECOND_HALF;
                             word_rec_cnt_rst_n <= all_data_received ? RST : RUN;
                             if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) begin
@@ -461,9 +464,54 @@ module cim # (
                         end
 
                         ENC_MHSA_DENSE_STEP: begin
-                            word_rec_cnt_rst_n <= RUN;
+                            word_rec_cnt_rst_n <= (word_rec_cnt >= EMB_DEPTH) ? RST : RUN;
                             gen_cnt_7b_rst_n <= RUN;
-                            gen_cnt_7b_2_rst_n <= RUN;                            
+                            gen_cnt_7b_2_inc <= {6'd0, (mac_done && (gen_reg_2b == 'd3))};
+                            gen_cnt_7b_2_rst_n <= (bus_op_read == PISTOL_START_OP) ? RST : RUN;
+
+                            int_res_access_signals.write_req_src[LOGIC_FSM] <= mac_done;
+                            int_res_access_signals.write_data[LOGIC_FSM] <= (mac_out[N_COMP-1]) ? (~mac_out_flipped[N_STORAGE-1:0]+1'd1) : mac_out[N_STORAGE-1:0];;
+
+                            if (current_inf_step == ENC_MHSA_DENSE_STEP) begin
+                                if (gen_reg_2b == 0) begin
+                                    mac_start_addr1 <= mem_map[ENC_QVK_IN_MEM];
+                                    mac_start_addr2 <= param_addr_map[ENC_Q_DENSE_KERNEL_PARAMS].addr;
+                                    mac_len <= EMB_DEPTH;
+                                    mac_bias_addr <= param_addr_map[SINGLE_PARAMS].addr + ENC_Q_DENSE_BIAS_0FF;
+                                    mac_param_type <= MODEL_PARAM;
+                                    mac_activation <= LINEAR_ACTIVATION;
+                                    gen_reg_2b <= (mac_done) ? 'd1 : 'd0;
+                                    mac_start <= (word_rec_cnt >= EMB_DEPTH) & (word_rec_cnt_rst_n == RUN);
+                                end else if (gen_reg_2b == 1) begin
+                                    int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[ENC_Q_MEM] + {3'd0, sender_id};
+                                    mac_start_addr2 <= param_addr_map[ENC_K_DENSE_KERNEL_PARAMS].addr;
+                                    mac_bias_addr <= param_addr_map[SINGLE_PARAMS].addr + ENC_K_DENSE_BIAS_0FF;
+                                    gen_reg_2b <= (mac_done) ? 'd2 : 'd1;
+                                    mac_start <= ~mac_busy & ~mac_done;
+                                end else if (gen_reg_2b == 2) begin
+                                    int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[ENC_K_MEM] + {3'd0, sender_id};
+                                    mac_start_addr2 <= param_addr_map[ENC_V_DENSE_KERNEL_PARAMS].addr;
+                                    mac_bias_addr <= param_addr_map[SINGLE_PARAMS].addr + ENC_K_DENSE_BIAS_0FF;
+                                    gen_reg_2b <= (mac_done) ? 'd3 : 'd2;
+                                    mac_start <= ~mac_busy & ~mac_done;
+                                end else if (gen_reg_2b == 3) begin
+                                    int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[ENC_V_MEM] + {3'd0, sender_id};
+                                    int_res_access_signals.write_data[LOGIC_FSM] <= (mac_out[N_COMP-1]) ? (~mac_out_flipped[N_STORAGE-1:0]+1'd1) : mac_out[N_STORAGE-1:0];;
+                                    is_ready_internal <= 1'b1;
+                                    gen_reg_2b <= 'd0;
+                                end
+                            end
+
+                            if (bus_op_read == PISTOL_START_OP) begin
+                                if (current_inf_step == ENC_MHSA_DENSE_STEP) begin
+                                    current_inf_step <= ENC_MHSA_Q_TRANSPOSE_STEP;
+                                    $display("Finished MHSA Dense step at time: %d", $time);
+                                end
+                            end
+                        end
+
+                        ENC_MHSA_Q_TRANSPOSE_STEP: begin
+                            gen_cnt_7b_2_rst_n <= RUN;
                         end
                         default: begin
                             $fatal("Invalid current_inf_step value in CIM_INFERENCE_RUNNING state");
@@ -484,7 +532,7 @@ module cim # (
     logic start_inst_fill, inst_fill_substate, need_to_send_dense;
     logic [1:0] addr_offset_counter, addr_offset_counter_delayed;
     logic [6:0] num_words_to_fill;
-    logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] data_fill_start_addr;
+    TEMP_RES_ADDR_T data_fill_start_addr;
 
     enum logic {FILL_INST_IDLE, FILL_INST} data_fill_state;
     always_ff @ (posedge clk) begin : data_inst_fill_and_send_fsm

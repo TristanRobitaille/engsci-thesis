@@ -28,9 +28,13 @@
     parameter   EEG_SAMPLE_DEPTH = 16;
     // verilator lint_on UNUSEDPARAM
 
+/*----- TYPES -----*/
+typedef logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] TEMP_RES_ADDR_T;
+typedef logic [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] PARAMS_ADDR_T;
+
 /*----- STRUCT -----*/
 typedef struct packed {
-    logic [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] addr;
+    PARAMS_ADDR_T addr;
     logic [$clog2(NUM_CIMS+1)-1:0] len;
     logic [$clog2(NUM_CIMS+1)-1:0] num_rec;
 } ParamInfo_t;
@@ -82,7 +86,7 @@ typedef enum logic [3:0] {
     PARAMS_NUM
 } PARAM_NAME_T;
 
-typedef enum logic [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] {
+typedef enum PARAMS_ADDR_T {
     PATCH_PROJ_BIAS_OFF,
     CLASS_TOKEN_OFF,
     ENC_LAYERNORM_1_GAMMA_OFF,

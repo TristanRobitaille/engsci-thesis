@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Sun Mar 24 15:43:41 2024
+[*] Mon Mar 25 16:32:17 2024
 [*]
 [dumpfile] "dump.vcd"
-[dumpfile_mtime] "Sun Mar 24 15:42:42 2024"
-[dumpfile_size] 31699067
+[dumpfile_mtime] "Mon Mar 25 16:26:39 2024"
+[dumpfile_size] 38881731
 [savefile] "cim.gtkw"
-[timestart] 1803302000
+[timestart] 0
 [size] 2080 1387
-[pos] 2787 53
-*-20.100000 1810260000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[pos] 1911 53
+*-28.200001 1572000000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -37,7 +37,7 @@
 [markername] YY
 [markername] ZZ
 [treeopen] cim.
-[treeopen] cim.cim_compute_control_fsm.
+[treeopen] cim.cim_comms_fsm.
 [treeopen] cim.mem.
 [sst_width] 299
 [signals_width] 347
@@ -49,13 +49,13 @@ clk
 cim.cim_state[2:0]
 cim.current_inf_step[5:0]
 @28
+cim.is_ready_internal
 cim.is_ready
 @200
 -
-@25
+@24
 [color] 2
 cim.bus_op_read[3:0]
-@24
 [color] 2
 cim.bus_target_or_sender_read[5:0]
 @420
@@ -82,6 +82,9 @@ cim.data_len[6:0]
 cim.gen_reg_2b[1:0]
 cim.word_rec_cnt[6:0]
 cim.word_snt_cnt[6:0]
+@28
+cim.word_rec_cnt_rst_n
+@24
 cim.gen_cnt_7b_cnt[6:0]
 cim.gen_cnt_7b_2_cnt[6:0]
 @200
@@ -89,6 +92,8 @@ cim.gen_cnt_7b_2_cnt[6:0]
 @28
 [color] 1
 cim.mac_start
+[color] 1
+cim.mac_busy
 @24
 [color] 1
 cim.mac_len[6:0]
@@ -113,88 +118,33 @@ cim.mac_out_flipped[21:0]
 cim.layernorm_start
 [color] 5
 cim.layernorm_done
-@420
 [color] 5
-cim.mult_input_q_1[21:0]
-[color] 5
-cim.mult_input_q_2[21:0]
-[color] 5
-cim.mult_output_q[21:0]
+cim.layernorm_busy
+@800022
+cim.mem.int_res_access_signals.read_req_src[6:0]
 @28
-[color] 5
-cim.mul_overflow
-[color] 5
-cim.mult_refresh
-@420
-[color] 5
-cim.add_input_q_1[21:0]
-[color] 5
-cim.add_input_q_2[21:0]
-@c00420
-[color] 5
-cim.add_output_q[21:0]
-@28
-[color] 5
-(0)cim.add_output_q[21:0]
-[color] 5
-(1)cim.add_output_q[21:0]
-[color] 5
-(2)cim.add_output_q[21:0]
-[color] 5
-(3)cim.add_output_q[21:0]
-[color] 5
-(4)cim.add_output_q[21:0]
-[color] 5
-(5)cim.add_output_q[21:0]
-[color] 5
-(6)cim.add_output_q[21:0]
-[color] 5
-(7)cim.add_output_q[21:0]
-[color] 5
-(8)cim.add_output_q[21:0]
-[color] 5
-(9)cim.add_output_q[21:0]
-[color] 5
-(10)cim.add_output_q[21:0]
-[color] 5
-(11)cim.add_output_q[21:0]
-[color] 5
-(12)cim.add_output_q[21:0]
-[color] 5
-(13)cim.add_output_q[21:0]
-[color] 5
-(14)cim.add_output_q[21:0]
-[color] 5
-(15)cim.add_output_q[21:0]
-[color] 5
-(16)cim.add_output_q[21:0]
-[color] 5
-(17)cim.add_output_q[21:0]
-[color] 5
-(18)cim.add_output_q[21:0]
-[color] 5
-(19)cim.add_output_q[21:0]
-[color] 5
-(20)cim.add_output_q[21:0]
-[color] 5
-(21)cim.add_output_q[21:0]
-@1401200
--group_end
-@28
-[color] 5
-cim.add_inst.refresh
-[color] 5
+(0)cim.mem.int_res_access_signals.read_req_src[6:0]
 (1)cim.mem.int_res_access_signals.read_req_src[6:0]
-[color] 5
-cim.mem.int_res_wen
-@24
-[color] 5
-cim.mem.int_res_addr[9:0]
-@420
-[color] 5
-cim.mem.int_res_read_data[15:0]
+(2)cim.mem.int_res_access_signals.read_req_src[6:0]
+(3)cim.mem.int_res_access_signals.read_req_src[6:0]
+(4)cim.mem.int_res_access_signals.read_req_src[6:0]
+(5)cim.mem.int_res_access_signals.read_req_src[6:0]
+(6)cim.mem.int_res_access_signals.read_req_src[6:0]
+@1001200
+-group_end
+@800022
+cim.mem.int_res_access_signals.write_req_src[6:0]
 @28
-cim.div_inst.start
-cim.cim_compute_control_fsm.unnamedblk2.all_data_received
+(0)cim.mem.int_res_access_signals.write_req_src[6:0]
+(1)cim.mem.int_res_access_signals.write_req_src[6:0]
+(2)cim.mem.int_res_access_signals.write_req_src[6:0]
+(3)cim.mem.int_res_access_signals.write_req_src[6:0]
+(4)cim.mem.int_res_access_signals.write_req_src[6:0]
+(5)cim.mem.int_res_access_signals.write_req_src[6:0]
+>4870000
+(6)cim.mem.int_res_access_signals.write_req_src[6:0]
+@1001200
+>0
+-group_end
 [pattern_trace] 1
 [pattern_trace] 0

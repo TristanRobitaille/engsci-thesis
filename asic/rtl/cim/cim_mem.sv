@@ -14,8 +14,8 @@ module cim_mem (
 );
 
     logic int_res_wen, params_wen;
-    logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] int_res_addr;
-    logic [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] params_addr;
+    TEMP_RES_ADDR_T int_res_addr;
+    PARAMS_ADDR_T params_addr;
 
     // TODO: Replace with actual (single port) generated memory
     logic [N_STORAGE-1:0] params [PARAMS_STORAGE_SIZE_CIM-1:0];

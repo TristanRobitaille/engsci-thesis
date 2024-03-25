@@ -78,9 +78,9 @@
 /*----- STRUCT -----*/
     typedef struct packed {
         logic [$clog2(OP_NUM)-1:0] op;
-        logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] tx_addr;
+        TEMP_RES_ADDR_T tx_addr;
         logic [$clog2(NUM_CIMS+1)-1:0] len;
-        logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] rx_addr;
+        TEMP_RES_ADDR_T rx_addr;
         logic [$clog2(NUM_CIMS+1)-1:0] num_cim;
     } BroadcastOpInfo_t;
 

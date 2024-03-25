@@ -27,8 +27,8 @@ module top_mac # () (
     logic start, param_type;
     logic [1:0] activation = 'd0;
     logic [$clog2(MAC_MAX_LEN+1)-1:0] len = 'd0;
-    logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] start_addr1 = 'd0;
-    logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] start_addr2 = 'd0;
+    TEMP_RES_ADDR_T start_addr1 = 'd0;
+    TEMP_RES_ADDR_T start_addr2 = 'd0;
 
     // MAC outputs
     wire busy, done, int_res_mem_access_req, params_mem_access_req;
