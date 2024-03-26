@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Mon Mar 25 16:32:17 2024
+[*] Tue Mar 26 05:41:05 2024
 [*]
 [dumpfile] "dump.vcd"
-[dumpfile_mtime] "Mon Mar 25 16:26:39 2024"
-[dumpfile_size] 38881731
+[dumpfile_mtime] "Tue Mar 26 05:40:50 2024"
+[dumpfile_size] 64538816
 [savefile] "cim.gtkw"
 [timestart] 0
-[size] 2080 1387
+[size] 2368 1387
 [pos] 1911 53
-*-28.200001 1572000000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+*-28.500000 2023000000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -37,12 +37,11 @@
 [markername] YY
 [markername] ZZ
 [treeopen] cim.
-[treeopen] cim.cim_comms_fsm.
 [treeopen] cim.mem.
 [sst_width] 299
 [signals_width] 347
 [sst_expanded] 1
-[sst_vpaned_height] 398
+[sst_vpaned_height] 481
 @28
 clk
 @24
@@ -79,13 +78,19 @@ cim.data_len[6:0]
 @200
 -
 @24
+[color] 7
 cim.gen_reg_2b[1:0]
+[color] 7
 cim.word_rec_cnt[6:0]
+[color] 7
 cim.word_snt_cnt[6:0]
 @28
+[color] 7
 cim.word_rec_cnt_rst_n
 @24
+[color] 7
 cim.gen_cnt_7b_cnt[6:0]
+[color] 7
 cim.gen_cnt_7b_2_cnt[6:0]
 @200
 -
@@ -113,38 +118,5 @@ cim.mac_inst.computation_result[21:0]
 cim.mac_out_flipped[21:0]
 @200
 -
-@28
-[color] 5
-cim.layernorm_start
-[color] 5
-cim.layernorm_done
-[color] 5
-cim.layernorm_busy
-@800022
-cim.mem.int_res_access_signals.read_req_src[6:0]
-@28
-(0)cim.mem.int_res_access_signals.read_req_src[6:0]
-(1)cim.mem.int_res_access_signals.read_req_src[6:0]
-(2)cim.mem.int_res_access_signals.read_req_src[6:0]
-(3)cim.mem.int_res_access_signals.read_req_src[6:0]
-(4)cim.mem.int_res_access_signals.read_req_src[6:0]
-(5)cim.mem.int_res_access_signals.read_req_src[6:0]
-(6)cim.mem.int_res_access_signals.read_req_src[6:0]
-@1001200
--group_end
-@800022
-cim.mem.int_res_access_signals.write_req_src[6:0]
-@28
-(0)cim.mem.int_res_access_signals.write_req_src[6:0]
-(1)cim.mem.int_res_access_signals.write_req_src[6:0]
-(2)cim.mem.int_res_access_signals.write_req_src[6:0]
-(3)cim.mem.int_res_access_signals.write_req_src[6:0]
-(4)cim.mem.int_res_access_signals.write_req_src[6:0]
-(5)cim.mem.int_res_access_signals.write_req_src[6:0]
->4870000
-(6)cim.mem.int_res_access_signals.write_req_src[6:0]
-@1001200
->0
--group_end
 [pattern_trace] 1
 [pattern_trace] 0

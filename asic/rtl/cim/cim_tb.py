@@ -193,7 +193,6 @@ async def basic_test(dut):
     # trigger_dense_broadcast(dut)
 
     # Go through inference steps
-    await cocotb.triggers.ClockCycles(dut.clk, INTERLUDE_CLOCK_CYCLES)
 
     await full_transpose_broadcast_emulation(dut, inf_steps[0].tx_addr, inf_steps[0].rx_addr, inf_steps[0].len, inf_steps[0].num_cim) # Pre-LayerNorm #1
     while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
@@ -216,4 +215,24 @@ async def basic_test(dut):
     while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
     await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
 
-    await cocotb.triggers.ClockCycles(dut.clk, 1000)
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
+
+    await full_transpose_broadcast_emulation(dut, inf_steps[4].tx_addr, inf_steps[4].rx_addr, inf_steps[4].len, inf_steps[4].num_cim) # Post-dense Q transpose
+    while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+    await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
+
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
+
+    await full_transpose_broadcast_emulation(dut, inf_steps[5].tx_addr, inf_steps[5].rx_addr, inf_steps[5].len, inf_steps[5].num_cim) # Post-dense K transpose
+    while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+    await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
+
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
+
+    for i in range (inf_steps[6].num_runs):
+        await full_dense_broadcast_emulation(dut, inf_steps[6].tx_addr, inf_steps[6].rx_addr, inf_steps[6].len, inf_steps[6].num_cim) # Post-dense K transpose
+        while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+    await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
+
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
+
