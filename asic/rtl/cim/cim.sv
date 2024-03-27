@@ -79,15 +79,17 @@ module cim # (
         end else if (layernorm_add_refresh) begin
             add_input_q_1 = layernorm_add_input_q_1;
             add_input_q_2 = layernorm_add_input_q_2;
+        end else if (exp_add_refresh) begin
+            add_input_q_1 = exp_add_input_q_1;
+            add_input_q_2 = exp_add_input_q_2;
         end
-        add_refresh = (cim_add_refresh || mac_add_refresh || layernorm_add_refresh);
+        add_refresh = (cim_add_refresh || mac_add_refresh || layernorm_add_refresh || exp_add_refresh);
     end
 
     always_ff @ (posedge clk) begin : adder_assertions
-        assert ($countones({cim_add_refresh, mac_add_refresh, layernorm_add_refresh}) <= 1) else $fatal("Multiple add_refresh signals are asserted simultaneously!");
+        assert ($countones({cim_add_refresh, mac_add_refresh, layernorm_add_refresh, exp_add_refresh}) <= 1) else $fatal("Multiple add_refresh signals are asserted simultaneously!");
     end
-    adder add_inst (.clk(clk), .rst_n(rst_n), .refresh(add_refresh), .overflow(add_overflow),
-                    .input_q_1(add_input_q_1), .input_q_2(add_input_q_2), .output_q(add_output_q));
+    adder add_inst (.clk(clk), .rst_n(rst_n), .refresh(add_refresh), .overflow(add_overflow), .input_q_1(add_input_q_1), .input_q_2(add_input_q_2), .output_q(add_output_q));
 
     // Multiplier module
     logic mult_refresh, mul_overflow;
@@ -99,14 +101,16 @@ module cim # (
         end else if (mac_mult_refresh) begin
             mult_input_q_1 = mac_mult_input_q_1;
             mult_input_q_2 = mac_mult_input_q_2;
+        end else if (exp_mult_refresh) begin
+            mult_input_q_1 = exp_mult_input_1;
+            mult_input_q_2 = exp_mult_input_2;
         end
-        mult_refresh = (layernorm_mult_refresh || mac_mult_refresh);
+        mult_refresh = (layernorm_mult_refresh || mac_mult_refresh || exp_mult_refresh);
     end
     always_ff @ (posedge clk) begin : mult_assertions
-        assert ($countones({layernorm_mult_refresh, mac_mult_refresh}) <= 1) else $fatal("Multiple mult_refresh signals are asserted simultaneously!");
+        assert ($countones({layernorm_mult_refresh, mac_mult_refresh, exp_mult_refresh}) <= 1) else $fatal("Multiple mult_refresh signals are asserted simultaneously!");
     end
-    multiplier mult_inst (  .clk(clk), .rst_n(rst_n), .refresh(mult_refresh), .overflow(mul_overflow),
-                            .input_q_1(mult_input_q_1), .input_q_2(mult_input_q_2), .output_q(mult_output_q));
+    multiplier mult_inst (.clk(clk), .rst_n(rst_n), .refresh(mult_refresh), .overflow(mul_overflow), .input_q_1(mult_input_q_1), .input_q_2(mult_input_q_2), .output_q(mult_output_q));
 
     // Divider module
     logic div_dbz, div_overflow, div_done, div_busy, div_start, logic_fsm_div_start;
@@ -118,11 +122,14 @@ module cim # (
         end else if (layernorm_div_start) begin
             div_dividend = layernorm_div_dividend;
             div_divisor = layernorm_div_divisor;
+        end else if (softmax_div_start) begin
+            div_dividend = softmax_div_dividend;
+            div_divisor = softmax_div_divisor;
         end
-        div_start = (logic_fsm_div_start || layernorm_div_start);
+        div_start = (logic_fsm_div_start || layernorm_div_start || softmax_div_start);
     end
     always_ff @ (posedge clk) begin : div_assertions
-        assert ($countones({logic_fsm_div_start, layernorm_div_start}) <= 1) else $fatal("Multiple div_start signals are asserted simultaneously!");
+        assert ($countones({logic_fsm_div_start, layernorm_div_start, softmax_div_start}) <= 1) else $fatal("Multiple div_start signals are asserted simultaneously!");
     end
     divider div_inst (.clk(clk), .rst_n(rst_n), .start(div_start), .dividend(div_dividend), .divisor(div_divisor), .done(div_done), .busy(div_busy), .output_q(div_output_q), .dbz(div_dbz), .overflow(div_overflow));
 
@@ -140,32 +147,52 @@ module cim # (
     logic [N_COMP-1:0] mac_mult_input_q_1, mac_mult_input_q_2;
     PARAM_TYPE_T mac_param_type;
     ACTIVATION_TYPE_T mac_activation;
-    mac mac_inst (
-        .clk(clk), .rst_n(rst_n), .start(mac_start), .done(mac_done), .busy(mac_busy), .param_type(mac_param_type), .len(mac_len), .activation(mac_activation),
-        .start_addr1(mac_start_addr1), .start_addr2(mac_start_addr2), .bias_addr(mac_bias_addr),
-        .params_access_signals(params_access_signals), .int_res_access_signals(int_res_access_signals),
-        .param_data(params_read_data), .int_res_data(int_res_read_data), .computation_result(mac_out),
-        .add_input_q_1(mac_add_input_q_1), .add_input_q_2(mac_add_input_q_2), .add_output_q(add_output_q), .add_refresh(mac_add_refresh),
-        .mult_input_q_1(mac_mult_input_q_1), .mult_input_q_2(mac_mult_input_q_2), .mult_output_q(mult_output_q), .mult_refresh(mac_mult_refresh)
-    );
+    mac mac_inst (.clk(clk), .rst_n(rst_n), .start(mac_start), .done(mac_done), .busy(mac_busy), .param_type(mac_param_type), .len(mac_len), .activation(mac_activation),
+                  .start_addr1(mac_start_addr1), .start_addr2(mac_start_addr2), .bias_addr(mac_bias_addr),
+                  .params_access_signals(params_access_signals), .int_res_access_signals(int_res_access_signals),
+                  .param_data(params_read_data), .int_res_data(int_res_read_data), .computation_result(mac_out),
+                  .add_input_q_1(mac_add_input_q_1), .add_input_q_2(mac_add_input_q_2), .add_output_q(add_output_q), .add_refresh(mac_add_refresh),
+                  .mult_input_q_1(mac_mult_input_q_1), .mult_input_q_2(mac_mult_input_q_2), .mult_output_q(mult_output_q), .mult_refresh(mac_mult_refresh));
 
     // LayerNorm module
     logic layernorm_start, layernorm_half_select, layernorm_done, layernorm_busy, layernorm_add_refresh, layernorm_mult_refresh, layernorm_div_start;
     PARAMS_ADDR_T beta_addr, gamma_addr;
     TEMP_RES_ADDR_T layernorm_start_addr;
     logic [N_COMP-1:0] layernorm_add_input_q_1, layernorm_add_input_q_2, layernorm_mult_input_q_1, layernorm_mult_input_q_2, layernorm_div_dividend, layernorm_div_divisor;
-    layernorm layernorm_inst (
-        .clk(clk), .rst_n(rst_n),
-        .start(layernorm_start), .half_select(layernorm_half_select), .busy(layernorm_busy), .done(layernorm_done),
-        .start_addr(layernorm_start_addr), .beta_addr(beta_addr), .gamma_addr(gamma_addr),
-        .int_res_access_signals(int_res_access_signals), .params_access_signals(params_access_signals),
-        .param_data(params_read_data), .int_res_data(int_res_read_data),
-        .add_input_q_1(layernorm_add_input_q_1), .add_input_q_2(layernorm_add_input_q_2), .add_refresh(layernorm_add_refresh), .add_output_q(add_output_q), .add_output_flipped(add_out_flipped),
-        .mult_input_q_1(layernorm_mult_input_q_1), .mult_input_q_2(layernorm_mult_input_q_2), .mult_refresh(layernorm_mult_refresh), .mult_output_q(mult_output_q), .mult_output_flipped(mult_out_flipped),
-        .div_done(div_done), .div_busy(div_busy), .div_start(layernorm_div_start),
-        .div_output_q(div_output_q), .div_dividend(layernorm_div_dividend), .div_divisor(layernorm_div_divisor),
-        .sqrt_done(sqrt_done), .sqrt_busy(sqrt_busy), .sqrt_start(sqrt_start), .sqrt_rad_q(sqrt_rad_q), .sqrt_root_q(sqrt_root_q)
-    );
+    layernorm layernorm_inst (.clk(clk), .rst_n(rst_n), .start(layernorm_start), .half_select(layernorm_half_select), .busy(layernorm_busy), .done(layernorm_done),
+                              .start_addr(layernorm_start_addr), .beta_addr(beta_addr), .gamma_addr(gamma_addr),
+                              .int_res_access_signals(int_res_access_signals), .params_access_signals(params_access_signals),
+                              .param_data(params_read_data), .int_res_data(int_res_read_data),
+                              .add_input_q_1(layernorm_add_input_q_1), .add_input_q_2(layernorm_add_input_q_2), .add_refresh(layernorm_add_refresh), .add_output_q(add_output_q), .add_output_flipped(add_out_flipped),
+                              .mult_input_q_1(layernorm_mult_input_q_1), .mult_input_q_2(layernorm_mult_input_q_2), .mult_refresh(layernorm_mult_refresh), .mult_output_q(mult_output_q), .mult_output_flipped(mult_out_flipped),
+                              .div_done(div_done), .div_busy(div_busy), .div_start(layernorm_div_start),
+                              .div_output_q(div_output_q), .div_dividend(layernorm_div_dividend), .div_divisor(layernorm_div_divisor),
+                              .sqrt_done(sqrt_done), .sqrt_busy(sqrt_busy), .sqrt_start(sqrt_start), .sqrt_rad_q(sqrt_rad_q), .sqrt_root_q(sqrt_root_q));
+
+    // Softmax module
+    logic softmax_start, softmax_busy, softmax_done, softmax_add_refresh, softmax_mul_refresh, softmax_div_start, softmax_exp_start;
+    logic [$clog2(MAC_MAX_LEN+1)-1:0] softmax_len;
+    TEMP_RES_ADDR_T softmax_start_addr;
+    COMP_WORD_T softmax_add_input_1, softmax_add_input_2, softmax_mul_input_1, softmax_mul_input_2, softmax_div_dividend, softmax_div_divisor, softmax_exp_input;
+    softmax softmax_inst (.clk(clk), .rst_n(rst_n), .start(softmax_start), .len(softmax_len), .start_addr(softmax_start_addr), .busy(softmax_busy), .done(softmax_done),
+                          .int_res_access_signals(int_res_access_signals), .int_res_data(int_res_read_data),
+                          .add_output_q(add_output_q), .add_out_flipped(add_out_flipped), .add_input_q_1(softmax_add_input_1), .add_input_q_2(softmax_add_input_2), .add_refresh(softmax_add_refresh),
+                          .mult_output_q(mult_output_q), .mult_out_flipped(mult_out_flipped), .mult_input_q_1(softmax_mul_input_1), .mult_input_q_2(softmax_mul_input_2), .mult_refresh(softmax_mul_refresh),
+                          .div_busy(div_busy), .div_done(div_done), .div_output_q(div_output_q), .div_dividend(softmax_div_dividend), .div_divisor(softmax_div_divisor), .div_start(softmax_div_start),
+                          .exp_busy(exp_busy), .exp_done(exp_done), .exp_output_q(exp_output), .exp_out_flipped(exp_output_flipped), .exp_input_q(softmax_exp_input), .exp_start(softmax_exp_start));
+
+    // Exponential module
+    logic exp_add_refresh, exp_mult_refresh, exp_busy, exp_done, exp_start;
+    COMP_WORD_T exp_input, exp_output, exp_output_flipped, exp_add_input_q_1, exp_add_input_q_2, exp_mult_input_1, exp_mult_input_2;
+    always_latch begin : exp_MUX
+        if (softmax_exp_start) begin
+            exp_input = softmax_exp_input;
+        end
+        exp_start = softmax_exp_start;
+    end
+    exp exp_inst (  .clk(clk), .rst_n(rst_n), .start(exp_start), .busy(exp_busy), .done(exp_done), .input_q(exp_input), .output_q(exp_output),
+                    .adder_output(add_output_q), .adder_refresh(exp_add_refresh), .adder_input_1(exp_add_input_q_1), .adder_input_2(exp_add_input_q_2),
+                    .mult_output(mult_output_q), .mult_refresh(exp_mult_refresh), .mult_input_1(exp_mult_input_1), .mult_input_2(exp_mult_input_2));
 
     // Comms FSM
     logic signed [N_STORAGE-1:0] bus_data_copy_1, bus_data_copy_2;
@@ -299,7 +326,9 @@ module cim # (
                     start_inst_fill <= 1'b0;
                     save_dense_broadcast_start <= 1'b0;
                 end
-                PISTOL_START_OP,
+                PISTOL_START_OP: begin
+                    word_snt_cnt_rst_n <= RST;
+                end
                 INFERENCE_RESULT_OP: begin
                 end
                 default: begin
@@ -424,7 +453,7 @@ module cim # (
                         ENC_LAYERNORM_3_1ST_HALF_STEP: begin
                             layernorm_start <= (word_rec_cnt == EMB_DEPTH);
                             word_rec_cnt_rst_n <= (word_rec_cnt == EMB_DEPTH) ? RST : RUN;
-                            is_ready_internal <= 1'd1;
+                            is_ready_internal <= layernorm_done || ((bus_target_or_sender_read == ID) & (word_snt_cnt >= NUM_PATCHES+1)); // If I'm the one sending and I've sent everything (//TODO: Check if this makes sense...what if I've CiM #63)
 
                             if (current_inf_step == ENC_LAYERNORM_1_1ST_HALF_STEP)      layernorm_start_addr <= mem_map[ENC_LN1_1ST_HALF_MEM];
                             else if (current_inf_step == ENC_LAYERNORM_2_1ST_HALF_STEP) layernorm_start_addr <= mem_map[ENC_LN2_1ST_HALF_MEM];
@@ -470,7 +499,7 @@ module cim # (
                         POST_LAYERNORM_TRANSPOSE_STEP,
                         ENC_MHSA_Q_TRANSPOSE_STEP,
                         ENC_MHSA_K_TRANSPOSE_STEP: begin
-                            is_ready_internal <= 1'b1;
+                            is_ready_internal <= (word_snt_cnt >= data_len);
                             if (bus_op_read == PISTOL_START_OP) begin
                                 word_rec_cnt_rst_n <= RST;
                                 gen_cnt_7b_rst_n <= RST;
@@ -482,7 +511,7 @@ module cim # (
                         ENC_MHSA_DENSE_STEP: begin
                             word_rec_cnt_rst_n <= (word_rec_cnt >= EMB_DEPTH) ? RST : RUN;
                             gen_cnt_7b_rst_n <= RUN;
-                            gen_cnt_7b_2_inc <= {6'd0, (mac_done && (gen_reg_2b == 'd3))};
+                            gen_cnt_7b_2_inc <= {6'd0, (mac_done && (gen_reg_2b == 'd2))};
                             gen_cnt_7b_2_rst_n <= (bus_op_read == PISTOL_START_OP) ? RST : RUN;
 
                             int_res_access_signals.write_req_src[LOGIC_FSM] <= mac_done;
@@ -497,7 +526,7 @@ module cim # (
                                     mac_param_type <= MODEL_PARAM;
                                     mac_activation <= LINEAR_ACTIVATION;
                                     gen_reg_2b <= (mac_done) ? 'd1 : 'd0;
-                                    mac_start <= (word_rec_cnt >= EMB_DEPTH) & (word_rec_cnt_rst_n == RUN);
+                                    mac_start <= (word_rec_cnt >= EMB_DEPTH) & (word_rec_cnt_rst_n == RUN);// & (gen_cnt_7b_2_cnt < EMB_DEPTH);
                                 end else if (gen_reg_2b == 1) begin
                                     int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[ENC_Q_MEM] + {3'd0, sender_id};
                                     mac_start_addr2 <= param_addr_map[ENC_K_DENSE_KERNEL_PARAMS].addr;
@@ -528,6 +557,7 @@ module cim # (
 
                         ENC_MHSA_QK_T_STEP: begin
                             // Perform a MAC, then divide by sqrt(NUM_HEADS), then save to intermediate results memory and inputs to modules is correct
+                            // TODO: Change this to multiply by 1/sqrt(num_heads) instead of dividing
                             TEMP_RES_ADDR_T MAC_storage_addr = mem_map[ENC_QK_T_MEM] + gen_cnt_7b_2_cnt*(NUM_PATCHES+1) + {3'd0, sender_id};
                             gen_cnt_7b_inc <= {6'd0, div_done};
                             gen_cnt_7b_2_inc <= {6'd0, (gen_cnt_7b_cnt == (NUM_PATCHES+1))};
@@ -549,10 +579,10 @@ module cim # (
                             mac_activation <= NO_ACTIVATION;
                             mac_len <= NUM_HEADS;
                             mac_param_type <= INTERMEDIATE_RES;
-                            
+
                             logic_fsm_div_dividend <= mac_out;
                             logic_fsm_div_divisor <= {{(N_COMP-N_STORAGE){params_read_data[N_STORAGE-1]}}, params_read_data}; // Sign extend
-
+    
                             if (bus_op_read == PISTOL_START_OP) begin
                                 $display("CiM: Finished encoder's MHSA QK_T");
                                 gen_cnt_7b_2_rst_n <= RST;
@@ -561,6 +591,29 @@ module cim # (
                         end
 
                         ENC_MHSA_PRE_SOFTMAX_TRANSPOSE_STEP: begin
+                            gen_cnt_7b_2_inc <= {6'd0, (word_rec_cnt == (NUM_PATCHES+1))};
+                            word_rec_cnt_rst_n <= (word_rec_cnt == (NUM_PATCHES+1)) ? RST : RUN;
+                            is_ready_internal <= ((bus_target_or_sender_read == ID) && (word_snt_cnt >= (NUM_PATCHES+1))) | (bus_target_or_sender_read != ID); // If I'm the one sending and I've sent everything (//TODO: Check if this makes sense...what if I've CiM #63)
+                            gen_cnt_7b_2_rst_n <= (gen_cnt_7b_2_cnt == NUM_HEADS || ID == 'd63) ? RST : RUN;
+                            current_inf_step <= (gen_cnt_7b_2_cnt == NUM_HEADS || ID == 'd63) ? ENC_MHSA_SOFTMAX_STEP : ENC_MHSA_PRE_SOFTMAX_TRANSPOSE_STEP;
+                        end
+
+                        ENC_MHSA_SOFTMAX_STEP: begin
+                            gen_cnt_7b_2_inc <= {6'd0, softmax_start}; // Increment after starting so it's ready for the next start
+                            softmax_start <= (gen_cnt_7b_2_cnt < NUM_HEADS) && (ID < (NUM_PATCHES+1)) && (~softmax_busy);
+                            softmax_len <= NUM_PATCHES + 'd1;
+                            softmax_start_addr <= mem_map[ENC_PRE_SOFTMAX_MEM] + gen_cnt_7b_2_cnt*(NUM_PATCHES+1);
+                            is_ready_internal <= ((~softmax_busy) && (gen_cnt_7b_2_cnt == NUM_HEADS)) || (ID >= NUM_PATCHES+1);
+                            gen_cnt_7b_2_rst_n <= (bus_op_read == PISTOL_START_OP) ? RST : RUN;
+
+                            if (bus_op_read == PISTOL_START_OP) begin
+                                gen_cnt_7b_rst_n <= RST;
+                                current_inf_step <= ENC_MHSA_MULT_V_STEP;
+                                $display("Done with ENC_MHSA_SOFTMAX_STEP");
+                            end
+                        end
+
+                        ENC_MHSA_MULT_V_STEP: begin
                         end
 
                         default: begin
@@ -675,11 +728,12 @@ module cim # (
         mac_out_flipped = ~mac_out + 'd1;
         add_out_flipped = ~add_output_q + 'd1;
         div_out_flipped = ~div_output_q + 'd1;
+        exp_output_flipped = ~exp_output + 'd1;
     end
 
     logic is_ready_internal;
     always_comb begin : is_ready_comb
-        is_ready = is_ready_internal & ~(layernorm_busy | div_busy | sqrt_busy | mac_busy);
+        is_ready = is_ready_internal & ~(layernorm_busy | div_busy | sqrt_busy | mac_busy | exp_busy | softmax_busy);
     end
 
 endmodule

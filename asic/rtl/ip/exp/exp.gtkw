@@ -1,0 +1,69 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Tue Mar 26 23:35:31 2024
+[*]
+[dumpfile] "dump.vcd"
+[dumpfile_mtime] "Tue Mar 26 23:34:37 2024"
+[dumpfile_size] 4749075
+[savefile] "exp.gtkw"
+[timestart] 0
+[size] 3440 1387
+[pos] 1679 0
+*-13.499999 8000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[markername] AA
+[markername] BB
+[markername] CC
+[markername] DD
+[markername] EE
+[markername] FF
+[markername] GG
+[markername] HH
+[markername] II
+[markername] JJ
+[markername] KK
+[markername] LL
+[markername] MM
+[markername] NN
+[markername] OO
+[markername] PP
+[markername] QQ
+[markername] RR
+[markername] SS
+[markername] TT
+[markername] UU
+[markername] VV
+[markername] WW
+[markername] XX
+[markername] YY
+[markername] ZZ
+[treeopen] exp_wrapper_tb.
+[sst_width] 253
+[signals_width] 266
+[sst_expanded] 1
+[sst_vpaned_height] 434
+@28
+clk
+@24
+exp_wrapper_tb.exp.state[2:0]
+@200
+-
+@420
+[color] 2
+exp_wrapper_tb.exp.adder_input_1[21:0]
+[color] 2
+exp_wrapper_tb.exp.adder_input_2[21:0]
+[color] 2
+exp_wrapper_tb.exp.adder_output[21:0]
+@28
+[color] 2
+exp_wrapper_tb.exp.adder_refresh
+@200
+-
+@420
+exp_wrapper_tb.mult_input_1_wire[21:0]
+exp_wrapper_tb.mult_input_2_wire[21:0]
+exp_wrapper_tb.mult_output[21:0]
+@421
+exp_wrapper_tb.mult_refresh
+[pattern_trace] 1
+[pattern_trace] 0

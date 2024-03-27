@@ -58,8 +58,7 @@ async def full_transpose_broadcast_emulation(dut, tx_addr, rx_addr, data_len, nu
     for i in range(num_cim):
         await write_full_bus(dut, op=BusOp.TRANS_BROADCAST_START_OP, target_or_sender=i, data=[tx_addr, data_len, rx_addr])
         if (i == 0): # CiM #0 is instantiated so it will actually send data so the testbench shouldn't do it
-            await cocotb.triggers.RisingEdge(dut.clk)
-            # while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+            while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
         else:
             for _ in range(math.ceil(data_len/3)):
                 await cocotb.triggers.ClockCycles(dut.clk, INTERTRANSPOSE_TRANSACTIONS_DELAY)
@@ -75,7 +74,6 @@ async def full_dense_broadcast_emulation(dut, tx_addr, rx_addr, data_len, num_ci
         if (i == 0): # CiM #0 is instantiated so it will actually send data so the testbench shouldn't do it
             await cocotb.triggers.RisingEdge(dut.clk)
             while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
-
         else:
             for _ in range(math.ceil(data_len/3)):
                 await cocotb.triggers.ClockCycles(dut.clk, INTERTRANSPOSE_TRANSACTIONS_DELAY)
@@ -84,6 +82,7 @@ async def full_dense_broadcast_emulation(dut, tx_addr, rx_addr, data_len, num_ci
                 word2 = BinToDec(random_input(-MAX_VAL, MAX_VAL), num_Q_storage)
                 await write_full_bus(dut, op=BusOp.DENSE_BROADCAST_DATA_OP, target_or_sender=i, data=[word0, word1, word2])
         while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+        await cocotb.triggers.ClockCycles(dut.clk, 10) # TODO: Should remove this
 
 async def trigger_transpose_broadcast(dut):
     data_len = [6, 1, 60, 61, EMB_DEPTH, 32]
@@ -194,6 +193,7 @@ async def basic_test(dut):
 
     # Go through inference steps
 
+    # TODO: Should remove all the artificial waits
     await full_transpose_broadcast_emulation(dut, inf_steps[0].tx_addr, inf_steps[0].rx_addr, inf_steps[0].len, inf_steps[0].num_cim) # Pre-LayerNorm #1
     while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
     await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
@@ -229,10 +229,21 @@ async def basic_test(dut):
 
     await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
 
-    for i in range (inf_steps[6].num_runs):
-        await full_dense_broadcast_emulation(dut, inf_steps[6].tx_addr, inf_steps[6].rx_addr, inf_steps[6].len, inf_steps[6].num_cim) # Post-dense K transpose
-        while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+    for _ in range (inf_steps[6].num_runs):
+        await full_dense_broadcast_emulation(dut, inf_steps[6].tx_addr, inf_steps[6].rx_addr, inf_steps[6].len, inf_steps[6].num_cim) # MHSA QK_T dense
+
     await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
 
     await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
 
+    for _ in range (inf_steps[7].num_runs):
+        await full_transpose_broadcast_emulation(dut, inf_steps[7].tx_addr, inf_steps[7].rx_addr, inf_steps[7].len, inf_steps[7].num_cim) # Pre-softmax transpsoe
+        while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+        await cocotb.triggers.ClockCycles(dut.clk, 20)
+
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
+
+    while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk) # Wait for softmax to complete
+    await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
+
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)

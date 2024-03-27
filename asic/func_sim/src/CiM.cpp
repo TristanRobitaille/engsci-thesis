@@ -392,7 +392,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             if (gen_cnt_7b_2.get_cnt() == NUM_HEADS || id == 63) {
                 is_ready = false;
                 gen_cnt_7b_2.reset();
-                current_inf_step = static_cast<INFERENCE_STEP> (static_cast<int> (current_inf_step) + 1);
+                current_inf_step = ENC_MHSA_SOFTMAX_STEP;
             }
             break;
 

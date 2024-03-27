@@ -12,25 +12,25 @@ module exp (
     input wire start,
 
     // Adder module
-    input wire signed [N_COMP-1:0] adder_output,
+    input COMP_WORD_T adder_output,
     output logic adder_refresh,
-    output logic signed [N_COMP-1:0] adder_input_1, adder_input_2,
+    output COMP_WORD_T adder_input_1, adder_input_2,
 
     // Multiplier module
-    input wire signed [N_COMP-1:0] mult_output,
+    input COMP_WORD_T mult_output,
     output logic mult_refresh,
-    output logic signed [N_COMP-1:0] mult_input_1, mult_input_2,
+    output COMP_WORD_T mult_input_1, mult_input_2,
 
-    input wire signed [N_COMP-1:0] input_q,
+    input COMP_WORD_T input_q,
     output logic busy, done,
-    output logic signed [N_COMP-1:0] output_q
+    output COMP_WORD_T output_q
 );
 
 // Signals
-logic signed [N_COMP-1:0] input_mapped, taylor_sum;
+COMP_WORD_T input_mapped, taylor_sum;
 
 // Constants
-wire signed [N_COMP-1:0] ln2_inv, Taylor_mult_1, Taylor_mult_2, Taylor_mult_3;
+COMP_WORD_T ln2_inv, Taylor_mult_1, Taylor_mult_2, Taylor_mult_3;
 assign ln2_inv          = 22'b1_0111000101; // 1/ln(2) = 1.44269504089
 assign Taylor_mult_1    = 22'b0_1011000110; // ln(2) = 0.69314718056
 assign Taylor_mult_2    = 22'b0_0011110110; // ln(2)^2/2! = 0.46209812037
@@ -62,7 +62,8 @@ always_ff @ (posedge clk) begin : exp_FSM
                 state <= (start) ? MULT : IDLE;
                 next_state <= TAYLOR_TERM_1;
                 sub_state <= ITERATION_1_SUBSTATE;
-                mult_refresh <= start; // Multiply is single-cycle
+                mult_refresh <= start;
+                adder_refresh <= 0;
                 mult_input_1 <= input_q;
                 mult_input_2 <= ln2_inv;
                 taylor_sum <= 22'b1_0000000000; // 1st term of Taylor series is 1
@@ -76,6 +77,7 @@ always_ff @ (posedge clk) begin : exp_FSM
                     mult_refresh <= 0;
                     sub_state_sum <= ITERATION_2_SUBSTATE;
                 end else begin
+                    adder_refresh <= 0;
                     state <= next_state;
                     sub_state_sum <= ITERATION_1_SUBSTATE;
                 end
@@ -95,6 +97,7 @@ always_ff @ (posedge clk) begin : exp_FSM
                     sub_state <= ITERATION_2_SUBSTATE;
                 end else begin
                     state <= UPDATE_SUM;
+                    mult_refresh <= 0;
                     next_state <= TAYLOR_TERM_2;
                     sub_state <= ITERATION_1_SUBSTATE;
                 end
@@ -118,6 +121,7 @@ always_ff @ (posedge clk) begin : exp_FSM
                     sub_state <= ITERATION_3_SUBSTATE;
                 end else if (sub_state == ITERATION_3_SUBSTATE) begin
                     state <= UPDATE_SUM;
+                    mult_refresh <= 0;
                     next_state <= TAYLOR_TERM_3;
                     sub_state <= ITERATION_1_SUBSTATE;
                 end
@@ -144,6 +148,7 @@ always_ff @ (posedge clk) begin : exp_FSM
                 end else if (sub_state == ITERATION_4_SUBSTATE) begin
                     state <= UPDATE_SUM;
                     next_state <= FINISH;
+                    mult_refresh <= 0;
                 end
             end
 

@@ -9,9 +9,9 @@ module adder (
     input refresh, // Update output when this is set
 
     // Data in 2's complement format
-    input wire signed [N_COMP-1:0] input_q_1,
-    input wire signed [N_COMP-1:0] input_q_2,
-    output logic signed [N_COMP-1:0] output_q,
+    input COMP_WORD_T input_q_1,
+    input COMP_WORD_T input_q_2,
+    output COMP_WORD_T output_q,
     output wire overflow
 );
 

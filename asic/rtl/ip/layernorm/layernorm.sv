@@ -4,38 +4,38 @@ module layernorm (
 
     // Control signals
     input wire start, half_select,
-    input wire [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] start_addr,
-    input wire [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] beta_addr,
-    input wire [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] gamma_addr,
+    input TEMP_RES_ADDR_T start_addr,
+    input PARAMS_ADDR_T beta_addr,
+    input PARAMS_ADDR_T gamma_addr,
     output logic busy, done,
 
     // Memory access signals
     input MemAccessSignals int_res_access_signals,
     input MemAccessSignals params_access_signals,
-    input wire signed [N_STORAGE-1:0] param_data,
-    input wire signed [N_STORAGE-1:0] int_res_data,
+    input STORAGE_WORD_T param_data,
+    input STORAGE_WORD_T int_res_data,
 
     // Adder signals
-    input wire signed [N_COMP-1:0] add_output_q, add_output_flipped,
-    output logic signed [N_COMP-1:0] add_input_q_1, add_input_q_2,
+    input COMP_WORD_T add_output_q, add_output_flipped,
+    output COMP_WORD_T add_input_q_1, add_input_q_2,
     output logic add_refresh,
 
     // Multiplier signals
-    input wire signed [N_COMP-1:0] mult_output_q, mult_output_flipped,
-    output logic signed [N_COMP-1:0] mult_input_q_1, mult_input_q_2,
+    input COMP_WORD_T mult_output_q, mult_output_flipped,
+    output COMP_WORD_T mult_input_q_1, mult_input_q_2,
     output logic mult_refresh,
 
     // Divider signals
     input wire div_done, div_busy,
-    input wire signed [N_COMP-1:0] div_output_q,
+    input COMP_WORD_T div_output_q,
     output logic div_start,
-    output logic signed [N_COMP-1:0] div_dividend, div_divisor,
+    output COMP_WORD_T div_dividend, div_divisor,
 
     // Sqrt signals
     input wire sqrt_done, sqrt_busy,
-    input wire signed [N_COMP-1:0] sqrt_root_q,
+    input COMP_WORD_T sqrt_root_q,
     output logic sqrt_start,
-    output logic signed [N_COMP-1:0] sqrt_rad_q
+    output COMP_WORD_T sqrt_rad_q
 );
 
     /*----- LOGIC -----*/
@@ -43,7 +43,7 @@ module layernorm (
                 LEN_SECOND_HALF = 61;
     logic [2:0] gen_reg_3b;
     logic [$clog2(EMB_DEPTH+1)-1:0] index;
-    logic signed [N_COMP-1:0] compute_temp, compute_temp_2, compute_temp_3; // TODO: Consider if it should be shared with other modules in CiM
+    COMP_WORD_T compute_temp, compute_temp_2, compute_temp_3; // TODO: Consider if it should be shared with other modules in CiM
 
     enum logic [1:0] {MEAN_SUM, VARIANCE, PARTIAL_NORM_FIRST_HALF} loop_sum_type;
     enum logic [3:0] {IDLE, LOOP_SUM, VARIANCE_LOOP, VARIANCE_SQRT, NORM_FIRST_HALF, BETA_LOAD, GAMMA_LOAD, SECOND_HALF_LOOP, DONE} state;

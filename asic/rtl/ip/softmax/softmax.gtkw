@@ -1,0 +1,163 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Wed Mar 27 01:06:58 2024
+[*]
+[dumpfile] "dump.vcd"
+[dumpfile_mtime] "Wed Mar 27 01:06:52 2024"
+[dumpfile_size] 512795
+[savefile] "softmax.gtkw"
+[timestart] 0
+[size] 2144 1331
+[pos] 1776 2
+*-18.900000 1835000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[markername] AA
+[markername] BB
+[markername] CC
+[markername] DD
+[markername] EE
+[markername] FF
+[markername] GG
+[markername] HH
+[markername] II
+[markername] JJ
+[markername] KK
+[markername] LL
+[markername] MM
+[markername] NN
+[markername] OO
+[markername] PP
+[markername] QQ
+[markername] RR
+[markername] SS
+[markername] TT
+[markername] UU
+[markername] VV
+[markername] WW
+[markername] XX
+[markername] YY
+[markername] ZZ
+[treeopen] top_softmax.
+[treeopen] top_softmax.softmax.
+[sst_width] 253
+[signals_width] 328
+[sst_expanded] 1
+[sst_vpaned_height] 310
+@28
+top_softmax.clk
+top_softmax.softmax.start
+@24
+top_softmax.softmax.state[2:0]
+top_softmax.softmax.index[6:0]
+@200
+-
+@24
+[color] 5
+top_softmax.int_res_access_signals.addr_table[6][9:0]
+@28
+[color] 5
+(0)top_softmax.int_res_access_signals.read_req_src[6:0]
+[color] 5
+top_softmax.softmax.read_req_delayed
+@420
+[color] 5
+top_softmax.int_res_access_signals.write_data[6][15:0]
+@200
+-
+-
+@28
+[color] 2
+top_softmax.exp_add_refresh
+@420
+[color] 2
+top_softmax.exp_add_input_1[21:0]
+[color] 2
+top_softmax.exp_add_input_2[21:0]
+@28
+[color] 2
+top_softmax.softmax_add_refresh
+@420
+[color] 2
+top_softmax.softmax_add_input_1[21:0]
+[color] 2
+top_softmax.softmax_add_input_2[21:0]
+[color] 2
+top_softmax.add_output_q[21:0]
+@200
+-
+-
+@28
+[color] 1
+top_softmax.exp_mul_refresh
+@420
+[color] 1
+top_softmax.exp_mul_input_1[21:0]
+[color] 1
+top_softmax.exp_mul_input_2[21:0]
+@28
+[color] 1
+top_softmax.softmax_mul_refresh
+@421
+[color] 1
+top_softmax.softmax_mul_input_1[21:0]
+@420
+[color] 1
+top_softmax.softmax_mul_input_2[21:0]
+[color] 1
+top_softmax.exp_output_q[21:0]
+@200
+-
+-
+@28
+[color] 6
+top_softmax.div_done
+[color] 6
+top_softmax.div_start
+[color] 6
+top_softmax.div_busy
+@c00420
+[color] 6
+top_softmax.div_dividend[21:0]
+@28
+(0)top_softmax.div_dividend[21:0]
+(1)top_softmax.div_dividend[21:0]
+(2)top_softmax.div_dividend[21:0]
+(3)top_softmax.div_dividend[21:0]
+(4)top_softmax.div_dividend[21:0]
+(5)top_softmax.div_dividend[21:0]
+(6)top_softmax.div_dividend[21:0]
+(7)top_softmax.div_dividend[21:0]
+(8)top_softmax.div_dividend[21:0]
+(9)top_softmax.div_dividend[21:0]
+(10)top_softmax.div_dividend[21:0]
+(11)top_softmax.div_dividend[21:0]
+(12)top_softmax.div_dividend[21:0]
+(13)top_softmax.div_dividend[21:0]
+(14)top_softmax.div_dividend[21:0]
+(15)top_softmax.div_dividend[21:0]
+(16)top_softmax.div_dividend[21:0]
+(17)top_softmax.div_dividend[21:0]
+(18)top_softmax.div_dividend[21:0]
+(19)top_softmax.div_dividend[21:0]
+(20)top_softmax.div_dividend[21:0]
+(21)top_softmax.div_dividend[21:0]
+@1401200
+-group_end
+@420
+[color] 6
+top_softmax.div_divisor[21:0]
+@24
+[color] 6
+top_softmax.div_output_q[21:0]
+@200
+-
+-
+@24
+top_softmax.int_res_access_signals.addr_table[6][9:0]
+@28
+(0)top_softmax.int_res_access_signals.read_req_src[6:0]
+(0)top_softmax.int_res_access_signals.write_req_src[6:0]
+@24
+top_softmax.int_res_data[15:0]
+top_softmax.softmax.div_loop_timekeep[1:0]
+[pattern_trace] 1
+[pattern_trace] 0

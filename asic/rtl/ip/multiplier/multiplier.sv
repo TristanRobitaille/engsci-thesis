@@ -10,10 +10,10 @@ module multiplier (
     input refresh, // Update output when this is set
 
     // Data in 2's complement format
-    input wire signed [N_COMP-1:0] input_q_1,
-    input wire signed [N_COMP-1:0] input_q_2,
+    input COMP_WORD_T input_q_1,
+    input COMP_WORD_T input_q_2,
     output wire overflow,
-    output logic signed [N_COMP-1:0] output_q
+    output COMP_WORD_T output_q
 );
 
     localparam MSB = 2*N_COMP - (N_COMP - Q) - 1;

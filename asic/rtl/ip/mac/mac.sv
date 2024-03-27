@@ -13,35 +13,35 @@ module mac
     input wire start, param_type,
     input wire [1:0] activation,
     input wire [$clog2(MAC_MAX_LEN+1)-1:0] len,
-    input wire [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] bias_addr,
-    input wire [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] start_addr1,
-    input wire [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] start_addr2, // Either intermediate res or params
+    input PARAMS_ADDR_T bias_addr,
+    input TEMP_RES_ADDR_T start_addr1,
+    input TEMP_RES_ADDR_T start_addr2, // Either intermediate res or params
     output logic busy, done,
 
     // Memory access signals
     input MemAccessSignals int_res_access_signals,
     input MemAccessSignals params_access_signals,
-    input wire signed [N_STORAGE-1:0] param_data,
-    input wire signed [N_STORAGE-1:0] int_res_data,
+    input STORAGE_WORD_T param_data,
+    input STORAGE_WORD_T int_res_data,
 
     // Computation signals
-    output logic signed [N_COMP-1:0] computation_result,
+    output COMP_WORD_T computation_result,
 
     // Adder signals
-    input wire signed [N_COMP-1:0] add_output_q,
-    output logic signed [N_COMP-1:0] add_input_q_1, add_input_q_2,
+    input COMP_WORD_T add_output_q,
+    output COMP_WORD_T add_input_q_1, add_input_q_2,
     output logic add_refresh,
 
     // Multiplier signals
-    input wire signed [N_COMP-1:0] mult_output_q,
-    output logic signed [N_COMP-1:0] mult_input_q_1, mult_input_q_2,
+    input COMP_WORD_T mult_output_q,
+    output COMP_WORD_T mult_input_q_1, mult_input_q_2,
     output logic mult_refresh
 );
 
    /*----- LOGIC -----*/
     logic [1:0] delay_signal;
     logic [$clog2(MAC_MAX_LEN+1)-1:0] index;
-    logic signed [N_COMP-1:0] compute_temp, compute_temp_2; // TODO: Consider if it should be shared with other modules in CiM
+    COMP_WORD_T compute_temp, compute_temp_2; // TODO: Consider if it should be shared with other modules in CiM
 
     enum logic [2:0] {IDLE, COMPUTE_MUL_IN1, COMPUTE_MUL_IN2, COMPUTE_MUL_OUT, COMPUTE_ADD, BASIC_MAC_DONE, COMPUTE_LINEAR_ACTIVATION} state;
     always_ff @ (posedge clk) begin : mac_fsm

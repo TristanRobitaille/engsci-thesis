@@ -15,9 +15,9 @@ module divider (
 
     // Data in 2's complement format
     output logic busy, done, dbz, overflow,
-    input wire signed [N_COMP-1:0] dividend,
-    input wire signed [N_COMP-1:0] divisor,
-    output logic signed [N_COMP-1:0] output_q
+    input COMP_WORD_T dividend,
+    input COMP_WORD_T divisor,
+    output COMP_WORD_T output_q
 );
 
     logic [$clog2(N_COMP):0] count;

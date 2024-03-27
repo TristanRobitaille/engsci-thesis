@@ -14,6 +14,7 @@ MAX_LEN = 64
 NUM_TESTS = 10
 ABS_TOLERANCE = 15 # In fixed-point format
 
+#----- FUNCTIONS -----#
 async def test_run(dut):
     # Prepare MAC
     start_addr = 10
