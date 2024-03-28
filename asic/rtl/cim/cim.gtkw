@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Wed Mar 27 04:55:23 2024
+[*] Thu Mar 28 00:23:02 2024
 [*]
 [dumpfile] "dump.vcd"
-[dumpfile_mtime] "Wed Mar 27 04:54:52 2024"
-[dumpfile_size] 159099034
+[dumpfile_mtime] "Thu Mar 28 00:15:14 2024"
+[dumpfile_size] 142121801
 [savefile] "cim.gtkw"
-[timestart] 2918300000
+[timestart] 3662420000
 [size] 3440 1387
 [pos] 1680 53
-*-26.794107 3726400000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+*-24.094107 3732580000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -101,7 +101,7 @@ cim.mac_busy
 @24
 [color] 1
 cim.mac_len[6:0]
-@28
+@29
 [color] 1
 cim.mac_done
 @24
@@ -130,7 +130,6 @@ cim.softmax_inst.state[2:0]
 @28
 cim.softmax_inst.div_start
 cim.softmax_div_start
-@29
 cim.div_inst.start
 [pattern_trace] 1
 [pattern_trace] 0

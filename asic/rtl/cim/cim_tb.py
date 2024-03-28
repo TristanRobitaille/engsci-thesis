@@ -231,7 +231,6 @@ async def basic_test(dut):
 
     for _ in range (inf_steps[6].num_runs):
         await full_dense_broadcast_emulation(dut, inf_steps[6].tx_addr, inf_steps[6].rx_addr, inf_steps[6].len, inf_steps[6].num_cim) # MHSA QK_T dense
-
     await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
 
     await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
@@ -244,6 +243,12 @@ async def basic_test(dut):
     await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
 
     while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk) # Wait for softmax to complete
+    await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
+
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
+
+    for _ in range (inf_steps[9].num_runs):
+        await full_dense_broadcast_emulation(dut, inf_steps[9].tx_addr, inf_steps[9].rx_addr, inf_steps[9].len, inf_steps[9].num_cim) # MHSA QK_T dense
     await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
 
     await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)

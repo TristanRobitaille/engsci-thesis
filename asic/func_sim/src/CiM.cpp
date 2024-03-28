@@ -563,9 +563,9 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 if (IS_MY_MATRIX(gen_cnt_7b_2.get_cnt()-1) && (compute_in_progress == false)) { // Only if matrix being broadcast corresponds to mine (-1 because gen_cnt_7b_2 is incremented when the matrix starts broadcast)
                     MAC(mem_map.at(ENC_V_MULT_IN_MEM), /*in2 addr*/ mem_map.at(ENC_V_MEM), NUM_PATCHES+1, /*bias addr unused when NO_ACTIVATION*/ 0, INTERMEDIATE_RES, NO_ACTIVATION);
                     gen_reg_2b = 1; // Just a signal to avoid coming here every time FSM runs
-                    word_rec_cnt.reset();
                     if (id >= (NUM_CIM - NUM_HEADS) && sender_id == NUM_PATCHES) { is_ready = false; } // Need to explicitly stop master else it would send pistol_start and we would miss the last row of CiM #56-#63
                 }
+                word_rec_cnt.reset();
             } else if (compute_in_progress == false && gen_reg_2b == 1) { // Done with this row in the matrix
                 intermediate_res[mem_map.at(ENC_V_MULT_MEM) + gen_cnt_7b.get_cnt()] = computation_result;
                 gen_cnt_7b.inc();

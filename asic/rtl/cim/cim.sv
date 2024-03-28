@@ -498,7 +498,8 @@ module cim # (
 
                         POST_LAYERNORM_TRANSPOSE_STEP,
                         ENC_MHSA_Q_TRANSPOSE_STEP,
-                        ENC_MHSA_K_TRANSPOSE_STEP: begin
+                        ENC_MHSA_K_TRANSPOSE_STEP,
+                        ENC_POST_MHSA_TRANSPOSE_STEP: begin
                             is_ready_internal <= (word_snt_cnt >= data_len);
                             if (bus_op_read == PISTOL_START_OP) begin
                                 word_rec_cnt_rst_n <= RST;
@@ -614,6 +615,35 @@ module cim # (
                         end
 
                         ENC_MHSA_MULT_V_STEP: begin
+                            logic is_my_matrix = (ID >= gen_cnt_7b_2_cnt*NUM_HEADS) && (ID < (gen_cnt_7b_2_cnt+1)*NUM_HEADS);
+
+                            // Start MAC
+                            mac_start <= ~mac_busy && is_my_matrix && (word_rec_cnt >= (NUM_PATCHES+1));
+                            mac_start_addr1 <= mem_map[ENC_V_MULT_IN_MEM];
+                            mac_start_addr2 <= mem_map[ENC_V_MEM];
+                            mac_bias_addr <= 'd0;
+                            mac_len <= NUM_PATCHES+1;
+                            mac_activation <= NO_ACTIVATION;
+                            mac_param_type <= INTERMEDIATE_RES;
+
+                            // Save results
+                            int_res_access_signals.write_req_src[LOGIC_FSM] <= mac_done;
+                            int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[ENC_V_MULT_MEM] + {3'd0, gen_cnt_7b_cnt};
+                            int_res_access_signals.write_data[LOGIC_FSM] <= (mac_out[N_COMP-1]) ? (~mac_out_flipped[N_STORAGE-1:0]+1'd1) : mac_out[N_STORAGE-1:0];
+                            gen_cnt_7b_inc <= {6'd0, mac_done};
+                            gen_cnt_7b_rst_n <= (gen_cnt_7b_cnt == (NUM_PATCHES+'d1)) ? RST : RUN;
+
+                            // Pistol start
+                            if (bus_op_read == PISTOL_START_OP) begin
+                                gen_cnt_7b_2_rst_n <= RST;
+                                current_inf_step <= ENC_POST_MHSA_TRANSPOSE_STEP;
+                                $display("Finished MHSA MULT V step at time: %d", $time);
+                                word_rec_cnt_rst_n <= RST;
+                                is_ready_internal <= 1'b1;
+                            end else begin
+                                word_rec_cnt_rst_n <= (word_rec_cnt >= (NUM_PATCHES+1)) ? RST : RUN;
+                                is_ready_internal <= ~(ID >= (NUM_CIMS - NUM_HEADS) && (sender_id == NUM_PATCHES)) && mac_done;
+                            end
                         end
 
                         default: begin
