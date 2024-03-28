@@ -114,7 +114,7 @@ module cim # (
 
     // Divider module
     logic div_dbz, div_overflow, div_done, div_busy, div_start, logic_fsm_div_start;
-    logic [N_COMP-1:0] div_output_q, div_out_flipped, div_dividend, div_divisor, logic_fsm_div_dividend, logic_fsm_div_divisor;
+    COMP_WORD_T div_output_q, div_out_flipped, div_dividend, div_divisor, logic_fsm_div_dividend, logic_fsm_div_divisor;
     always_latch begin : div_input_MUX
         if (logic_fsm_div_start) begin
             div_dividend = logic_fsm_div_dividend;
@@ -125,34 +125,41 @@ module cim # (
         end else if (softmax_div_start) begin
             div_dividend = softmax_div_dividend;
             div_divisor = softmax_div_divisor;
+        end else if (mac_div_start) begin
+            div_dividend = mac_div_dividend;
+            div_divisor = mac_div_divisor;
         end
-        div_start = (logic_fsm_div_start || layernorm_div_start || softmax_div_start);
+        div_start = (logic_fsm_div_start || layernorm_div_start || softmax_div_start || mac_div_start);
     end
     always_ff @ (posedge clk) begin : div_assertions
-        assert ($countones({logic_fsm_div_start, layernorm_div_start, softmax_div_start}) <= 1) else $fatal("Multiple div_start signals are asserted simultaneously!");
+        assert ($countones({logic_fsm_div_start, layernorm_div_start, softmax_div_start, mac_div_start}) <= 1) else $fatal("Multiple div_start signals are asserted simultaneously!");
     end
     divider div_inst (.clk(clk), .rst_n(rst_n), .start(div_start), .dividend(div_dividend), .divisor(div_divisor), .done(div_done), .busy(div_busy), .output_q(div_output_q), .dbz(div_dbz), .overflow(div_overflow));
 
     // Sqrt module
     logic sqrt_start, sqrt_done, sqrt_busy, sqrt_neg_rad;
-    logic [N_COMP-1:0] sqrt_rad_q, sqrt_root_q;
+    COMP_WORD_T sqrt_rad_q, sqrt_root_q;
     sqrt sqrt_inst (.clk(clk), .rst_n(rst_n), .start(sqrt_start), .done(sqrt_done), .busy(sqrt_busy), .rad_q(sqrt_rad_q), .root_q(sqrt_root_q), .neg_rad(sqrt_neg_rad));
 
     // MAC module
-    logic mac_start, mac_done, mac_busy, mac_add_refresh, mac_mult_refresh;
+    logic mac_start, mac_done, mac_busy, mac_add_refresh, mac_mult_refresh, mac_exp_start, mac_div_start;
     logic [$clog2(MAC_MAX_LEN+1)-1:0] mac_len;
     TEMP_RES_ADDR_T mac_start_addr1, mac_start_addr2;
     PARAMS_ADDR_T mac_params_addr, mac_bias_addr;
-    logic [N_COMP-1:0] mac_out, mac_out_flipped, mac_add_input_q_1, mac_add_input_q_2;
-    logic [N_COMP-1:0] mac_mult_input_q_1, mac_mult_input_q_2;
+    COMP_WORD_T mac_out, mac_out_flipped, mac_add_input_q_1, mac_add_input_q_2;
+    COMP_WORD_T mac_mult_input_q_1, mac_mult_input_q_2;
+    COMP_WORD_T mac_div_dividend, mac_div_divisor;
+    COMP_WORD_T mac_exp_input;
     PARAM_TYPE_T mac_param_type;
     ACTIVATION_TYPE_T mac_activation;
     mac mac_inst (.clk(clk), .rst_n(rst_n), .start(mac_start), .done(mac_done), .busy(mac_busy), .param_type(mac_param_type), .len(mac_len), .activation(mac_activation),
                   .start_addr1(mac_start_addr1), .start_addr2(mac_start_addr2), .bias_addr(mac_bias_addr),
                   .params_access_signals(params_access_signals), .int_res_access_signals(int_res_access_signals),
                   .param_data(params_read_data), .int_res_data(int_res_read_data), .computation_result(mac_out),
-                  .add_input_q_1(mac_add_input_q_1), .add_input_q_2(mac_add_input_q_2), .add_output_q(add_output_q), .add_refresh(mac_add_refresh),
-                  .mult_input_q_1(mac_mult_input_q_1), .mult_input_q_2(mac_mult_input_q_2), .mult_output_q(mult_output_q), .mult_refresh(mac_mult_refresh));
+                  .add_input_q_1(mac_add_input_q_1), .add_input_q_2(mac_add_input_q_2), .add_output_q(add_output_q), .add_out_flipped(add_out_flipped), .add_refresh(mac_add_refresh),
+                  .mult_input_q_1(mac_mult_input_q_1), .mult_input_q_2(mac_mult_input_q_2), .mult_output_q(mult_output_q), .mult_refresh(mac_mult_refresh),
+                  .div_busy(div_busy), .div_done(div_done), .div_start(mac_div_start), .div_output_q(div_output_q), .div_dividend(mac_div_dividend), .div_divisor(mac_div_divisor),
+                  .exp_busy(exp_busy), .exp_done(exp_done), .exp_start(mac_exp_start), .exp_output_q(exp_output), .exp_input(mac_exp_input));
 
     // LayerNorm module
     logic layernorm_start, layernorm_half_select, layernorm_done, layernorm_busy, layernorm_add_refresh, layernorm_mult_refresh, layernorm_div_start;
@@ -187,8 +194,10 @@ module cim # (
     always_latch begin : exp_MUX
         if (softmax_exp_start) begin
             exp_input = softmax_exp_input;
+        end else if (mac_exp_start) begin
+            exp_input = mac_exp_input;
         end
-        exp_start = softmax_exp_start;
+        exp_start = (softmax_exp_start || mac_exp_start);
     end
     exp exp_inst (  .clk(clk), .rst_n(rst_n), .start(exp_start), .busy(exp_busy), .done(exp_done), .input_q(exp_input), .output_q(exp_output),
                     .adder_output(add_output_q), .adder_refresh(exp_add_refresh), .adder_input_1(exp_add_input_q_1), .adder_input_2(exp_add_input_q_2),
@@ -499,7 +508,9 @@ module cim # (
                         POST_LAYERNORM_TRANSPOSE_STEP,
                         ENC_MHSA_Q_TRANSPOSE_STEP,
                         ENC_MHSA_K_TRANSPOSE_STEP,
-                        ENC_POST_MHSA_TRANSPOSE_STEP: begin
+                        ENC_POST_MHSA_TRANSPOSE_STEP,
+                        ENC_PRE_MLP_TRANSPOSE_STEP,
+                        ENC_POST_DENSE_1_TRANSPOSE_STEP: begin
                             is_ready_internal <= (word_snt_cnt >= data_len);
                             if (bus_op_read == PISTOL_START_OP) begin
                                 word_rec_cnt_rst_n <= RST;
@@ -509,7 +520,8 @@ module cim # (
                             end
                         end
 
-                        ENC_MHSA_DENSE_STEP: begin
+                        ENC_MHSA_DENSE_STEP,
+                        MLP_DENSE_1_STEP: begin
                             word_rec_cnt_rst_n <= (word_rec_cnt >= EMB_DEPTH) ? RST : RUN;
                             gen_cnt_7b_rst_n <= RUN;
                             gen_cnt_7b_2_inc <= {6'd0, (mac_done && (gen_reg_2b == 'd2))};
@@ -527,7 +539,7 @@ module cim # (
                                     mac_param_type <= MODEL_PARAM;
                                     mac_activation <= LINEAR_ACTIVATION;
                                     gen_reg_2b <= (mac_done) ? 'd1 : 'd0;
-                                    mac_start <= (word_rec_cnt >= EMB_DEPTH) & (word_rec_cnt_rst_n == RUN);// & (gen_cnt_7b_2_cnt < EMB_DEPTH);
+                                    mac_start <= (word_rec_cnt >= EMB_DEPTH) & (word_rec_cnt_rst_n == RUN);
                                 end else if (gen_reg_2b == 1) begin
                                     int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[ENC_Q_MEM] + {3'd0, sender_id};
                                     mac_start_addr2 <= param_addr_map[ENC_K_DENSE_KERNEL_PARAMS].addr;
@@ -548,10 +560,31 @@ module cim # (
                                 end
                             end
 
+                            if (current_inf_step == MLP_DENSE_1_STEP) begin
+                                // Start MAC
+                                mac_start_addr1 <= mem_map[ENC_MLP_IN_MEM];
+                                mac_start_addr2 <= param_addr_map[ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_KERNEL_PARAMS].addr;
+                                mac_bias_addr <= param_addr_map[SINGLE_PARAMS].addr + ENC_MLP_DENSE_1_MLP_HEAD_DENSE_1_BIAS_OFF;
+                                mac_param_type <= MODEL_PARAM;
+                                mac_activation <= SWISH_ACTIVATION;
+                                mac_len <= EMB_DEPTH;
+                                mac_start <= (word_rec_cnt >= EMB_DEPTH) & (word_rec_cnt_rst_n == RUN) & (ID < MLP_DIM);
+
+                                // Save MAC results
+                                int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[ENC_MLP_DENSE1_MEM] + {3'd0, sender_id};
+                                int_res_access_signals.write_data[LOGIC_FSM] <= (mac_out[N_COMP-1]) ? (~mac_out_flipped[N_STORAGE-1:0]+1'd1) : mac_out[N_STORAGE-1:0];
+                                int_res_access_signals.write_req_src[LOGIC_FSM] <= mac_done;
+
+                                is_ready_internal <= mac_done;
+                            end
+
                             if (bus_op_read == PISTOL_START_OP) begin
                                 if (current_inf_step == ENC_MHSA_DENSE_STEP) begin
                                     current_inf_step <= ENC_MHSA_Q_TRANSPOSE_STEP;
                                     $display("Finished MHSA Dense step at time: %d", $time);
+                                end else if (current_inf_step == MLP_DENSE_1_STEP) begin
+                                    current_inf_step <= ENC_POST_DENSE_1_TRANSPOSE_STEP;
+                                    $display("Finished MLP Dense 1 step at time: %d", $time);
                                 end
                             end
                         end

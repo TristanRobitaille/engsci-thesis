@@ -10,6 +10,7 @@ from cocotb.triggers import RisingEdge
 
 #----- CONSTANTS -----#
 MAX_LEN = 64
+MAX_VAL_MAC = 2.5
 NUM_TESTS = 100
 params_file = h5py.File("../../../func_sim/reference_data/model_weights.h5", "r")
 
@@ -17,6 +18,7 @@ params_file = h5py.File("../../../func_sim/reference_data/model_weights.h5", "r"
 async def test_MAC(dut, activation=ActivationType.NO_ACTIVATION.value):
     # Prepare MAC
     expected_result = 0
+    compute_temp_fp = 0
     start_addr1 = random.randint(MAX_LEN, TEMP_RES_STORAGE_SIZE_CIM-1-MAX_LEN) # Starts at MAX_LEN to make it easier to correct for overlap
     start_addr2 = random.randint(MAX_LEN, PARAMS_STORAGE_SIZE_CIM-1-MAX_LEN)
     # Fix address if there's an overlap
@@ -36,9 +38,9 @@ async def test_MAC(dut, activation=ActivationType.NO_ACTIVATION.value):
 
     expected_result = 0
     for i in range(len):
-        in1 = random_input(-MAX_VAL, MAX_VAL)
-        in2 = random_input(-MAX_VAL, MAX_VAL)
-        bias = random_input(-MAX_VAL, MAX_VAL)
+        in1 = random_input(-MAX_VAL_MAC, MAX_VAL_MAC)
+        in2 = random_input(-MAX_VAL_MAC, MAX_VAL_MAC)
+        bias = random_input(-MAX_VAL_MAC, MAX_VAL_MAC)
         dut.int_res[start_addr1+i].value = BinToDec(in1, num_Q_storage)
         dut.int_res[start_addr2+i].value = BinToDec(in2, num_Q_storage)
         dut.params[param_addr_map["single_params"]["start_addr"]+0].value = BinToDec(bias, num_Q_storage) # patch_project_bias is at address 0 from the start of the single_params
@@ -46,6 +48,10 @@ async def test_MAC(dut, activation=ActivationType.NO_ACTIVATION.value):
 
     if activation == ActivationType.LINEAR_ACTIVATION.value:
         expected_result += FXnum(bias, num_Q_comp)
+    elif activation == ActivationType.SWISH_ACTIVATION.value:
+        compute_temp_fp = expected_result + FXnum(bias, num_Q_comp)
+        compute_temp_fp_neg = -compute_temp_fp
+        expected_result += compute_temp_fp / (FXnum(1, num_Q_comp) + compute_temp_fp_neg.exp())
 
     dut.start.value = 1
     await RisingEdge(dut.clk)
@@ -66,6 +72,12 @@ async def random_test(dut):
 
     for _ in range(NUM_TESTS):
         await test_MAC(dut, ActivationType.NO_ACTIVATION.value)
+    print("Done with NO_ACTIVATION tests")
 
     for _ in range(NUM_TESTS):
         await test_MAC(dut, ActivationType.LINEAR_ACTIVATION.value)
+    print("Done with LINEAR_ACTIVATION tests")
+
+    for _ in range(NUM_TESTS):
+        await test_MAC(dut, ActivationType.SWISH_ACTIVATION.value)
+    print("Done with SWISH_ACTIVATION tests")

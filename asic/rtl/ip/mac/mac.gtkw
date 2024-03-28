@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Wed Mar 20 05:41:23 2024
+[*] Thu Mar 28 19:41:27 2024
 [*]
 [dumpfile] "dump.vcd"
-[dumpfile_mtime] "Wed Mar 20 05:41:18 2024"
-[dumpfile_size] 76661
+[dumpfile_mtime] "Thu Mar 28 19:40:16 2024"
+[dumpfile_size] 121822
 [savefile] "mac.gtkw"
-[timestart] 368733
-[size] 3440 1387
-[pos] 1679 0
-*-10.799999 393500 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[timestart] 445190
+[size] 1680 997
+[pos] 0 0
+*-11.100000 456000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -43,18 +43,66 @@
 [sst_vpaned_height] 217
 @28
 clk
+top_mac.mac_inst.done
+top_mac.start
+@22
+top_mac.mac_inst.state[3:0]
+@28
+top_mac.param_type
+top_mac.activation[1:0]
+@420
+top_mac.mac_inst.computation_result[21:0]
+@200
+-
+@420
+[color] 5
+top_mac.mac_inst.add_input_q_1[21:0]
+[color] 5
+top_mac.mac_inst.add_input_q_2[21:0]
+[color] 5
+top_mac.mac_inst.add_output_q[21:0]
+@28
+[color] 5
+top_mac.mac_add_refresh
+@200
+-
+@420
+[color] 2
+top_mac.exp_input[21:0]
+[color] 2
+top_mac.exp_output_q[21:0]
+@28
+[color] 2
+top_mac.exp_start
+[color] 2
+top_mac.exp_done
+@420
+top_mac.exp.output_q[21:0]
+@28
+top_mac.exp.state[2:0]
+@420
+top_mac.exp.input_q[21:0]
+@200
+-
+@420
+[color] 1
+top_mac.div_dividend[21:0]
+[color] 1
+top_mac.div_divisor[21:0]
+[color] 1
+top_mac.div_output_q[21:0]
+@28
+[color] 1
+top_mac.div_start
+[color] 1
+top_mac.div_done
 @200
 -
 @24
-top_mac.mac_inst.state[2:0]
+top_mac.params_access_signals.addr_table[4][9:0]
 @28
-top_mac.mac_inst.done
-@25
-top_mac.mac_inst.add_input_q_1[21:0]
-top_mac.mac_inst.add_input_q_2[21:0]
-top_mac.mac_inst.add_output_q[21:0]
-top_mac.mac_inst.computation_result[21:0]
-top_mac.param_addr[9:0]
+(2)top_mac.params_access_signals.read_req_src[6:0]
+@420
 top_mac.param_data[15:0]
 [pattern_trace] 1
 [pattern_trace] 0

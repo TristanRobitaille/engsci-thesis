@@ -4,6 +4,8 @@
 - Uses external multiplier and adder modules to be shared with other modules in the CiM.
 - Implements three different activations: No activation (no bias), linear (adds bias to MAC result) and TODO: SWISH
 */
+`include "../../types.svh"
+
 module mac
 (
     input wire clk,
@@ -28,14 +30,26 @@ module mac
     output COMP_WORD_T computation_result,
 
     // Adder signals
-    input COMP_WORD_T add_output_q,
+    input COMP_WORD_T add_output_q, add_out_flipped,
     output COMP_WORD_T add_input_q_1, add_input_q_2,
     output logic add_refresh,
 
     // Multiplier signals
     input COMP_WORD_T mult_output_q,
     output COMP_WORD_T mult_input_q_1, mult_input_q_2,
-    output logic mult_refresh
+    output logic mult_refresh,
+
+    // Divide signals
+    input wire div_busy, div_done,
+    input COMP_WORD_T div_output_q,
+    output COMP_WORD_T div_dividend, div_divisor,
+    output logic div_start,
+
+    // Exponential signals
+    input wire exp_busy, exp_done,
+    input COMP_WORD_T exp_output_q,
+    output COMP_WORD_T exp_input,
+    output logic exp_start
 );
 
    /*----- LOGIC -----*/
@@ -43,7 +57,7 @@ module mac
     logic [$clog2(MAC_MAX_LEN+1)-1:0] index;
     COMP_WORD_T compute_temp, compute_temp_2; // TODO: Consider if it should be shared with other modules in CiM
 
-    enum logic [2:0] {IDLE, COMPUTE_MUL_IN1, COMPUTE_MUL_IN2, COMPUTE_MUL_OUT, COMPUTE_ADD, BASIC_MAC_DONE, COMPUTE_LINEAR_ACTIVATION} state;
+    enum logic [3:0] {IDLE, COMPUTE_MUL_IN1, COMPUTE_MUL_IN2, COMPUTE_MUL_OUT, COMPUTE_ADD, BASIC_MAC_DONE, COMPUTE_LINEAR_ACTIVATION, COMPUTE_SWISH_ACTIVATION, SWISH_ACTIVATION_FINAL_ADD} state;
     always_ff @ (posedge clk) begin : mac_fsm
         if (!rst_n) begin
             state <= IDLE;
@@ -105,16 +119,18 @@ module mac
                         computation_result <= add_output_q;
                         done <= 1'b1;
                         state <= IDLE;
-                    end else if (activation == LINEAR_ACTIVATION) begin
-                        params_access_signals.addr_table[MAC] <= (activation == LINEAR_ACTIVATION) ? bias_addr : params_access_signals.addr_table[MAC];
-                        params_access_signals.read_req_src[MAC] <= (activation == LINEAR_ACTIVATION);
-                        delay_signal <= {delay_signal[0], 1'b1}; // Need to delay signal by 1 cycle while we wait for bias
-                        state <= (delay_signal[1]) ? COMPUTE_LINEAR_ACTIVATION : BASIC_MAC_DONE;
-                    end else if (activation == SWISH_ACTIVATION) begin
-                        // TODO
-                        $fatal("SWISH activation not implementedin MAC unit");
+                    end else if (activation == LINEAR_ACTIVATION || activation == SWISH_ACTIVATION) begin
+                        params_access_signals.addr_table[MAC] <= bias_addr;
+                        params_access_signals.read_req_src[MAC] <= 1'b1;
+                        if (delay_signal[1]) begin
+                            delay_signal <= (activation == LINEAR_ACTIVATION) ? delay_signal : 'd0; // Reset signal
+                            state <= (activation == LINEAR_ACTIVATION) ? COMPUTE_LINEAR_ACTIVATION : COMPUTE_SWISH_ACTIVATION;
+                        end else begin
+                            delay_signal <= {delay_signal[0], 1'b1}; // Need to delay signal by 1 cycle while we wait for bias
+                        end
                     end
                 end
+
                 COMPUTE_LINEAR_ACTIVATION: begin
                     add_input_q_1 <= add_output_q;
                     add_input_q_2 <= {{(N_COMP-N_STORAGE){param_data[N_STORAGE-1]}}, param_data}; // Sign extend;
@@ -127,6 +143,37 @@ module mac
                         done <= 1'b1;
                         state <= IDLE;
                     end
+                end
+
+                COMPUTE_SWISH_ACTIVATION: begin
+                    // Start add
+                    compute_temp <= (params_access_signals.read_req_src[MAC]) ? add_output_q : compute_temp; // Capture result of MAC for last step
+                    add_input_q_1 <= (params_access_signals.read_req_src[MAC]) ? add_output_q : compute_temp; // For first add, use previous add_output_q and for the 2nd add, use div_output_q
+                    add_input_q_2 <= (params_access_signals.read_req_src[MAC]) ? {{(N_COMP-N_STORAGE){param_data[N_STORAGE-1]}}, param_data} : div_output_q; // Sign extend;
+                    params_access_signals.read_req_src[MAC] <= 1'b0;
+                    add_refresh <= params_access_signals.read_req_src[MAC] || div_done; // read_req_src and div_done are convenient pulses to start add
+
+                    // Save add result and start exp
+                    delay_signal <= {delay_signal[0], add_refresh}; // Need to delay signal by 1 cycle while we wait for add
+                    compute_temp_2 <= (delay_signal[1]) ? add_output_q : compute_temp_2;
+                    exp_start <= delay_signal[1];
+                    exp_input <= add_out_flipped;
+
+                    // Start div
+                    div_divisor <= exp_output_q + /* +1 */('d1 << Q);
+                    div_dividend <= compute_temp_2;
+                    div_start <= exp_done;
+
+                    // Done
+                    state <= (div_done) ? SWISH_ACTIVATION_FINAL_ADD : COMPUTE_SWISH_ACTIVATION;
+                end
+
+                SWISH_ACTIVATION_FINAL_ADD: begin
+                    computation_result <= add_output_q;
+                    delay_signal <= {delay_signal[0], add_refresh};
+                    add_refresh <= 1'b0;
+                    done <= (delay_signal[1]);
+                    state <= (delay_signal[1]) ? IDLE : SWISH_ACTIVATION_FINAL_ADD;
                 end
                 default: begin
                     $fatal("Invalid state in MAC FSM");

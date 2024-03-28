@@ -3,7 +3,6 @@
     - A pulse on start will initiate the computation process.
     - Signal done (pulse) is asserted when the computation is complete.
     - Signal busy is asserted during the computation process.
-    - Inputs must remain stable until done is asserted.
     - Computation time is 24 cycles.
 */
 module exp (
@@ -27,7 +26,7 @@ module exp (
 );
 
 // Signals
-COMP_WORD_T input_mapped, taylor_sum;
+COMP_WORD_T input_capture, input_mapped, taylor_sum;
 
 // Constants
 COMP_WORD_T ln2_inv, Taylor_mult_1, Taylor_mult_2, Taylor_mult_3;
@@ -60,6 +59,7 @@ always_ff @ (posedge clk) begin : exp_FSM
                 busy <= start;
                 done <= 0;
                 state <= (start) ? MULT : IDLE;
+                input_capture <= (start) ? input_q : input_capture;
                 next_state <= TAYLOR_TERM_1;
                 sub_state <= ITERATION_1_SUBSTATE;
                 mult_refresh <= start;
@@ -90,7 +90,7 @@ always_ff @ (posedge clk) begin : exp_FSM
             TAYLOR_TERM_1: begin // x_fractional * ln(2)
                 if (sub_state == ITERATION_1_SUBSTATE) begin // Square fractional part of input
                     input_mapped <= mult_output;
-                    mult_input_1 <= {{(N_COMP-Q){input_q[N_COMP-1]}}, mult_output[Q-1:0]}; // Grab fractional part
+                    mult_input_1 <= {{(N_COMP-Q){input_capture[N_COMP-1]}}, mult_output[Q-1:0]}; // Grab fractional part
                     mult_input_2 <= Taylor_mult_1;
                     next_state <= TAYLOR_TERM_1;
                     state <= MULT;
@@ -106,8 +106,8 @@ always_ff @ (posedge clk) begin : exp_FSM
             TAYLOR_TERM_2: begin
                 if (sub_state == ITERATION_1_SUBSTATE) begin // Square fractional part of input
                     taylor_sum <= adder_output;
-                    mult_input_1 <= {{(N_COMP-Q){input_q[N_COMP-1]}}, input_mapped[Q-1:0]}; // Grab fractional part (while keeping the sign)
-                    mult_input_2 <= {{(N_COMP-Q){input_q[N_COMP-1]}}, input_mapped[Q-1:0]}; // Grab fractional part (while keeping the sign)
+                    mult_input_1 <= {{(N_COMP-Q){input_capture[N_COMP-1]}}, input_mapped[Q-1:0]}; // Grab fractional part (while keeping the sign)
+                    mult_input_2 <= {{(N_COMP-Q){input_capture[N_COMP-1]}}, input_mapped[Q-1:0]}; // Grab fractional part (while keeping the sign)
                     mult_refresh <= 1;
                     adder_refresh <= 0;
                     state <= MULT;
@@ -131,8 +131,8 @@ always_ff @ (posedge clk) begin : exp_FSM
                 if (sub_state == ITERATION_1_SUBSTATE) begin // Square fractional part of input
                     taylor_sum <= adder_output;
                     mult_refresh <= 1;
-                    mult_input_1 <= {{(N_COMP-Q){input_q[N_COMP-1]}}, input_mapped[Q-1:0]}; // Grab fractional part (while keeping the sign)
-                    mult_input_2 <= {{(N_COMP-Q){input_q[N_COMP-1]}}, input_mapped[Q-1:0]}; // Grab fractional part (while keeping the sign)
+                    mult_input_1 <= {{(N_COMP-Q){input_capture[N_COMP-1]}}, input_mapped[Q-1:0]}; // Grab fractional part (while keeping the sign)
+                    mult_input_2 <= {{(N_COMP-Q){input_capture[N_COMP-1]}}, input_mapped[Q-1:0]}; // Grab fractional part (while keeping the sign)
                     state <= MULT;
                     next_state <= TAYLOR_TERM_3;
                     sub_state <= ITERATION_2_SUBSTATE;
@@ -153,7 +153,7 @@ always_ff @ (posedge clk) begin : exp_FSM
             end
 
             FINISH: begin
-                output_q <= (input_q[N_COMP-1]) ? (adder_output >> ~input_mapped[N_COMP-1:Q]) : (adder_output << input_mapped[N_COMP-1:Q]); // Multiply fractional part by integer part (2^floor(x/ln(2)))
+                output_q <= (input_capture[N_COMP-1]) ? (adder_output >> ~input_mapped[N_COMP-1:Q]) : (adder_output << input_mapped[N_COMP-1:Q]); // Multiply fractional part by integer part (2^floor(x/ln(2)))
                 done <= 1;
                 state <= IDLE;
             end

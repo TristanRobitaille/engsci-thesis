@@ -328,7 +328,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                         gen_reg_2b = 1;
                     } else if (gen_reg_2b == 1) {
                         intermediate_res[mem_map.at(ENC_MLP_OUT_MEM)+sender_id] = computation_result; // MLP Dense 2
-                        ADD(/*enc input*/ sender_id, mem_map.at(ENC_MLP_OUT_MEM)+sender_id, INTERMEDIATE_RES);  // Sum with encoder's input (next step in inference pipeline, but do it now)
+                        ADD(sender_id, mem_map.at(ENC_MLP_OUT_MEM)+sender_id, INTERMEDIATE_RES);  // Sum with encoder's input (next step in inference pipeline, but do it now)
                         gen_reg_2b = 3;
                         word_rec_cnt.reset();
                     }
@@ -673,7 +673,8 @@ void CiM::MAC(uint16_t in1_start_addr, uint16_t in2_start_addr, uint16_t len, ui
         _total_exp_cnt++;
         if ((-compute_temp_fp - compute_temp_fp_2) < _min_exp_input_arg) { _min_exp_input_arg = -compute_temp_fp - compute_temp_fp_2; }
         if ((-compute_temp_fp - compute_temp_fp_2) > _max_exp_input_arg) { _max_exp_input_arg = -compute_temp_fp - compute_temp_fp_2; }
-        compute_temp_fp = (compute_temp_fp + compute_temp_fp_2) * (large_fp_t { 1 } / (large_fp_t { 1 } + exp(-(compute_temp_fp + compute_temp_fp_2))));
+        compute_temp_fp = compute_temp_fp + compute_temp_fp_2;
+        compute_temp_fp = compute_temp_fp / (large_fp_t { 1 } + exp(-compute_temp_fp));
         break;
     case NO_ACTIVATION:
     default:
