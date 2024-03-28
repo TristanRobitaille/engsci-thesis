@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Thu Mar 28 00:23:02 2024
+[*] Thu Mar 28 04:28:48 2024
 [*]
 [dumpfile] "dump.vcd"
-[dumpfile_mtime] "Thu Mar 28 00:15:14 2024"
-[dumpfile_size] 142121801
+[dumpfile_mtime] "Thu Mar 28 04:27:46 2024"
+[dumpfile_size] 195294111
 [savefile] "cim.gtkw"
-[timestart] 3662420000
+[timestart] 6866054000
 [size] 3440 1387
 [pos] 1680 53
-*-24.094107 3732580000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+*-20.794106 6891210000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -40,7 +40,7 @@
 [sst_width] 299
 [signals_width] 347
 [sst_expanded] 1
-[sst_vpaned_height] 420
+[sst_vpaned_height] 388
 @28
 clk
 @24
@@ -101,7 +101,7 @@ cim.mac_busy
 @24
 [color] 1
 cim.mac_len[6:0]
-@29
+@28
 [color] 1
 cim.mac_done
 @24
@@ -115,6 +115,9 @@ cim.mac_inst.state[2:0]
 cim.mac_inst.computation_result[21:0]
 [color] 1
 cim.mac_out_flipped[21:0]
+@22
+[color] 1
+cim.mac_out[21:0]
 @200
 -
 @28
@@ -124,12 +127,5 @@ cim.softmax_start
 cim.softmax_done
 [color] 3
 cim.softmax_busy
-cim.softmax_inst.start
-@24
-cim.softmax_inst.state[2:0]
-@28
-cim.softmax_inst.div_start
-cim.softmax_div_start
-cim.div_inst.start
 [pattern_trace] 1
 [pattern_trace] 0

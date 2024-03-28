@@ -596,20 +596,17 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     gen_reg_2b = 2;
                     word_rec_cnt.reset();
                 }
-                if (sender_id == NUM_PATCHES-1) { is_ready = false; }
             } else if (compute_in_progress == false && gen_reg_2b == 2) {
                 intermediate_res[mem_map.at(ENC_MHSA_OUT_MEM) + sender_id] = computation_result;
-                gen_cnt_7b_2.inc();
                 gen_reg_2b = 0;
                 is_ready = true;
             }
 
             if (inst.op == PISTOL_START_OP) {
                 verify_computation(ENC_RES_SUM_1_VERIF, id, intermediate_res, mem_map.at(ENC_MHSA_OUT_MEM));
-                if (id == 0 && gen_cnt_7b_2.get_cnt() == (NUM_PATCHES+1)) { cout << "CiM: Finished encoder's post-MHSA Dense" << endl; }
+                if (id == 0) { cout << "CiM: Finished encoder's post-MHSA Dense" << endl; }
                 current_inf_step = ENC_LAYERNORM_2_1ST_HALF_STEP; // Start another round of LayerNorm
                 gen_reg_2b = 0;
-                gen_cnt_7b_2.reset();
             }
             break;
 

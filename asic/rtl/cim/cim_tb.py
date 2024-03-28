@@ -252,3 +252,14 @@ async def basic_test(dut):
     await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
 
     await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
+
+    await full_transpose_broadcast_emulation(dut, inf_steps[10].tx_addr, inf_steps[10].rx_addr, inf_steps[10].len, inf_steps[10].num_cim) # Post-MHSA transpose
+    while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+    await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
+
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
+
+    await full_dense_broadcast_emulation(dut, inf_steps[11].tx_addr, inf_steps[11].rx_addr, inf_steps[11].len, inf_steps[11].num_cim) # Post-MHSA dense
+    await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
+
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)

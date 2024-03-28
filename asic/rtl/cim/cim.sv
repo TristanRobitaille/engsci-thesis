@@ -32,7 +32,7 @@ module cim # (
                     .int_res_read_data(int_res_read_data), .params_read_data(params_read_data));
 
     // Bus
-    logic bus_drive, bus_drive_delayed;
+    logic bus_drive;
     logic [BUS_OP_WIDTH-1:0] bus_op_write;
     logic signed [2:0][N_STORAGE-1:0] bus_data_write;
     logic [$clog2(NUM_CIMS)-1:0] bus_target_or_sender_write;
@@ -516,7 +516,7 @@ module cim # (
                             gen_cnt_7b_2_rst_n <= (bus_op_read == PISTOL_START_OP) ? RST : RUN;
 
                             int_res_access_signals.write_req_src[LOGIC_FSM] <= mac_done;
-                            int_res_access_signals.write_data[LOGIC_FSM] <= (mac_out[N_COMP-1]) ? (~mac_out_flipped[N_STORAGE-1:0]+1'd1) : mac_out[N_STORAGE-1:0];;
+                            int_res_access_signals.write_data[LOGIC_FSM] <= (mac_out[N_COMP-1]) ? (~mac_out_flipped[N_STORAGE-1:0]+1'd1) : mac_out[N_STORAGE-1:0];
 
                             if (current_inf_step == ENC_MHSA_DENSE_STEP) begin
                                 if (gen_reg_2b == 0) begin
@@ -542,7 +542,7 @@ module cim # (
                                     mac_start <= ~mac_busy & ~mac_done;
                                 end else if (gen_reg_2b == 3) begin
                                     int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[ENC_V_MEM] + {3'd0, sender_id};
-                                    int_res_access_signals.write_data[LOGIC_FSM] <= (mac_out[N_COMP-1]) ? (~mac_out_flipped[N_STORAGE-1:0]+1'd1) : mac_out[N_STORAGE-1:0];;
+                                    int_res_access_signals.write_data[LOGIC_FSM] <= (mac_out[N_COMP-1]) ? (~mac_out_flipped[N_STORAGE-1:0]+1'd1) : mac_out[N_STORAGE-1:0];
                                     is_ready_internal <= 1'b1;
                                     gen_reg_2b <= 'd0;
                                 end
@@ -643,6 +643,39 @@ module cim # (
                             end else begin
                                 word_rec_cnt_rst_n <= (word_rec_cnt >= (NUM_PATCHES+1)) ? RST : RUN;
                                 is_ready_internal <= ~(ID >= (NUM_CIMS - NUM_HEADS) && (sender_id == NUM_PATCHES)) && mac_done;
+                            end
+                        end
+
+                        ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP: begin
+                            // Start MAC
+                            mac_start <= ~mac_busy && (word_rec_cnt >= EMB_DEPTH);
+                            mac_start_addr1 <= mem_map[ENC_DENSE_IN_MEM];
+                            mac_start_addr2 <= param_addr_map[ENC_COMB_HEAD_KERNEL_PARAMS].addr;
+                            mac_bias_addr <= param_addr_map[SINGLE_PARAMS].addr+ENC_COMB_HEAD_BIAS_OFF;
+                            mac_len <= EMB_DEPTH;
+                            mac_activation <= LINEAR_ACTIVATION;
+                            mac_param_type <= MODEL_PARAM;
+                            word_rec_cnt_rst_n <= (word_rec_cnt >= EMB_DEPTH) ? RST : RUN;
+
+                            // Read encoder's input for residual connection
+                            int_res_access_signals.read_req_src[LOGIC_FSM] <= mac_done; // mac_done is a convenient pulse signal
+                            int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[ENC_MHSA_OUT_MEM] + {3'd0, sender_id};
+                            gen_reg_2b <= {gen_reg_2b[0], int_res_access_signals.read_req_src[LOGIC_FSM]};
+
+                            // Sum with encoder's input as a residual connection
+                            cim_add_refresh <= gen_reg_2b[1];
+                            cim_add_input_q_1 <= mac_out;
+                            cim_add_input_q_2 <= {{(N_COMP-N_STORAGE){int_res_read_data[N_STORAGE-1]}}, int_res_read_data}; // Sign extend
+
+                            // Post-add cleanup
+                            int_res_access_signals.write_req_src[LOGIC_FSM] <= cim_add_refresh; // add_refresh is a convenient pulse signal
+                            int_res_access_signals.write_data[LOGIC_FSM] <= (add_output_q[N_COMP-1]) ? (~add_out_flipped[N_STORAGE-1:0]+1'd1) : add_output_q[N_STORAGE-1:0];
+                            is_ready_internal <= cim_add_refresh;
+
+                            if (bus_op_read == PISTOL_START_OP) begin
+                                $display("Finished post-MHSA dense step at time: %d", $time);
+                                gen_reg_2b <= 'd0;
+                                current_inf_step <= ENC_LAYERNORM_2_1ST_HALF_STEP;
                             end
                         end
 
