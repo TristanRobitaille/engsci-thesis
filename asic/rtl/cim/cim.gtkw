@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Thu Mar 28 20:53:44 2024
+[*] Fri Mar 29 21:58:35 2024
 [*]
 [dumpfile] "dump.vcd"
-[dumpfile_mtime] "Thu Mar 28 20:50:21 2024"
-[dumpfile_size] 314327731
+[dumpfile_mtime] "Fri Mar 29 21:40:24 2024"
+[dumpfile_size] 217550428
 [savefile] "cim.gtkw"
-[timestart] 7242333000
-[size] 3440 1387
-[pos] 1680 53
-*-19.594105 7244020000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[timestart] 7678248000
+[size] 1680 997
+[pos] 0 53
+*-20.494106 7682510000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -38,9 +38,9 @@
 [markername] ZZ
 [treeopen] cim.
 [sst_width] 299
-[signals_width] 347
+[signals_width] 318
 [sst_expanded] 1
-[sst_vpaned_height] 388
+[sst_vpaned_height] 335
 @28
 clk
 @24
@@ -112,7 +112,6 @@ cim.mac_inst.param_data[15:0]
 cim.mac_inst.computation_result[21:0]
 [color] 1
 cim.mac_out_flipped[21:0]
-@421
 [color] 1
 cim.mac_out[21:0]
 @200
@@ -124,5 +123,40 @@ cim.softmax_start
 cim.softmax_done
 [color] 3
 cim.softmax_busy
+@200
+-
+@28
+[color] 5
+cim.layernorm_start
+[color] 5
+cim.layernorm_done
+@200
+-
+@29
+cim.start_inst_fill
+@800022
+cim.layernorm_inst.int_res_access_signals.read_req_src[6:0]
+@28
+(0)cim.layernorm_inst.int_res_access_signals.read_req_src[6:0]
+(1)cim.layernorm_inst.int_res_access_signals.read_req_src[6:0]
+(2)cim.layernorm_inst.int_res_access_signals.read_req_src[6:0]
+(3)cim.layernorm_inst.int_res_access_signals.read_req_src[6:0]
+(4)cim.layernorm_inst.int_res_access_signals.read_req_src[6:0]
+(5)cim.layernorm_inst.int_res_access_signals.read_req_src[6:0]
+(6)cim.layernorm_inst.int_res_access_signals.read_req_src[6:0]
+@1001200
+-group_end
+@800022
+cim.layernorm_inst.int_res_access_signals.write_req_src[6:0]
+@28
+(0)cim.layernorm_inst.int_res_access_signals.write_req_src[6:0]
+(1)cim.layernorm_inst.int_res_access_signals.write_req_src[6:0]
+(2)cim.layernorm_inst.int_res_access_signals.write_req_src[6:0]
+(3)cim.layernorm_inst.int_res_access_signals.write_req_src[6:0]
+(4)cim.layernorm_inst.int_res_access_signals.write_req_src[6:0]
+(5)cim.layernorm_inst.int_res_access_signals.write_req_src[6:0]
+(6)cim.layernorm_inst.int_res_access_signals.write_req_src[6:0]
+@1001200
+-group_end
 [pattern_trace] 1
 [pattern_trace] 0

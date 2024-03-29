@@ -462,7 +462,11 @@ module cim # (
                         ENC_LAYERNORM_3_1ST_HALF_STEP: begin
                             layernorm_start <= (word_rec_cnt == EMB_DEPTH);
                             word_rec_cnt_rst_n <= (word_rec_cnt == EMB_DEPTH) ? RST : RUN;
-                            is_ready_internal <= layernorm_done || ((bus_target_or_sender_read == ID) & (word_snt_cnt >= NUM_PATCHES+1)); // If I'm the one sending and I've sent everything (//TODO: Check if this makes sense...what if I've CiM #63)
+                            if (current_inf_step == ENC_LAYERNORM_3_1ST_HALF_STEP) begin
+                                is_ready_internal <= layernorm_done || ((bus_target_or_sender_read == ID) & (word_snt_cnt >= 1)); // If I'm the one sending and I've sent everything (//TODO: Check if this makes sense...what if I've CiM #63)
+                            end else begin
+                                is_ready_internal <= layernorm_done || ((bus_target_or_sender_read == ID) & (word_snt_cnt >= NUM_PATCHES+1)); // If I'm the one sending and I've sent everything (//TODO: Check if this makes sense...what if I've CiM #63)
+                            end
 
                             if (current_inf_step == ENC_LAYERNORM_1_1ST_HALF_STEP)      layernorm_start_addr <= mem_map[ENC_LN1_1ST_HALF_MEM];
                             else if (current_inf_step == ENC_LAYERNORM_2_1ST_HALF_STEP) layernorm_start_addr <= mem_map[ENC_LN2_1ST_HALF_MEM];
@@ -477,7 +481,13 @@ module cim # (
                         ENC_LAYERNORM_1_2ND_HALF_STEP,
                         ENC_LAYERNORM_2_2ND_HALF_STEP,
                         ENC_LAYERNORM_3_2ND_HALF_STEP: begin
-                            logic all_data_received = (word_rec_cnt == NUM_PATCHES+1) || ((word_rec_cnt == 1) && (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP));
+                            logic all_data_received;
+                            if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) begin
+                                all_data_received = (word_rec_cnt == 1) && (word_snt_cnt >= NUM_PATCHES+1);
+                            end else begin
+                                all_data_received = (word_rec_cnt == NUM_PATCHES+1);
+                            end
+
                             layernorm_start <= all_data_received;
                             is_ready_internal <= (layernorm_done | is_ready_internal);
                             layernorm_half_select <= SECOND_HALF;
@@ -510,7 +520,8 @@ module cim # (
                         ENC_MHSA_K_TRANSPOSE_STEP,
                         ENC_POST_MHSA_TRANSPOSE_STEP,
                         ENC_PRE_MLP_TRANSPOSE_STEP,
-                        ENC_POST_DENSE_1_TRANSPOSE_STEP: begin
+                        ENC_POST_DENSE_1_TRANSPOSE_STEP,
+                        MLP_HEAD_PRE_DENSE_1_TRANSPOSE_STEP: begin
                             is_ready_internal <= (word_snt_cnt >= data_len);
                             if (bus_op_read == PISTOL_START_OP) begin
                                 word_rec_cnt_rst_n <= RST;
@@ -521,8 +532,8 @@ module cim # (
                         end
 
                         ENC_MHSA_DENSE_STEP,
-                        MLP_DENSE_1_STEP: begin
-                            word_rec_cnt_rst_n <= (word_rec_cnt >= EMB_DEPTH) ? RST : RUN;
+                        MLP_DENSE_1_STEP,
+                        MLP_DENSE_2_AND_SUM_STEP: begin
                             gen_cnt_7b_rst_n <= RUN;
                             gen_cnt_7b_2_inc <= {6'd0, (mac_done && (gen_reg_2b == 'd2))};
                             gen_cnt_7b_2_rst_n <= (bus_op_read == PISTOL_START_OP) ? RST : RUN;
@@ -531,6 +542,7 @@ module cim # (
                             int_res_access_signals.write_data[LOGIC_FSM] <= (mac_out[N_COMP-1]) ? (~mac_out_flipped[N_STORAGE-1:0]+1'd1) : mac_out[N_STORAGE-1:0];
 
                             if (current_inf_step == ENC_MHSA_DENSE_STEP) begin
+                                word_rec_cnt_rst_n <= (word_rec_cnt >= EMB_DEPTH) ? RST : RUN;
                                 if (gen_reg_2b == 0) begin
                                     mac_start_addr1 <= mem_map[ENC_QVK_IN_MEM];
                                     mac_start_addr2 <= param_addr_map[ENC_Q_DENSE_KERNEL_PARAMS].addr;
@@ -558,9 +570,8 @@ module cim # (
                                     is_ready_internal <= 1'b1;
                                     gen_reg_2b <= 'd0;
                                 end
-                            end
-
-                            if (current_inf_step == MLP_DENSE_1_STEP) begin
+                            end else if (current_inf_step == MLP_DENSE_1_STEP) begin
+                                word_rec_cnt_rst_n <= (word_rec_cnt >= EMB_DEPTH) ? RST : RUN;
                                 // Start MAC
                                 mac_start_addr1 <= mem_map[ENC_MLP_IN_MEM];
                                 mac_start_addr2 <= param_addr_map[ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_KERNEL_PARAMS].addr;
@@ -576,6 +587,31 @@ module cim # (
                                 int_res_access_signals.write_req_src[LOGIC_FSM] <= mac_done;
 
                                 is_ready_internal <= mac_done;
+                            end else if (current_inf_step == MLP_DENSE_2_AND_SUM_STEP) begin
+                                word_rec_cnt_rst_n <= (word_rec_cnt >= MLP_DIM) ? RST : RUN;
+
+                                // Start MAC
+                                mac_start_addr1 <= mem_map[ENC_MLP_DENSE2_IN_MEM];
+                                mac_start_addr2 <= param_addr_map[ENC_MLP_DENSE_2_KERNEL_PARAMS].addr;
+                                mac_bias_addr <= param_addr_map[SINGLE_PARAMS].addr + ENC_MLP_DENSE_2_BIAS_OFF;
+                                mac_param_type <= MODEL_PARAM;
+                                mac_activation <= LINEAR_ACTIVATION;
+                                mac_len <= MLP_DIM;
+                                mac_start <= (word_rec_cnt >= MLP_DIM) & (word_rec_cnt_rst_n == RUN);
+
+                                // Start add
+                                int_res_access_signals.addr_table[LOGIC_FSM] <= {3'd0, sender_id}; // Residual connection with encoder input
+                                int_res_access_signals.read_req_src[LOGIC_FSM] <= mac_done;
+                                gen_reg_2b <= (mac_done || cim_add_refresh || is_ready_internal) ? (gen_reg_2b + 'd1) : gen_reg_2b;
+                                cim_add_input_q_1 <= mac_out;
+                                cim_add_input_q_2 <= {{(N_COMP-N_STORAGE){int_res_read_data[N_STORAGE-1]}}, int_res_read_data}; // Sign extend
+                                cim_add_refresh <= (gen_reg_2b == 'd1);
+
+                                // Save MAC results
+                                int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[ENC_MLP_OUT_MEM] + {3'd0, sender_id};
+                                int_res_access_signals.write_data[LOGIC_FSM] <= (add_output_q[N_COMP-1]) ? (~add_out_flipped[N_STORAGE-1:0]+1'd1) : add_output_q[N_STORAGE-1:0];
+                                int_res_access_signals.write_req_src[LOGIC_FSM] <= (gen_reg_2b == 'd2);
+                                is_ready_internal <= (gen_reg_2b == 'd2);
                             end
 
                             if (bus_op_read == PISTOL_START_OP) begin
@@ -585,6 +621,9 @@ module cim # (
                                 end else if (current_inf_step == MLP_DENSE_1_STEP) begin
                                     current_inf_step <= ENC_POST_DENSE_1_TRANSPOSE_STEP;
                                     $display("Finished MLP Dense 1 step at time: %d", $time);
+                                end else if (current_inf_step == MLP_DENSE_2_AND_SUM_STEP) begin
+                                    current_inf_step <= ENC_LAYERNORM_3_1ST_HALF_STEP;
+                                    $display("Finished MLP Dense 2 and sum step at time: %d", $time);
                                 end
                             end
                         end

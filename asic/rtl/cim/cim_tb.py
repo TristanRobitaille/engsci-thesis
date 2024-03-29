@@ -276,12 +276,36 @@ async def basic_test(dut):
 
     await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
 
-    await full_dense_broadcast_emulation(dut, inf_steps[14].tx_addr, inf_steps[14].rx_addr, inf_steps[14].len, inf_steps[14].num_cim) # Post-LayerNorm #2
+    await full_transpose_broadcast_emulation(dut, inf_steps[14].tx_addr, inf_steps[14].rx_addr, inf_steps[14].len, inf_steps[14].num_cim) # Post-LayerNorm #2
+    while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
     await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
 
     await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
 
     await full_dense_broadcast_emulation(dut, inf_steps[15].tx_addr, inf_steps[15].rx_addr, inf_steps[15].len, inf_steps[15].num_cim) # MLP dense
+    await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
+
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
+
+    await full_transpose_broadcast_emulation(dut, inf_steps[16].tx_addr, inf_steps[16].rx_addr, inf_steps[16].len, inf_steps[16].num_cim) # Post-Dense 1 transpose
+    while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+    await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
+
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
+
+    await full_dense_broadcast_emulation(dut, inf_steps[17].tx_addr, inf_steps[17].rx_addr, inf_steps[17].len, inf_steps[17].num_cim) # MLP dense 2 and residual connection sum
+    await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
+
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
+
+    await full_transpose_broadcast_emulation(dut, inf_steps[18].tx_addr, inf_steps[18].rx_addr, inf_steps[18].len, inf_steps[18].num_cim) # Pre-LayerNorm 3 transpose
+    while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+    await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
+
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
+
+    await full_transpose_broadcast_emulation(dut, inf_steps[19].tx_addr, inf_steps[19].rx_addr, inf_steps[19].len, inf_steps[19].num_cim) # Intra LayerNorm 3 transpose
+    while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
     await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
 
     await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
