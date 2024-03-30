@@ -521,7 +521,8 @@ module cim # (
                         ENC_POST_MHSA_TRANSPOSE_STEP,
                         ENC_PRE_MLP_TRANSPOSE_STEP,
                         ENC_POST_DENSE_1_TRANSPOSE_STEP,
-                        MLP_HEAD_PRE_DENSE_1_TRANSPOSE_STEP: begin
+                        MLP_HEAD_PRE_DENSE_1_TRANSPOSE_STEP,
+                        MLP_HEAD_PRE_DENSE_2_TRANSPOSE_STEP: begin
                             is_ready_internal <= (word_snt_cnt >= data_len);
                             if (bus_op_read == PISTOL_START_OP) begin
                                 word_rec_cnt_rst_n <= RST;
@@ -533,7 +534,9 @@ module cim # (
 
                         ENC_MHSA_DENSE_STEP,
                         MLP_DENSE_1_STEP,
-                        MLP_DENSE_2_AND_SUM_STEP: begin
+                        MLP_DENSE_2_AND_SUM_STEP,
+                        MLP_HEAD_DENSE_1_STEP,
+                        MLP_HEAD_DENSE_2_STEP: begin
                             gen_cnt_7b_rst_n <= RUN;
                             gen_cnt_7b_2_inc <= {6'd0, (mac_done && (gen_reg_2b == 'd2))};
                             gen_cnt_7b_2_rst_n <= (bus_op_read == PISTOL_START_OP) ? RST : RUN;
@@ -611,7 +614,44 @@ module cim # (
                                 int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[ENC_MLP_OUT_MEM] + {3'd0, sender_id};
                                 int_res_access_signals.write_data[LOGIC_FSM] <= (add_output_q[N_COMP-1]) ? (~add_out_flipped[N_STORAGE-1:0]+1'd1) : add_output_q[N_STORAGE-1:0];
                                 int_res_access_signals.write_req_src[LOGIC_FSM] <= (gen_reg_2b == 'd2);
+                                
                                 is_ready_internal <= (gen_reg_2b == 'd2);
+                            end else if (current_inf_step == MLP_HEAD_DENSE_1_STEP) begin
+                                word_rec_cnt_rst_n <= (word_rec_cnt >= EMB_DEPTH) ? RST : RUN;
+
+                                // Start MAC
+                                mac_start_addr1 <= mem_map[MLP_HEAD_DENSE_1_IN_MEM];
+                                mac_start_addr2 <= param_addr_map[ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_KERNEL_PARAMS].addr;
+                                mac_bias_addr <= param_addr_map[SINGLE_PARAMS].addr + ENC_MLP_DENSE_1_MLP_HEAD_DENSE_1_BIAS_OFF;
+                                mac_param_type <= MODEL_PARAM;
+                                mac_activation <= SWISH_ACTIVATION;
+                                mac_len <= EMB_DEPTH;
+                                mac_start <= (word_rec_cnt >= EMB_DEPTH) & (word_rec_cnt_rst_n == RUN) & (ID < MLP_DIM); // TODO: Here, we need ID >= MLP_DIM but for testing we use ID < MLP_DIM
+
+                                // Save MAC results
+                                int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[MLP_HEAD_DENSE_1_OUT_MEM] + {3'd0, sender_id};
+                                int_res_access_signals.write_data[LOGIC_FSM] <= (mac_out[N_COMP-1]) ? (~mac_out_flipped[N_STORAGE-1:0]+1'd1) : mac_out[N_STORAGE-1:0];
+                                int_res_access_signals.write_req_src[LOGIC_FSM] <= mac_done;
+
+                                is_ready_internal <= mac_done;                                
+                            end else if (current_inf_step == MLP_HEAD_DENSE_2_STEP) begin
+                                word_rec_cnt_rst_n <= (word_rec_cnt >= MLP_DIM) ? RST : RUN;
+
+                                // Start MAC
+                                mac_start_addr1 <= mem_map[MLP_HEAD_DENSE_2_IN_MEM];
+                                mac_start_addr2 <= param_addr_map[ENC_MLP_DENSE_2_KERNEL_PARAMS].addr;
+                                mac_bias_addr <= param_addr_map[SINGLE_PARAMS].addr + MLP_HEAD_DENSE_2_BIAS_OFF;
+                                mac_param_type <= MODEL_PARAM;
+                                mac_activation <= LINEAR_ACTIVATION;
+                                mac_len <= MLP_DIM;
+                                mac_start <= (word_rec_cnt >= MLP_DIM) & (word_rec_cnt_rst_n == RUN);
+
+                                // Save MAC results
+                                int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[MLP_HEAD_DENSE_2_OUT_MEM];
+                                int_res_access_signals.write_data[LOGIC_FSM] <= (mac_out[N_COMP-1]) ? (~mac_out_flipped[N_STORAGE-1:0]+1'd1) : mac_out[N_STORAGE-1:0];
+                                int_res_access_signals.write_req_src[LOGIC_FSM] <= mac_done;
+
+                                is_ready_internal <= mac_done;
                             end
 
                             if (bus_op_read == PISTOL_START_OP) begin
@@ -624,6 +664,12 @@ module cim # (
                                 end else if (current_inf_step == MLP_DENSE_2_AND_SUM_STEP) begin
                                     current_inf_step <= ENC_LAYERNORM_3_1ST_HALF_STEP;
                                     $display("Finished MLP Dense 2 and sum step at time: %d", $time);
+                                end else if (current_inf_step == MLP_HEAD_DENSE_1_STEP) begin
+                                    current_inf_step <= MLP_HEAD_PRE_DENSE_2_TRANSPOSE_STEP;
+                                    $display("Finished MLP Head Dense 1 step at time: %d", $time);
+                                end else if (current_inf_step == MLP_HEAD_DENSE_2_STEP) begin
+                                    current_inf_step <= MLP_HEAD_PRE_SOFTMAX_TRANSPOSE_STEP;
+                                    $display("Finished MLP Head Dense 2 step at time: %d", $time);
                                 end
                             end
                         end
@@ -751,6 +797,33 @@ module cim # (
                             end
                         end
 
+                        MLP_HEAD_PRE_SOFTMAX_TRANSPOSE_STEP: begin
+                            is_ready_internal <= (word_snt_cnt >= 'd1);
+                            current_inf_step <= (word_rec_cnt == NUM_SLEEP_STAGES) ? MLP_HEAD_SOFTMAX_STEP : MLP_HEAD_PRE_SOFTMAX_TRANSPOSE_STEP;
+                        end
+
+                        MLP_HEAD_SOFTMAX_STEP: begin
+                            is_ready_internal <= 1'b0;
+                            gen_cnt_7b_2_rst_n <= RST;
+
+                            // Start softmax
+                            softmax_len <= NUM_SLEEP_STAGES;
+                            softmax_start_addr <= mem_map[MLP_HEAD_SOFTMAX_IN_MEM];
+                            softmax_start <= (gen_cnt_7b_2_cnt < NUM_HEADS) && (ID < NUM_SLEEP_STAGES) && (~softmax_busy);
+
+                            // Change step
+                            if (softmax_done) begin
+                                current_inf_step <= (ID == 0) ? POST_SOFTMAX_DIVIDE_STEP : INFERENCE_COMPLETE;
+                                $display("Finished MLP Head Softmax step at time: %d", $time);
+                            end
+                        end
+
+                        POST_SOFTMAX_DIVIDE_STEP: begin
+                        end
+
+                        INFERENCE_COMPLETE: begin
+                        end
+                        
                         default: begin
                             $fatal("Invalid current_inf_step value in CIM_INFERENCE_RUNNING state");
                         end

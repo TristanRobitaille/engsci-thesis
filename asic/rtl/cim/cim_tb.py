@@ -309,3 +309,31 @@ async def basic_test(dut):
     await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
 
     await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
+
+    await full_transpose_broadcast_emulation(dut, inf_steps[20].tx_addr, inf_steps[20].rx_addr, inf_steps[20].len, inf_steps[20].num_cim) # MLP head pre-dense #1 transpose
+    while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+    await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
+
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
+
+    await full_dense_broadcast_emulation(dut, inf_steps[21].tx_addr, inf_steps[21].rx_addr, inf_steps[21].len, inf_steps[21].num_cim) # MLP head dense #1
+    await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
+
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
+
+    await full_transpose_broadcast_emulation(dut, inf_steps[22].tx_addr, inf_steps[22].rx_addr, inf_steps[22].len, inf_steps[22].num_cim) # Pre-dense #2 transpose
+    while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+    await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
+
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
+
+    await full_dense_broadcast_emulation(dut, inf_steps[23].tx_addr, inf_steps[23].rx_addr, inf_steps[23].len, inf_steps[23].num_cim) # Dense #2
+    await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
+
+    await cocotb.triggers.ClockCycles(dut.clk, INTERSTEP_CLOCK_CYCLES)
+
+    await full_transpose_broadcast_emulation(dut, inf_steps[24].tx_addr, inf_steps[24].rx_addr, inf_steps[24].len, inf_steps[24].num_cim) # Pre-softmax transpose
+    while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
+    await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
+
+    await cocotb.triggers.ClockCycles(dut.clk, 1000)
