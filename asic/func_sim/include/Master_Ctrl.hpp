@@ -85,7 +85,7 @@ class Master_Ctrl {
             MlpDimVect_t enc_mlp_dense_1_bias;
             EncMlpDimxEmbDepthMat_t enc_mlp_dense_2_kernel;
             EmbDepthVect_t enc_mlp_dense_2_bias;
-            float enc_mhsa_sqrt_num_heads;
+            float enc_mhsa_inv_sqrt_num_heads;
 
             // MLP head
             MlpDimVect_t mlp_head_dense_1_bias;

@@ -33,7 +33,7 @@ ext_mem_param_map = { # Starting row of each layer's parameter in external memor
     "mhsa_combine_head_dense_bias":     482,
     "mlp_head_dense_1_bias":            483,
     "mlp_head_softmax_bias":            483, # Offest by MLP_DIM
-    "sqrt_num_heads":                   483, # Offest by MLP_DIM + NUM_SLEEP_STAGES
+    "inv_sqrt_num_heads":               483, # Offest by MLP_DIM + NUM_SLEEP_STAGES
     "mlp_dense_2_bias":                 484,
     "enc_layernorm_1_beta":             485,
     "enc_layernorm_1_gamma":            486,
@@ -84,7 +84,7 @@ def read_param_from_ext_mem(dut):
         elif (row == ext_mem_param_map["mhsa_combine_head_dense_bias"]):                                                    dut.ext_mem_data.value = BinToDec(params("mhsa_combine_head_dense_bias", params_file)[col], num_Q_storage) # MHSA combine head dense bias
         elif (row == ext_mem_param_map["mlp_head_dense_1_bias"] and (col<32)):                                              dut.ext_mem_data.value = BinToDec(params("mlp_head_dense_1_bias", params_file)[col], num_Q_storage) # MLP head dense 1 bias
         elif (row == ext_mem_param_map["mlp_head_softmax_bias"] and (32<=col<37)):                                          dut.ext_mem_data.value = BinToDec(params("mlp_head_softmax_bias", params_file)[col - 32], num_Q_storage) # MLP head softmax bias
-        elif (row == ext_mem_param_map["sqrt_num_heads"] and (col==37)):                                                    dut.ext_mem_data.value = BinToDec(params("sqrt_num_heads", params_file), num_Q_storage) # sqrt(# heads)
+        elif (row == ext_mem_param_map["inv_sqrt_num_heads"] and (col==37)):                                                dut.ext_mem_data.value = BinToDec(params("inv_sqrt_num_heads", params_file), num_Q_storage) # sqrt(# heads)
         elif (row == ext_mem_param_map["mlp_dense_2_bias"]):                                                                dut.ext_mem_data.value = BinToDec(params("mlp_dense_2_bias", params_file)[col], num_Q_storage) # Encoder MLP dense 2 bias
         elif (row == ext_mem_param_map["enc_layernorm_1_beta"]):                                                            dut.ext_mem_data.value = BinToDec(params("enc_layernorm_1_beta", params_file)[col], num_Q_storage) # Encoder LayerNorm 1 beta
         elif (row == ext_mem_param_map["enc_layernorm_1_gamma"]):                                                           dut.ext_mem_data.value = BinToDec(params("enc_layernorm_1_gamma", params_file)[col], num_Q_storage) # Encoder LayerNorm 1 gamma

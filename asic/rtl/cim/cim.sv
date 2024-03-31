@@ -92,8 +92,8 @@ module cim # (
     adder add_inst (.clk(clk), .rst_n(rst_n), .refresh(add_refresh), .overflow(add_overflow), .input_q_1(add_input_q_1), .input_q_2(add_input_q_2), .output_q(add_output_q));
 
     // Multiplier module
-    logic mult_refresh, mul_overflow;
-    COMP_WORD_T mult_input_q_1, mult_input_q_2, mult_output_q, mult_out_flipped;
+    logic mult_refresh, logic_fsm_mul_refresh, mul_overflow;
+    COMP_WORD_T mult_input_q_1, mult_input_q_2, logic_fsm_mul_input_1, logic_fsm_mul_input_2, mult_output_q, mult_out_flipped;
     always_latch begin : mult_input_MUX
         if (layernorm_mult_refresh) begin
             mult_input_q_1 = layernorm_mult_input_q_1;
@@ -104,11 +104,14 @@ module cim # (
         end else if (exp_mult_refresh) begin
             mult_input_q_1 = exp_mult_input_1;
             mult_input_q_2 = exp_mult_input_2;
+        end else if (logic_fsm_mul_refresh) begin
+            mult_input_q_1 = logic_fsm_mul_input_1;
+            mult_input_q_2 = logic_fsm_mul_input_2;
         end
-        mult_refresh = (layernorm_mult_refresh || mac_mult_refresh || exp_mult_refresh);
+        mult_refresh = (layernorm_mult_refresh || mac_mult_refresh || exp_mult_refresh || logic_fsm_mul_refresh);
     end
     always_ff @ (posedge clk) begin : mult_assertions
-        assert ($countones({layernorm_mult_refresh, mac_mult_refresh, exp_mult_refresh}) <= 1) else $fatal("Multiple mult_refresh signals are asserted simultaneously!");
+        assert ($countones({layernorm_mult_refresh, mac_mult_refresh, exp_mult_refresh, logic_fsm_mul_refresh}) <= 1) else $fatal("Multiple mult_refresh signals are asserted simultaneously!");
     end
     multiplier mult_inst (.clk(clk), .rst_n(rst_n), .refresh(mult_refresh), .overflow(mul_overflow), .input_q_1(mult_input_q_1), .input_q_2(mult_input_q_2), .output_q(mult_output_q));
 
@@ -680,31 +683,32 @@ module cim # (
 
                         ENC_MHSA_QK_T_STEP: begin
                             // Perform a MAC, then divide by sqrt(NUM_HEADS), then save to intermediate results memory and inputs to modules is correct
-                            // TODO: Change this to multiply by 1/sqrt(num_heads) instead of dividing
                             TEMP_RES_ADDR_T MAC_storage_addr = mem_map[ENC_QK_T_MEM] + gen_cnt_7b_2_cnt*(NUM_PATCHES+1) + {3'd0, sender_id};
-                            gen_cnt_7b_inc <= {6'd0, div_done};
+                            gen_cnt_7b_inc <= {6'd0, logic_fsm_mul_refresh};
                             gen_cnt_7b_2_inc <= {6'd0, (gen_cnt_7b_cnt == (NUM_PATCHES+1))};
                             gen_cnt_7b_rst_n <= (gen_cnt_7b_cnt == (NUM_PATCHES+1)) ? RST : RUN;
                             word_rec_cnt_rst_n <= (word_rec_cnt >= NUM_HEADS) ? RST : RUN;
+                            is_ready_internal <= logic_fsm_mul_refresh; // Ready to move on once division is done
 
-                            mac_start <= (word_rec_cnt >= NUM_HEADS) & (word_rec_cnt_rst_n == RUN); // Start a MAC
-                            logic_fsm_div_start <= mac_done; // Start a division once MAC is done
-                            is_ready_internal <= div_done; // Ready to move on once division is done
-
-                            int_res_access_signals.write_req_src[LOGIC_FSM] <= div_done; // Write to memory once division is done
-                            int_res_access_signals.addr_table[LOGIC_FSM] <= MAC_storage_addr;
-                            int_res_access_signals.write_data[LOGIC_FSM] <= (div_output_q[N_COMP-1]) ? (~div_out_flipped[N_STORAGE-1:0]+1'd1) : div_output_q[N_STORAGE-1:0];
-                            params_access_signals.read_req_src[LOGIC_FSM] <= (word_rec_cnt >= NUM_HEADS) & (word_rec_cnt_rst_n == RUN); // Start a read of the parameter memory since it will be needed by the division module
-                            params_access_signals.addr_table[LOGIC_FSM] <= param_addr_map[SINGLE_PARAMS].addr + ENC_SQRT_NUM_HEADS_OFF;
-
+                            // Start a MAC
+                            mac_start <= (word_rec_cnt >= NUM_HEADS) & (word_rec_cnt_rst_n == RUN);
                             mac_start_addr1 <= mem_map[ENC_QK_T_IN_MEM];
                             mac_start_addr2 <= mem_map[ENC_K_T_MEM] + gen_cnt_7b_2_cnt*NUM_HEADS;
                             mac_activation <= NO_ACTIVATION;
                             mac_len <= NUM_HEADS;
                             mac_param_type <= INTERMEDIATE_RES;
 
-                            logic_fsm_div_dividend <= mac_out;
-                            logic_fsm_div_divisor <= {{(N_COMP-N_STORAGE){params_read_data[N_STORAGE-1]}}, params_read_data}; // Sign extend
+                            // Divide by sqrt(NUM_HEADS)
+                            logic_fsm_mul_refresh <= mac_done; // Start a multiplication once MAC is done
+                            logic_fsm_mul_input_1 <= mac_out;
+                            logic_fsm_mul_input_2 <= {{(N_COMP-N_STORAGE){params_read_data[N_STORAGE-1]}}, params_read_data}; // Sign extend
+
+                            // Write to memory once division is done
+                            int_res_access_signals.write_req_src[LOGIC_FSM] <= logic_fsm_mul_refresh;
+                            int_res_access_signals.addr_table[LOGIC_FSM] <= MAC_storage_addr;
+                            int_res_access_signals.write_data[LOGIC_FSM] <= (mult_output_q[N_COMP-1]) ? (~mult_out_flipped[N_STORAGE-1:0]+1'd1) : mult_output_q[N_STORAGE-1:0];
+                            params_access_signals.read_req_src[LOGIC_FSM] <= (word_rec_cnt >= NUM_HEADS) & (word_rec_cnt_rst_n == RUN); // Start a read of the parameter memory since it will be needed by the division module
+                            params_access_signals.addr_table[LOGIC_FSM] <= param_addr_map[SINGLE_PARAMS].addr + ENC_INV_SQRT_NUM_HEADS_OFF;
 
                             if (bus_op_read == PISTOL_START_OP) begin
                                 $display("CiM: Finished encoder's MHSA QK_T");
@@ -824,11 +828,10 @@ module cim # (
                         end
 
                         POST_SOFTMAX_DIVIDE_STEP: begin
-                            // TODO: Replace /NUM_SLEEP_STAGES with * 1/NUM_SLEEP_STAGES
-                            gen_cnt_7b_inc <= {6'd0, logic_fsm_div_start};
+                            gen_cnt_7b_inc <= {6'd0, logic_fsm_mul_refresh};
                             gen_cnt_7b_rst_n <= (gen_cnt_7b_cnt == NUM_SLEEP_STAGES) ? RST : RUN;
                             if (gen_cnt_7b_cnt < NUM_SLEEP_STAGES) begin
-                                gen_reg_2b <= (int_res_access_signals.read_req_src[LOGIC_FSM] || div_done || (gen_reg_2b == 'd3)) ? gen_reg_2b + 'd1 : gen_reg_2b;
+                                gen_reg_2b <= (int_res_access_signals.read_req_src[LOGIC_FSM] || logic_fsm_mul_refresh || (gen_reg_2b == 'd3)) ? gen_reg_2b + 'd1 : gen_reg_2b;
                             end else begin
                                 gen_reg_2b <= 'd0;
                             end
@@ -838,14 +841,14 @@ module cim # (
                             int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[MLP_HEAD_SOFTMAX_IN_MEM] + {3'd0, gen_cnt_7b_cnt};
 
                             // Start division
-                            logic_fsm_div_start <= (gen_reg_2b == 'd1) && ~div_busy;
-                            logic_fsm_div_dividend <= {{(N_COMP-N_STORAGE){int_res_read_data[N_STORAGE-1]}}, int_res_read_data}; // Sign extend
-                            logic_fsm_div_divisor <= NUM_SLEEP_STAGES << Q; // Shift left by Q to convert to fixed-point
+                            logic_fsm_mul_input_1 <= {{(N_COMP-N_STORAGE){int_res_read_data[N_STORAGE-1]}}, int_res_read_data}; // Sign extend
+                            logic_fsm_mul_input_2 <= INV_NUM_SAMPLES_OUT_AVG; // 1/NUM_SAMPLES_OUT_AVG in fixed-point
+                            logic_fsm_mul_refresh <= (gen_reg_2b == 'd1);
 
                             // Save results
-                            int_res_access_signals.write_req_src[LOGIC_FSM] <= div_done || (gen_reg_2b == 'd3);
+                            int_res_access_signals.write_req_src[LOGIC_FSM] <= logic_fsm_mul_refresh || (gen_reg_2b == 'd3);
                             int_res_access_signals.addr_table[LOGIC_FSM] <= (int_res_access_signals.write_req_src[LOGIC_FSM]) ? mem_map[SOFTMAX_AVG_SUM_MEM] + {3'd0, gen_cnt_7b_cnt} : mem_map[MLP_HEAD_SOFTMAX_IN_MEM] + {3'd0, gen_cnt_7b_cnt}; // Write to two locations
-                            int_res_access_signals.write_data[LOGIC_FSM] <= (div_output_q[N_COMP-1]) ? (~div_out_flipped[N_STORAGE-1:0]+1'd1) : div_output_q[N_STORAGE-1:0];
+                            int_res_access_signals.write_data[LOGIC_FSM] <= (mult_output_q[N_COMP-1]) ? (~mult_out_flipped[N_STORAGE-1:0]+1'd1) : mult_output_q[N_STORAGE-1:0];
 
                             // Done
                             current_inf_step <= (gen_cnt_7b_cnt == NUM_SLEEP_STAGES) ? POST_SOFTMAX_AVERAGING_STEP : POST_SOFTMAX_DIVIDE_STEP;
@@ -953,7 +956,7 @@ module cim # (
                             word_snt_cnt_rst_n <= RST;
                             if (bus_op_read == PISTOL_START_OP) begin
                                 $display("Inference complete at time: %d", $time);
-                                $display("Inferred sleep stage: %d", inferred_sleep_stage);
+                                $display("Inferred sleep stage: %d", integer'inferred_sleep_stage);
                                 bus_op_write <= INFERENCE_RESULT_OP;
                                 bus_data_write[0] <= {13'd0, inferred_sleep_stage};
                                 bus_target_or_sender_write <= ID;

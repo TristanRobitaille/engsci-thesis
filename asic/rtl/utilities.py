@@ -161,7 +161,7 @@ def params(param_name:str, params_file:h5py.File):
     elif (param_name == "mhsa_combine_head_dense_bias"):    return params_file["Encoder_1"]["mhsa_combine_head_dense"]["bias:0"] # MHSA combine head dense bias
     elif (param_name == "mlp_head_dense_1_bias"):           return params_file["mlp_head"]["mlp_head_dense1"]["bias:0"] # MLP head dense 1 bias
     elif (param_name == "mlp_head_softmax_bias"):           return params_file["mlp_head_softmax"]["vision_transformer"]["mlp_head_softmax"]["bias:0"] # MLP head softmax bias
-    elif (param_name == "sqrt_num_heads"):                  return FXnum(NUM_HEADS, num_Q_storage).sqrt() # sqrt(# heads)
+    elif (param_name == "inv_sqrt_num_heads"):              return FXnum(1/NUM_HEADS, num_Q_storage).sqrt() # 1/sqrt(# heads)
     elif (param_name == "mlp_dense_2_bias"):                return params_file["Encoder_1"]["vision_transformer"]["Encoder_1"]["mlp_dense2_encoder"]["bias:0"] # Encoder MLP dense 2 bias
     elif (param_name == "enc_layernorm_1_beta"):            return params_file["Encoder_1"]["vision_transformer"]["Encoder_1"]["layerNorm1_encoder"]["beta:0"] # Encoder LayerNorm 1 beta
     elif (param_name == "enc_layernorm_1_gamma"):           return params_file["Encoder_1"]["vision_transformer"]["Encoder_1"]["layerNorm1_encoder"]["gamma:0"] # Encoder LayerNorm 1 gamma

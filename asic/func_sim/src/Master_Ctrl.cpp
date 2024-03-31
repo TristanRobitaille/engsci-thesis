@@ -231,7 +231,7 @@ struct instruction Master_Ctrl::param_to_send(){
                 inst = {PARAM_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.layernorm_beta[0][gen_cnt_7b_2.get_cnt()], params.enc_mhsa_Q_bias[gen_cnt_7b_2.get_cnt()], params.enc_mhsa_K_bias[gen_cnt_7b_2.get_cnt()]}};
                 gen_cnt_7b.inc();
             } else if (gen_cnt_7b.get_cnt() == 3) {
-                inst = {PARAM_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.enc_mhsa_V_bias[gen_cnt_7b_2.get_cnt()], params.enc_mhsa_sqrt_num_heads, params.enc_mhsa_combine_bias[gen_cnt_7b_2.get_cnt()]}};
+                inst = {PARAM_STREAM_OP, /*target_or_sender*/ gen_cnt_7b_2.get_cnt(), /*data*/ {params.enc_mhsa_V_bias[gen_cnt_7b_2.get_cnt()], params.enc_mhsa_inv_sqrt_num_heads, params.enc_mhsa_combine_bias[gen_cnt_7b_2.get_cnt()]}};
                 gen_cnt_7b.inc();
             } else if (gen_cnt_7b.get_cnt() == 4) {
                 // Note: CiM's 0-31 receive bias for the encoder's MLP and CiM's 32-63 receive bias for the MLP head
@@ -296,7 +296,7 @@ int Master_Ctrl::load_params_from_h5(const std::string params_filepath) {
     params.enc_mhsa_V_bias = enc.getGroup("mhsa_value_dense").getDataSet("bias:0").read<EmbDepthVect_t>();
     params.enc_mhsa_combine_kernel = enc.getGroup("mhsa_combine_head_dense").getDataSet("kernel:0").read<EncEmbDepthMat_t>();
     params.enc_mhsa_combine_bias = enc.getGroup("mhsa_combine_head_dense").getDataSet("bias:0").read<EmbDepthVect_t>();
-    params.enc_mhsa_sqrt_num_heads = static_cast<float>(sqrt(NUM_HEADS));
+    params.enc_mhsa_inv_sqrt_num_heads = static_cast<float>(1 / sqrt(NUM_HEADS)); // To save compute, we store the reciprocal of the square root of the number of heads such that we can multiply instead of divide
 
     // MLP
     params.enc_mlp_dense_1_kernel = enc.getGroup("vision_transformer").getGroup("Encoder_1").getGroup("mlp_dense1_encoder").getDataSet("kernel:0").read<EmbDepthxMlpDimMat_t>();

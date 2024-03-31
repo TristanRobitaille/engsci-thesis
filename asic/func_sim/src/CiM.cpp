@@ -415,21 +415,16 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case ENC_MHSA_QK_T_STEP: {
             uint16_t MAC_storage_addr = mem_map.at(ENC_QK_T_MEM) + gen_cnt_7b_2.get_cnt()*(NUM_PATCHES+1) + sender_id; // Storage location of MAC result
             if (word_rec_cnt.get_cnt() >= NUM_HEADS) { // No more data to receive, start MACs
-                if (compute_in_progress == false){
-                    if (gen_reg_2b == 0) {
-                        uint16_t K_T_addr = mem_map.at(ENC_K_T_MEM) + gen_cnt_7b_2.get_cnt()*NUM_HEADS;
-                        uint16_t Q_addr = mem_map.at(ENC_QK_T_IN_MEM); // Temporary storage location for Q's dense broadcast, so it remains the same for all heads
-                        MAC(Q_addr, K_T_addr, NUM_HEADS, /*bias addr unused when NO_ACTIVATION*/ 0, INTERMEDIATE_RES, NO_ACTIVATION);
-                        gen_reg_2b = 1;
-                    } else if (gen_reg_2b == 1) {
-                        intermediate_res[MAC_storage_addr] = computation_result;
-                        DIV(MAC_storage_addr, param_addr_map[SINGLE_PARAMS].addr+ENC_SQRT_NUM_HEADS_OFF, MODEL_PARAM); // /sqrt(NUM_HEADS)
-                        gen_reg_2b = 2; // Just a signal to avoid coming here every time FSM runs
-                        word_rec_cnt.reset();
-                    }
+                if ((compute_in_progress == false) && (gen_reg_2b == 0)){
+                    uint16_t K_T_addr = mem_map.at(ENC_K_T_MEM) + gen_cnt_7b_2.get_cnt()*NUM_HEADS;
+                    uint16_t Q_addr = mem_map.at(ENC_QK_T_IN_MEM); // Temporary storage location for Q's dense broadcast, so it remains the same for all heads
+                    gen_reg_2b = 1;
+                    MAC(Q_addr, K_T_addr, NUM_HEADS, /*bias addr unused when NO_ACTIVATION*/ 0, INTERMEDIATE_RES, NO_ACTIVATION);
+                    word_rec_cnt.reset();
                 }
-            } else if (compute_in_progress == false && gen_reg_2b == 2) { // Done with this MAC
+            } else if (compute_in_progress == false && gen_reg_2b == 1) { // Done with this MAC
                 gen_reg_2b = 0;
+                computation_result = static_cast<float> (fix_pt_t { large_fp_t { computation_result } * large_fp_t { params[param_addr_map[SINGLE_PARAMS].addr+ENC_INV_SQRT_NUM_HEADS_OFF] } }); // Divide by sqrt(NUM_HEADS)
                 intermediate_res[MAC_storage_addr] = computation_result;
                 gen_cnt_7b.inc();
                 if (gen_cnt_7b.get_cnt() == (NUM_PATCHES+1)) { // All MACs for one matrix are done
@@ -451,31 +446,28 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 SOFTMAX(/*input addr*/ mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM), /*len*/ NUM_SLEEP_STAGES);
                 gen_reg_2b = 1; // Just a signal to avoid coming here every time FSM runs
             } else if (compute_in_progress == false) {
-                if (id == 0) { current_inf_step = POST_SOFTMAX_DIVIDE_STEP; }
-                else { current_inf_step = INFERENCE_COMPLETE;}
-                is_ready = false;
+                if (id == 0) { cout << "CiM: Finished MLP head's Softmax" << endl; }
                 if (id == 0) { verify_computation(MLP_HEAD_SOFTMAX_VERIF, id, intermediate_res, mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM)); }
+                is_ready = false;
                 gen_cnt_7b.reset();
                 gen_reg_2b = 0;
-                if (id == 0) { cout << "CiM: Finished MLP head's Softmax" << endl; }
+                if (id == 0) { current_inf_step = POST_SOFTMAX_DIVIDE_STEP; }
+                else { current_inf_step = INFERENCE_COMPLETE; }
             }
             break;
 
         case POST_SOFTMAX_DIVIDE_STEP:
-            if ((compute_in_progress == false) && (gen_reg_2b == 0) && (gen_cnt_7b.get_cnt() < NUM_SLEEP_STAGES)) { // Divide all elements by NUM_SAMPLES_OUT_AVG
-                DIV(mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM)+gen_cnt_7b.get_cnt(), NUM_SAMPLES_OUT_AVG, IMMEDIATE_VAL);
-                gen_reg_2b = 1; // Just a signal to avoid coming here every time FSM runs
+            if ((compute_in_progress == false) && (gen_cnt_7b.get_cnt() < NUM_SLEEP_STAGES)) { // Divide all elements by NUM_SAMPLES_OUT_AVG
+                computation_result = static_cast<float> (large_fp_t { intermediate_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM)+gen_cnt_7b.get_cnt()] } * large_fp_t { 1.0f / NUM_SAMPLES_OUT_AVG }); // Multiply by 1/NUM_SAMPLES_OUT_AVG saves cycles on the ASIC vs dividing by NUM_SAMPLES_OUT_AVG
+                intermediate_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM)+gen_cnt_7b.get_cnt()] = computation_result;
+                intermediate_res[mem_map.at(SOFTMAX_AVG_SUM_MEM)+gen_cnt_7b.get_cnt()] = computation_result; // Copy there for averaging sum step
+                gen_cnt_7b.inc();
             } else if ((gen_cnt_7b.get_cnt() == NUM_SLEEP_STAGES) && (compute_in_progress == false)) {
                 cout << "CiM: Finished MLP head's Softmax averaging divide" << endl;
                 verify_computation(MLP_HEAD_SOFTMAX_DIV_VERIF, id, intermediate_res, mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM));
                 current_inf_step = POST_SOFTMAX_AVERAGING_STEP;
                 gen_cnt_7b.reset();
                 gen_cnt_7b_2.reset();
-            } else if ((compute_in_progress == false) && (gen_reg_2b == 1)) { // Done one division
-                intermediate_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM)+gen_cnt_7b.get_cnt()] = computation_result;
-                intermediate_res[mem_map.at(SOFTMAX_AVG_SUM_MEM)+gen_cnt_7b.get_cnt()] = computation_result; // Copy there for averaging sum step
-                gen_cnt_7b.inc();
-                gen_reg_2b = 0;
             }
             break;
 

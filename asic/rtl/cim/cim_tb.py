@@ -186,13 +186,7 @@ async def basic_test(dut):
     await patch_load(dut)
     await cocotb.triggers.ClockCycles(dut.clk, INTERLUDE_CLOCK_CYCLES)
 
-    # Test tranpose broadcast and dense broadcast
-    # trigger_transpose_broadcast(dut)
-    # await cocotb.triggers.ClockCycles(dut.clk, INTERLUDE_CLOCK_CYCLES)
-    # trigger_dense_broadcast(dut)
-
     # Go through inference steps
-
     # TODO: Should remove all the artificial waits
     await full_transpose_broadcast_emulation(dut, inf_steps[0].tx_addr, inf_steps[0].rx_addr, inf_steps[0].len, inf_steps[0].num_cim) # Pre-LayerNorm #1
     while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
