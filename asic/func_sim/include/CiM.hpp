@@ -71,6 +71,7 @@ class CiM {
             MLP_HEAD_SOFTMAX_STEP,
             POST_SOFTMAX_DIVIDE_STEP,
             POST_SOFTMAX_AVERAGING_STEP,
+            POST_SOFTMAX_ARGMAX_STEP,
             RETIRE_SOFTMAX_STEP,
             INFERENCE_COMPLETE,
             INVALID_INF_STEP = -1

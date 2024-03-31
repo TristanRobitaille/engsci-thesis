@@ -44,8 +44,9 @@ typedef enum logic [5:0] {
     MLP_HEAD_SOFTMAX_STEP                   = 'd27,
     POST_SOFTMAX_DIVIDE_STEP                = 'd28,
     POST_SOFTMAX_AVERAGING_STEP             = 'd29,
-    RETIRE_SOFTMAX_STEP                     = 'd30,
-    INFERENCE_COMPLETE                      = 'd31,
+    POST_SOFTMAX_ARGMAX_STEP                = 'd30,
+    RETIRE_SOFTMAX_STEP                     = 'd31,
+    INFERENCE_COMPLETE                      = 'd32,
     INVALID_INF_STEP
 } INFERENCE_STEP_T;
 
@@ -108,8 +109,8 @@ typedef enum logic {
 /* verilator lint_off DECLFILENAME */
 interface MemAccessSignals;
     wire [MEM_ACCESS_SRC_NUM-1:0] read_req_src, write_req_src; // One-hot signal indicating the source of the read or write request
-    wire [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] addr_table [MEM_ACCESS_SRC_NUM]; // Contains the addresses that different part of the CiM want to read/write
-    wire [N_STORAGE-1:0] write_data [MEM_ACCESS_SRC_NUM]; // Data to be written to the memory
+    TEMP_RES_ADDR_T addr_table [MEM_ACCESS_SRC_NUM]; // Contains the addresses that different part of the CiM want to read/write
+    STORAGE_WORD_T write_data [MEM_ACCESS_SRC_NUM]; // Data to be written to the memory
 endinterface
 /* verilator lint_on DECLFILENAME */
 `endif

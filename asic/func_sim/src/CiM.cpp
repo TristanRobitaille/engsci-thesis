@@ -484,27 +484,32 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 - gen_cnt_7b holds the current sleep stage within an epoch's softmax
                 - gen_cnt_7b_2 holds the epoch
             */
-            if ((compute_in_progress == false) && (gen_cnt_7b_2.get_cnt() < (NUM_SAMPLES_OUT_AVG-1)) && (gen_cnt_7b.get_cnt() <= NUM_SLEEP_STAGES)) {
+            if (compute_in_progress == false){
                 uint16_t addr_prev_softmax = mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + gen_cnt_7b.get_cnt() + gen_cnt_7b_2.get_cnt()*NUM_SLEEP_STAGES;
                 uint16_t addr_softmax_divide_sum = mem_map.at(SOFTMAX_AVG_SUM_MEM) + gen_cnt_7b.get_cnt();
 
                 intermediate_res[gen_cnt_7b.get_cnt()] = intermediate_res[addr_prev_softmax]; // Move previous softmax result to intermediate storage
-                if (gen_reg_2b == 1) { intermediate_res[mem_map.at(SOFTMAX_AVG_SUM_MEM)+gen_cnt_7b.get_cnt()-1] = computation_result; } // Save previous sum result
+                intermediate_res[addr_softmax_divide_sum-1] = computation_result; // Save previous sum result
                 ADD(gen_cnt_7b.get_cnt(), addr_softmax_divide_sum, INTERMEDIATE_RES); // Sum with previous result
 
-                gen_reg_2b = 1;
                 gen_cnt_7b.inc();
                 if (gen_cnt_7b.get_cnt() == NUM_SLEEP_STAGES) {
-                    intermediate_res[mem_map.at(SOFTMAX_AVG_SUM_MEM)+gen_cnt_7b.get_cnt()-1] = computation_result;
+                    intermediate_res[addr_softmax_divide_sum] = computation_result;
                     gen_cnt_7b.reset();
                     gen_cnt_7b_2.inc();
+                    if (gen_cnt_7b_2.get_cnt() == (NUM_SAMPLES_OUT_AVG-1)) {
+                        current_inf_step = POST_SOFTMAX_ARGMAX_STEP;
+                        gen_cnt_7b_2.reset();
+                    }
                 }
-            } else if ((compute_in_progress == false) && (gen_reg_2b == 1)) {
+            }
+            break;
+
+        case POST_SOFTMAX_ARGMAX_STEP:
+            if ((compute_in_progress == false) && (gen_reg_2b == 0)) {
                 ARGMAX(/*addr*/ mem_map.at(SOFTMAX_AVG_SUM_MEM), /*len*/ NUM_SLEEP_STAGES); // Start a ARGMAX in the background
-                gen_reg_2b = 2;
-            } else if ((compute_in_progress == false) && (gen_reg_2b == 2)) {
-                gen_cnt_7b.reset();
-                gen_cnt_7b_2.reset();
+                gen_reg_2b = 1;
+            } else if ((compute_in_progress == false) && (gen_reg_2b == 1)) {
                 current_inf_step = RETIRE_SOFTMAX_STEP;
                 cout << "CiM: Finished averaging softmax with previous epochs." << endl;
                 verify_computation(POST_SOFTMAX_AVG_VERIF, id, intermediate_res, mem_map.at(SOFTMAX_AVG_SUM_MEM));
@@ -513,9 +518,9 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
         case RETIRE_SOFTMAX_STEP:
             if ((gen_cnt_7b.get_cnt() < NUM_SLEEP_STAGES) && (gen_cnt_7b_2.get_cnt() < (NUM_SAMPLES_OUT_AVG-2))) {
-                intermediate_res[mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + gen_cnt_7b.get_cnt() + NUM_SLEEP_STAGES*(gen_cnt_7b_2.get_cnt()+1)] = intermediate_res[mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + gen_cnt_7b.get_cnt() + NUM_SLEEP_STAGES*gen_cnt_7b_2.get_cnt()];
+                intermediate_res[/*2*/mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + gen_cnt_7b.get_cnt() + NUM_SLEEP_STAGES*(gen_cnt_7b_2.get_cnt()+1)] = intermediate_res[/*1*/mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + gen_cnt_7b.get_cnt() + NUM_SLEEP_STAGES*gen_cnt_7b_2.get_cnt()];
 
-                if (gen_cnt_7b_2.get_cnt() == 0) {intermediate_res[mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + gen_cnt_7b.get_cnt()] = intermediate_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + gen_cnt_7b.get_cnt()];}
+                if (gen_cnt_7b_2.get_cnt() == 0) {intermediate_res[/*3*/mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + gen_cnt_7b.get_cnt()] = intermediate_res[/*4*/mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + gen_cnt_7b.get_cnt()];}
 
                 gen_cnt_7b.inc();
                 if (gen_cnt_7b.get_cnt() == NUM_SLEEP_STAGES) {
@@ -617,8 +622,8 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     bus->push_inst(inst);
                 }
                 word_rec_cnt.reset();
+                update_state(IDLE_CIM);
             }
-            update_state(IDLE_CIM);
             break;
         case INVALID_INF_STEP:
         default:

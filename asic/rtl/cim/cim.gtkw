@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Sat Mar 30 04:30:34 2024
+[*] Sat Mar 30 23:54:55 2024
 [*]
 [dumpfile] "dump.vcd"
-[dumpfile_mtime] "Sat Mar 30 04:27:44 2024"
-[dumpfile_size] 218207379
+[dumpfile_mtime] "Sat Mar 30 23:53:36 2024"
+[dumpfile_size] 218509192
 [savefile] "cim.gtkw"
-[timestart] 7710337000
-[size] 3440 1387
-[pos] 1680 0
-*-18.694107 7716190000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[timestart] 7720178000
+[size] 1680 997
+[pos] 0 0
+*-19.194105 7721779300 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -37,10 +37,11 @@
 [markername] YY
 [markername] ZZ
 [treeopen] cim.
+[treeopen] cim.mem.
 [sst_width] 299
 [signals_width] 318
 [sst_expanded] 1
-[sst_vpaned_height] 488
+[sst_vpaned_height] 338
 @28
 clk
 @24
@@ -133,30 +134,23 @@ cim.layernorm_done
 @200
 -
 @28
-cim.start_inst_fill
-@800022
-cim.layernorm_inst.int_res_access_signals.read_req_src[6:0]
+cim.div_start
+cim.div_done
+@420
+cim.div_dividend[21:0]
+cim.div_divisor[21:0]
+cim.div_output_q[21:0]
+@200
+-
+@421
+cim.mem.int_res_access_signals.write_data[1][15:0]
 @28
-(0)cim.layernorm_inst.int_res_access_signals.read_req_src[6:0]
-(1)cim.layernorm_inst.int_res_access_signals.read_req_src[6:0]
-(2)cim.layernorm_inst.int_res_access_signals.read_req_src[6:0]
-(3)cim.layernorm_inst.int_res_access_signals.read_req_src[6:0]
-(4)cim.layernorm_inst.int_res_access_signals.read_req_src[6:0]
-(5)cim.layernorm_inst.int_res_access_signals.read_req_src[6:0]
-(6)cim.layernorm_inst.int_res_access_signals.read_req_src[6:0]
-@1001200
--group_end
-@800022
-cim.layernorm_inst.int_res_access_signals.write_req_src[6:0]
-@28
-(0)cim.layernorm_inst.int_res_access_signals.write_req_src[6:0]
-(1)cim.layernorm_inst.int_res_access_signals.write_req_src[6:0]
-(2)cim.layernorm_inst.int_res_access_signals.write_req_src[6:0]
-(3)cim.layernorm_inst.int_res_access_signals.write_req_src[6:0]
-(4)cim.layernorm_inst.int_res_access_signals.write_req_src[6:0]
-(5)cim.layernorm_inst.int_res_access_signals.write_req_src[6:0]
-(6)cim.layernorm_inst.int_res_access_signals.write_req_src[6:0]
-@1001200
--group_end
+(5)cim.mem.int_res_access_signals.read_req_src[6:0]
+(5)cim.mem.int_res_access_signals.write_req_src[6:0]
+@24
+cim.mem.int_res_access_signals.addr_table[1][9:0]
+cim.compute_temp[21:0]
+@420
+cim.int_res_read_data[15:0]
 [pattern_trace] 1
 [pattern_trace] 0

@@ -27,7 +27,7 @@ module cim # (
     // Memory
     MemAccessSignals params_access_signals();
     MemAccessSignals int_res_access_signals();
-    wire [N_STORAGE-1:0] int_res_read_data, params_read_data;
+    STORAGE_WORD_T int_res_read_data, params_read_data;
     cim_mem mem (   .clk(clk), .params_access_signals(params_access_signals), .int_res_access_signals(int_res_access_signals),
                     .int_res_read_data(int_res_read_data), .params_read_data(params_read_data));
 
@@ -50,11 +50,11 @@ module cim # (
     end
 
     // Internal signals
-    wire MAC_compute_in_progress;
     logic [1:0] gen_reg_2b;
     logic [$clog2(NUM_CIMS+1)-1:0] sender_id, data_len;
+    SLEEP_STAGE_T inferred_sleep_stage;
     TEMP_RES_ADDR_T tx_addr, rx_addr;
-    logic [N_COMP-1:0] compute_temp, compute_temp_2, compute_temp_3, computation_result;
+    COMP_WORD_T compute_temp;
 
     // Counters
     logic gen_cnt_7b_rst_n, gen_cnt_7b_2_rst_n, word_rec_cnt_rst_n, word_snt_cnt_rst_n;
@@ -67,8 +67,8 @@ module cim # (
 
     // Adder module
     wire add_overflow;
-    logic add_refresh, cim_add_refresh;
-    logic [N_COMP-1:0] add_input_q_1, add_input_q_2, cim_add_input_q_1, cim_add_input_q_2, add_output_q, add_out_flipped;
+    logic add_refresh, cim_add_refresh, cim_add_refresh_delayed;
+    COMP_WORD_T add_input_q_1, add_input_q_2, cim_add_input_q_1, cim_add_input_q_2, add_output_q, add_out_flipped;
     always_latch begin : adder_input_MUX
         if (cim_add_refresh) begin
             add_input_q_1 = cim_add_input_q_1;
@@ -93,7 +93,7 @@ module cim # (
 
     // Multiplier module
     logic mult_refresh, mul_overflow;
-    logic [N_COMP-1:0] mult_input_q_1, mult_input_q_2, mult_output_q, mult_out_flipped;
+    COMP_WORD_T mult_input_q_1, mult_input_q_2, mult_output_q, mult_out_flipped;
     always_latch begin : mult_input_MUX
         if (layernorm_mult_refresh) begin
             mult_input_q_1 = layernorm_mult_input_q_1;
@@ -165,7 +165,7 @@ module cim # (
     logic layernorm_start, layernorm_half_select, layernorm_done, layernorm_busy, layernorm_add_refresh, layernorm_mult_refresh, layernorm_div_start;
     PARAMS_ADDR_T beta_addr, gamma_addr;
     TEMP_RES_ADDR_T layernorm_start_addr;
-    logic [N_COMP-1:0] layernorm_add_input_q_1, layernorm_add_input_q_2, layernorm_mult_input_q_1, layernorm_mult_input_q_2, layernorm_div_dividend, layernorm_div_divisor;
+    COMP_WORD_T layernorm_add_input_q_1, layernorm_add_input_q_2, layernorm_mult_input_q_1, layernorm_mult_input_q_2, layernorm_div_dividend, layernorm_div_divisor;
     layernorm layernorm_inst (.clk(clk), .rst_n(rst_n), .start(layernorm_start), .half_select(layernorm_half_select), .busy(layernorm_busy), .done(layernorm_done),
                               .start_addr(layernorm_start_addr), .beta_addr(beta_addr), .gamma_addr(gamma_addr),
                               .int_res_access_signals(int_res_access_signals), .params_access_signals(params_access_signals),
@@ -204,7 +204,7 @@ module cim # (
                     .mult_output(mult_output_q), .mult_refresh(exp_mult_refresh), .mult_input_1(exp_mult_input_1), .mult_input_2(exp_mult_input_2));
 
     // Comms FSM
-    logic signed [N_STORAGE-1:0] bus_data_copy_1, bus_data_copy_2;
+    STORAGE_WORD_T bus_data_copy_1, bus_data_copy_2;
     always_ff @ (posedge clk) begin : cim_comms_fsm
         if (!rst_n) begin
             word_rec_cnt_rst_n <= RST;
@@ -357,9 +357,6 @@ module cim # (
             gen_cnt_7b_rst_n <= RST;
             gen_cnt_7b_2_rst_n <= RST;
             compute_temp <= 'd0;
-            compute_temp_2 <= 'd0;
-            compute_temp_3 <= 'd0;
-            computation_result <= 'd0;
             // TODO: Reset intermediate_res
         end else begin
             unique case (cim_state)
@@ -367,11 +364,17 @@ module cim # (
                     if (bus_op_read == PATCH_LOAD_BROADCAST_START_OP) begin
                         cim_state <= CIM_PATCH_LOAD;
                     end
+                    current_inf_step <= CLASS_TOKEN_CONCAT_STEP;
+                    gen_cnt_7b_rst_n <= RUN;
+                    gen_cnt_7b_2_rst_n <= RUN;
+                    word_rec_cnt_rst_n <= RUN;
+                    word_snt_cnt_rst_n <= RUN;
                 end
+                
                 CIM_PATCH_LOAD: begin
                     unique case (gen_reg_2b)
                         'd0: begin
-                            if (~MAC_compute_in_progress && (word_rec_cnt == PATCH_LEN)) begin
+                            if (~mac_busy && (word_rec_cnt == PATCH_LEN)) begin
                                 gen_reg_2b <= 'd1;
                                 gen_cnt_7b_2_inc <= 'd0;
                                 mac_start <= 1'b1;
@@ -396,12 +399,13 @@ module cim # (
                             $fatal("Invalid gen_reg_2b value in CIM_PATCH_LOAD state");
                         end
                     endcase
-                    word_rec_cnt_rst_n <= (~MAC_compute_in_progress && (word_rec_cnt == PATCH_LEN)) ? RST : RUN;
+                    word_rec_cnt_rst_n <= (~mac_busy && (word_rec_cnt == PATCH_LEN)) ? RST : RUN;
                     int_res_access_signals.write_req_src[LOGIC_FSM] <= (mac_done);
                     is_ready_internal <= (gen_cnt_7b_2_cnt == NUM_PATCHES);
                     cim_state <= (gen_cnt_7b_2_cnt == NUM_PATCHES) ? CIM_INFERENCE_RUNNING : cim_state;
                     gen_cnt_7b_2_rst_n <= (gen_cnt_7b_2_cnt == NUM_PATCHES) ? RST : RUN;
                 end
+
                 CIM_INFERENCE_RUNNING: begin
                     unique case (current_inf_step)
                         CLASS_TOKEN_CONCAT_STEP : begin // Move classification token from parameters memory to intermediate storage
@@ -614,7 +618,7 @@ module cim # (
                                 int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[ENC_MLP_OUT_MEM] + {3'd0, sender_id};
                                 int_res_access_signals.write_data[LOGIC_FSM] <= (add_output_q[N_COMP-1]) ? (~add_out_flipped[N_STORAGE-1:0]+1'd1) : add_output_q[N_STORAGE-1:0];
                                 int_res_access_signals.write_req_src[LOGIC_FSM] <= (gen_reg_2b == 'd2);
-                                
+
                                 is_ready_internal <= (gen_reg_2b == 'd2);
                             end else if (current_inf_step == MLP_HEAD_DENSE_1_STEP) begin
                                 word_rec_cnt_rst_n <= (word_rec_cnt >= EMB_DEPTH) ? RST : RUN;
@@ -633,7 +637,7 @@ module cim # (
                                 int_res_access_signals.write_data[LOGIC_FSM] <= (mac_out[N_COMP-1]) ? (~mac_out_flipped[N_STORAGE-1:0]+1'd1) : mac_out[N_STORAGE-1:0];
                                 int_res_access_signals.write_req_src[LOGIC_FSM] <= mac_done;
 
-                                is_ready_internal <= mac_done;                                
+                                is_ready_internal <= mac_done;
                             end else if (current_inf_step == MLP_HEAD_DENSE_2_STEP) begin
                                 word_rec_cnt_rst_n <= (word_rec_cnt >= MLP_DIM) ? RST : RUN;
 
@@ -701,7 +705,7 @@ module cim # (
 
                             logic_fsm_div_dividend <= mac_out;
                             logic_fsm_div_divisor <= {{(N_COMP-N_STORAGE){params_read_data[N_STORAGE-1]}}, params_read_data}; // Sign extend
-    
+
                             if (bus_op_read == PISTOL_START_OP) begin
                                 $display("CiM: Finished encoder's MHSA QK_T");
                                 gen_cnt_7b_2_rst_n <= RST;
@@ -813,17 +817,151 @@ module cim # (
 
                             // Change step
                             if (softmax_done) begin
+                                gen_reg_2b <= 'd0;
                                 current_inf_step <= (ID == 0) ? POST_SOFTMAX_DIVIDE_STEP : INFERENCE_COMPLETE;
                                 $display("Finished MLP Head Softmax step at time: %d", $time);
                             end
                         end
 
                         POST_SOFTMAX_DIVIDE_STEP: begin
+                            // TODO: Replace /NUM_SLEEP_STAGES with * 1/NUM_SLEEP_STAGES
+                            gen_cnt_7b_inc <= {6'd0, logic_fsm_div_start};
+                            gen_cnt_7b_rst_n <= (gen_cnt_7b_cnt == NUM_SLEEP_STAGES) ? RST : RUN;
+                            if (gen_cnt_7b_cnt < NUM_SLEEP_STAGES) begin
+                                gen_reg_2b <= (int_res_access_signals.read_req_src[LOGIC_FSM] || div_done || (gen_reg_2b == 'd3)) ? gen_reg_2b + 'd1 : gen_reg_2b;
+                            end else begin
+                                gen_reg_2b <= 'd0;
+                            end
+
+                            // Load data for division
+                            int_res_access_signals.read_req_src[LOGIC_FSM] <= (gen_reg_2b == 'd0);
+                            int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[MLP_HEAD_SOFTMAX_IN_MEM] + {3'd0, gen_cnt_7b_cnt};
+
+                            // Start division
+                            logic_fsm_div_start <= (gen_reg_2b == 'd1) && ~div_busy;
+                            logic_fsm_div_dividend <= {{(N_COMP-N_STORAGE){int_res_read_data[N_STORAGE-1]}}, int_res_read_data}; // Sign extend
+                            logic_fsm_div_divisor <= NUM_SLEEP_STAGES << Q; // Shift left by Q to convert to fixed-point
+
+                            // Save results
+                            int_res_access_signals.write_req_src[LOGIC_FSM] <= div_done || (gen_reg_2b == 'd3);
+                            int_res_access_signals.addr_table[LOGIC_FSM] <= (int_res_access_signals.write_req_src[LOGIC_FSM]) ? mem_map[SOFTMAX_AVG_SUM_MEM] + {3'd0, gen_cnt_7b_cnt} : mem_map[MLP_HEAD_SOFTMAX_IN_MEM] + {3'd0, gen_cnt_7b_cnt}; // Write to two locations
+                            int_res_access_signals.write_data[LOGIC_FSM] <= (div_output_q[N_COMP-1]) ? (~div_out_flipped[N_STORAGE-1:0]+1'd1) : div_output_q[N_STORAGE-1:0];
+
+                            // Done
+                            current_inf_step <= (gen_cnt_7b_cnt == NUM_SLEEP_STAGES) ? POST_SOFTMAX_AVERAGING_STEP : POST_SOFTMAX_DIVIDE_STEP;
+                        end
+
+                        POST_SOFTMAX_AVERAGING_STEP: begin
+                            gen_cnt_7b_inc <= {6'd0, cim_add_refresh};
+                            gen_cnt_7b_rst_n <= (gen_cnt_7b_cnt == NUM_SLEEP_STAGES) ? RST : RUN;
+                            gen_cnt_7b_2_inc <= {6'd0, (gen_cnt_7b_cnt == NUM_SLEEP_STAGES)};
+                            gen_cnt_7b_2_rst_n <= ((gen_cnt_7b_cnt == NUM_SLEEP_STAGES) && (gen_cnt_7b_2_cnt == (NUM_SAMPLES_OUT_AVG-1))) ? RST : RUN;
+                            cim_add_refresh_delayed <= cim_add_refresh;
+
+                            if (cim_add_refresh_delayed) begin
+                                gen_reg_2b <= 'd0;
+                            end else begin
+                                gen_reg_2b <= ((int_res_access_signals.read_req_src[LOGIC_FSM] || int_res_access_signals.write_req_src[LOGIC_FSM]) && (gen_reg_2b != 'd3)) ? (gen_reg_2b + 'd1) : gen_reg_2b;
+                            end
+
+                            // Read previous softmax
+                            int_res_access_signals.read_req_src[LOGIC_FSM] <= (gen_reg_2b == 'd0) || (gen_reg_2b == 'd3);
+                            if (gen_reg_2b == 'd0) begin
+                                int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[PREV_SOFTMAX_OUTPUT_MEM] + {3'd0, gen_cnt_7b_cnt} + gen_cnt_7b_2_cnt*NUM_SLEEP_STAGES; // Move previous softmax result
+                            end else if (gen_reg_2b == 'd1) begin
+                                int_res_access_signals.addr_table[LOGIC_FSM] <= {3'd0, gen_cnt_7b_cnt};
+                            end else if (gen_reg_2b == 'd2) begin
+                                int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[SOFTMAX_AVG_SUM_MEM] + {3'd0, gen_cnt_7b_cnt} - 'd1;
+                            end else if (gen_reg_2b == 'd3) begin
+                                int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[SOFTMAX_AVG_SUM_MEM] + {3'd0, gen_cnt_7b_cnt};
+                            end
+
+                            // Save previous softmax and add module output
+                            int_res_access_signals.write_req_src[LOGIC_FSM] <= (gen_reg_2b == 'd1) || (gen_reg_2b == 'd2);
+                            int_res_access_signals.write_data[LOGIC_FSM] <= (gen_reg_2b == 'd1) ? int_res_read_data : ((add_output_q[N_COMP-1]) ? (~add_out_flipped[N_STORAGE-1:0]+1'd1) : add_output_q[N_STORAGE-1:0]);
+
+                            // Read and start add
+                            cim_add_refresh <= (gen_reg_2b == 'd3);
+                            cim_add_input_q_1 <= (gen_reg_2b == 'd1) ? {{(N_COMP-N_STORAGE){int_res_read_data[N_STORAGE-1]}}, int_res_read_data} : cim_add_input_q_1; // Grab int_res[addr_prev_softmax] when you write it to memory
+                            cim_add_input_q_2 <= (gen_reg_2b == 'd3) ? {{(N_COMP-N_STORAGE){int_res_read_data[N_STORAGE-1]}}, int_res_read_data} : cim_add_input_q_2;
+
+                            // Done
+                            current_inf_step <= ((gen_cnt_7b_cnt == NUM_SLEEP_STAGES) && (gen_cnt_7b_2_cnt == (NUM_SAMPLES_OUT_AVG-1))) ? POST_SOFTMAX_ARGMAX_STEP : POST_SOFTMAX_AVERAGING_STEP;
+                        end
+
+                        POST_SOFTMAX_ARGMAX_STEP: begin
+                            gen_cnt_7b_inc <= {6'd0, int_res_access_signals.read_req_src[LOGIC_FSM] & (gen_cnt_7b_inc != 'd1)}; // Current index
+                            gen_cnt_7b_rst_n <= (gen_cnt_7b_cnt == NUM_SLEEP_STAGES) ? RST : RUN;
+
+                            int_res_access_signals.read_req_src[LOGIC_FSM] <= (gen_cnt_7b_cnt < NUM_SLEEP_STAGES);
+                            int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[SOFTMAX_AVG_SUM_MEM] + {3'd0, gen_cnt_7b_cnt};
+
+                            if ({6'd0, int_res_read_data} > compute_temp) begin // compute_temp holds the large softmax value
+                                inferred_sleep_stage <= gen_cnt_7b_cnt[$clog2(NUM_SLEEP_STAGES)-1:0];
+                                compute_temp <= {6'd0, int_res_read_data}; // int_res_read_data will always be positive (since it's a probability, so no need to sign-extend)
+                                gen_reg_2b <= 3;
+                            end
+
+                            if ((gen_cnt_7b_cnt == NUM_SLEEP_STAGES) && (gen_cnt_7b_rst_n == RUN)) begin
+                            end else begin
+                            end
+
+                            current_inf_step <= ((gen_cnt_7b_cnt == NUM_SLEEP_STAGES) && (gen_cnt_7b_rst_n == RST) && (gen_reg_2b == 3)) ? RETIRE_SOFTMAX_STEP : POST_SOFTMAX_ARGMAX_STEP;
+                        end
+
+                        RETIRE_SOFTMAX_STEP: begin
+                            if (gen_reg_2b == 'd1) begin // Want to extend cycle 1 (transition between reads and writes) by 1 to give time to properly clock in the last read
+                                gen_reg_2b <= (int_res_access_signals.read_req_src[LOGIC_FSM] == 1'b0) ? gen_reg_2b + 'd1 : gen_reg_2b;
+                            end else begin
+                                gen_reg_2b <= gen_reg_2b + 'd1; // Note: We enter this state with gen_reg_2b = 3
+                            end
+                            gen_cnt_7b_inc <= {6'd0, (gen_reg_2b == 'd2)};
+                            gen_cnt_7b_2_inc <= {6'd0, (gen_cnt_7b_cnt == NUM_SLEEP_STAGES)};
+                            gen_cnt_7b_rst_n <= (gen_cnt_7b_cnt == NUM_SLEEP_STAGES) ? RST : RUN;
+                            gen_cnt_7b_2_rst_n <= RUN;
+
+                            // Read from memory
+                            int_res_access_signals.read_req_src[LOGIC_FSM] <= (gen_reg_2b == 'd3) || (gen_reg_2b == 'd0);
+                            if (gen_reg_2b == 'd3) begin
+                                int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[PREV_SOFTMAX_OUTPUT_MEM] + {3'd0, gen_cnt_7b_cnt} + NUM_SLEEP_STAGES*{3'd0, gen_cnt_7b_cnt};
+                            end else if (gen_reg_2b == 'd0) begin
+                                int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[MLP_HEAD_SOFTMAX_IN_MEM] + {3'd0, gen_cnt_7b_cnt};
+                            end else if (gen_reg_2b == 'd1) begin
+                                int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[PREV_SOFTMAX_OUTPUT_MEM] + {3'd0, gen_cnt_7b_cnt};
+                            end else if (gen_reg_2b == 'd2) begin
+                                int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[PREV_SOFTMAX_OUTPUT_MEM] + {3'd0, gen_cnt_7b_cnt} + NUM_SLEEP_STAGES*({3'd0, gen_cnt_7b_cnt}+1);
+                            end
+
+                            // Save to temporary memory for later write
+                            compute_temp <= (gen_reg_2b == 'd1) ? {{(N_COMP-N_STORAGE){int_res_read_data[N_STORAGE-1]}}, int_res_read_data} : compute_temp;                            
+
+                            // Write to memory
+                            int_res_access_signals.write_req_src[LOGIC_FSM] <= (gen_reg_2b == 'd1) || (gen_reg_2b == 'd2);
+                            int_res_access_signals.write_data[LOGIC_FSM] <= (gen_reg_2b == 'd2) ? int_res_read_data : compute_temp[N_STORAGE-1:0];
+
+                            // Done
+                            if ((gen_cnt_7b_cnt == NUM_SLEEP_STAGES) && (gen_cnt_7b_2_cnt == (NUM_SAMPLES_OUT_AVG-2))) begin
+                                current_inf_step <= INFERENCE_COMPLETE;
+                                is_ready_internal <= 1'b1;
+                            end
                         end
 
                         INFERENCE_COMPLETE: begin
+                            gen_cnt_7b_rst_n <= RST;
+                            gen_cnt_7b_2_rst_n <= RST;
+                            word_rec_cnt_rst_n <= RST;
+                            word_snt_cnt_rst_n <= RST;
+                            if (bus_op_read == PISTOL_START_OP) begin
+                                $display("Inference complete at time: %d", $time);
+                                $display("Inferred sleep stage: %d", inferred_sleep_stage);
+                                bus_op_write <= INFERENCE_RESULT_OP;
+                                bus_data_write[0] <= {13'd0, inferred_sleep_stage};
+                                bus_target_or_sender_write <= ID;
+                                bus_drive <= (ID == 0); // Only CiM #0 should drive the bus
+                                cim_state <= CIM_IDLE;
+                            end
                         end
-                        
+
                         default: begin
                             $fatal("Invalid current_inf_step value in CIM_INFERENCE_RUNNING state");
                         end

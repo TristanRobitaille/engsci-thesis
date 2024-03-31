@@ -336,4 +336,6 @@ async def basic_test(dut):
     while (dut.is_ready == 0): await cocotb.triggers.RisingEdge(dut.clk)
     await write_full_bus(dut, op=BusOp.PISTOL_START_OP, target_or_sender=0, data=[0, 0, 0])
 
-    await cocotb.triggers.ClockCycles(dut.clk, 1000)
+    while (dut.bus_op != 10): await cocotb.triggers.RisingEdge(dut.clk)
+
+    print(f"Inference complete. Sleep stage: {dut.bus_data_write.value[32:47]}")

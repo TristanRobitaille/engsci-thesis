@@ -20,7 +20,8 @@
                 NUM_SLEEP_STAGES    = 5,
                 NUM_HEADS           = 8,
                 MAC_MAX_LEN         = 64,
-                SOFTMAX_MAX_LEN     = 64;
+                SOFTMAX_MAX_LEN     = 64,
+                NUM_SAMPLES_OUT_AVG = 3;
 
     parameter   NUM_PARAMS  = 31589;
     parameter   PARAMS_STORAGE_SIZE_CIM = 528,
@@ -32,6 +33,7 @@
 /*----- TYPES -----*/
 typedef logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] TEMP_RES_ADDR_T;
 typedef logic [$clog2(PARAMS_STORAGE_SIZE_CIM)-1:0] PARAMS_ADDR_T;
+typedef logic [$clog2(NUM_SLEEP_STAGES)-1:0] SLEEP_STAGE_T;
 typedef logic signed [N_COMP-1:0] COMP_WORD_T;
 typedef logic signed [N_STORAGE-1:0] STORAGE_WORD_T;
 
