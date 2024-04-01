@@ -1,3 +1,6 @@
+`ifndef _mac_sv_
+`define _mac_sv_
+
 /* Note:
 - Fixed-point MAC
 - Done signal is a single-cycle pulse
@@ -183,3 +186,5 @@ module mac
     end
 
 endmodule
+
+`endif

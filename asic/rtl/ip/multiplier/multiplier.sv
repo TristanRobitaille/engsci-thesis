@@ -1,9 +1,12 @@
+`ifndef _multiplier_sv_
+`define _multiplier_sv_
+
 /* Note:
 - Single-cycle fixed-point multiplier
 - Output is updated when refresh is set
 - Provides notice of overflow (note: only valid in the cycle after the posedge on refresh, when the data is ready)
 */
-// `include "../types.svh"
+
 module multiplier (
     input wire clk,
     input wire rst_n,
@@ -48,3 +51,5 @@ module multiplier (
     end
     
 endmodule
+
+`endif

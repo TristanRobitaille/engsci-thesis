@@ -3,6 +3,37 @@
 
 `include "../types.svh"
 
+/*----- CONSTANTS -----*/
+parameter logic [$clog2(NUM_PARAMS/64)-1:0] ext_mem_param_addr_map[27] = {
+    $clog2(NUM_PARAMS/64)'(0),
+    $clog2(NUM_PARAMS/64)'(478),
+    $clog2(NUM_PARAMS/64)'(64),
+    $clog2(NUM_PARAMS/64)'(125),
+    $clog2(NUM_PARAMS/64)'(479),
+    $clog2(NUM_PARAMS/64)'(189),
+    $clog2(NUM_PARAMS/64)'(480),
+    $clog2(NUM_PARAMS/64)'(253),
+    $clog2(NUM_PARAMS/64)'(481),
+    $clog2(NUM_PARAMS/64)'(317),
+    $clog2(NUM_PARAMS/64)'(482),
+    $clog2(NUM_PARAMS/64)'(381),
+    $clog2(NUM_PARAMS/64)'(483),
+    $clog2(NUM_PARAMS/64)'(381),
+    $clog2(NUM_PARAMS/64)'(491),
+    $clog2(NUM_PARAMS/64)'(445),
+    $clog2(NUM_PARAMS/64)'(484),
+    $clog2(NUM_PARAMS/64)'(477),
+    $clog2(NUM_PARAMS/64)'(485),
+    $clog2(NUM_PARAMS/64)'(486),
+    $clog2(NUM_PARAMS/64)'(487),
+    $clog2(NUM_PARAMS/64)'(488),
+    $clog2(NUM_PARAMS/64)'(489),
+    $clog2(NUM_PARAMS/64)'(490),
+    $clog2(NUM_PARAMS/64)'(492),
+    $clog2(NUM_PARAMS/64)'(483),
+    $clog2(NUM_PARAMS/64)'(483)
+};
+
 /*----- FUNCTIONS -----*/
 function automatic logic [$clog2(NUM_PARAMS)-1:0] param_ext_mem_addr(input logic[6:0] param_num, input logic[6:0] cim_num, input logic[1:0] gen_cnt_2b_cnt, input logic [3:0] params_curr_layer);
     logic [$clog2(NUM_PARAMS)-1:0] addr;
@@ -102,37 +133,4 @@ function automatic void update_inst(ref logic signed [2:0][N_STORAGE-1:0] bus_da
     end
 endfunction
 
-function automatic void prepare_for_broadcast(input HIGH_LEVEL_INFERENCE_STEP_T high_level_inf_step, input logic [6:0] gen_cnt_7b_cnt, input logic [6:0] gen_cnt_7b_2_cnt, input BroadcastOpInfo_t broadcast_info, ref logic[3:0] bus_op_write, ref logic signed [2:0][N_STORAGE-1:0] bus_data_write, ref logic [$clog2(NUM_CIMS)-1:0] bus_target_or_sender_write);
-    bus_op_write <= broadcast_info.op;
-    bus_data_write[1] <= {{(N_STORAGE-$clog2(NUM_CIMS+1)){1'd0}}, broadcast_info.len};
-
-    unique case (high_level_inf_step)
-        ENC_MHSA_QK_T_STEP: begin
-            bus_data_write[0] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].tx_addr + 10'($rtoi($ceil(gen_cnt_7b_2_cnt*NUM_HEADS)))};
-            bus_data_write[2] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].rx_addr};
-            bus_target_or_sender_write <= gen_cnt_7b_cnt[5:0];
-        end
-        ENC_MHSA_V_MULT_STEP: begin
-            bus_data_write[0] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].tx_addr + 10'($rtoi($ceil(gen_cnt_7b_2_cnt*(NUM_PATCHES+1))))};
-            bus_data_write[2] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].rx_addr};
-            bus_target_or_sender_write <= gen_cnt_7b_cnt[5:0];
-        end
-        ENC_MHSA_PRE_SOFTMAX_TRANS_STEP: begin
-            bus_data_write[0] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].tx_addr + 10'($rtoi($ceil(gen_cnt_7b_2_cnt*(NUM_PATCHES+1))))};
-            bus_data_write[2] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].rx_addr + 10'($rtoi($ceil(gen_cnt_7b_2_cnt*(NUM_PATCHES+1))))};
-            bus_target_or_sender_write <= gen_cnt_7b_cnt[5:0];
-        end
-        PRE_MLP_HEAD_DENSE_2_TRANS_STEP: begin
-            bus_data_write[0] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].tx_addr};
-            bus_data_write[2] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].rx_addr};
-            bus_target_or_sender_write <= MLP_DIM + gen_cnt_7b_cnt[5:0];
-        end
-        default: begin
-            bus_data_write[0] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].tx_addr};
-            bus_data_write[2] <= {{(N_STORAGE-$clog2(TEMP_RES_STORAGE_SIZE_CIM)){1'd0}}, broadcast_ops[high_level_inf_step].rx_addr};
-            bus_target_or_sender_write <= gen_cnt_7b_cnt[5:0];
-        end
-    endcase
-    
-endfunction
 `endif

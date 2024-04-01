@@ -1,12 +1,138 @@
-\documentclass{article}
+\documentclass[12pt, hidelinks]{article}
+\usepackage[a4paper, margin=1in]{geometry} % Set 1-inch border
+\usepackage[backend=biber, citestyle=ieee]{biblatex}
+\usepackage{setspace}
+\usepackage{acronym}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{setspace}
+\usepackage{lipsum} % Dummy text
+\usepackage{multirow} % Table
+\usepackage{tocloft}
+\usepackage{quantikz}
+\usepackage{booktabs}
+\usepackage{fancyhdr} % Headers and footers
 
-\usepackage[backend=biber]{biblatex}
 \addbibresource{../references.bib}
+% Dots (leaders) in table of contents
+\renewcommand{\cftsecleader}{\cftdotfill{\cftdotsep}}
+\renewcommand{\cftsubsecleader}{\cftdotfill{\cftdotsep}}
+\renewcommand{\cftsubsubsecleader}{\cftdotfill{\cftdotsep}}
+\renewcommand{\thetable}{\Roman{table}}
 
 \begin{document}
+% Front cover
+\include{front_cover.tex}
+\maketitle
 
-See~\cite{yao2023cnn}.
+% Flyleaf
+\include{flyleaf}
 
+\onehalfspacing
+
+% Title
+\include{title}
+\newpage
+
+\pagenumbering{roman}
+% Abstract
+\section*{Abstract}
+    \lipsum[1]
+\newline
+\newline
+{\bf Keywords:} Sleep staging, ASIC accelerator, vision transformer, computer architecture
+\newpage
+
+% Acknowledgements
+\section*{Acknowledgements}
+I would like to express my gratitude to...
+\newpage
+
+% Table of Contents
+\tableofcontents
+\newpage
+
+% List of Figures
+\listoffigures
+\newpage
+
+% List of Tables
+\listoftables
+\newpage
+
+% List of abbreviations
+\section*{List of Abbreviations}
+\input{acronyms}
+\newpage
+
+% Body
+\pagenumbering{arabic}
+    See~\cite{liu2021edge}.
+    I am making an \ac{asic}. It's small, low-power and fast. It's better than Google's.
+\section{Introduction}
+\lipsum[1]
+
+\newpage
+\section{Background}
+\lipsum[1]
+
+\newpage
+\section{How to Design an AI Accelerator}
+\lipsum[1]
+\subsection{Model Prototyping}
+\lipsum[1]
+\subsection{Accelerator Functional Simulation}
+\lipsum[1]
+\subsection{Accelerator Hardware Implementation}
+\lipsum[1]
+
+\newpage
+\section{Design Overview}
+\lipsum[1]
+
+\subsection{Vision Transformer}
+\lipsum[1]
+\subsection{Accelerator Architecture}
+\subsubsection{Centralized vs. Distributed Architecture}
+\subsubsection{Master Architecture}
+\subsubsection{Data and Control Bus}
+\subsubsection{Compute-in-Memory: Fixed-Point Accuracy}
+\subsubsection{Compute-in-Memory: Memory}
+\subsubsection{Compute-in-Memory: Compute Modules}
+
+\subsection{A Note About Software-Hardware Co-Design}
+
+\lipsum[1]
+
+\newpage
+\section{Evaluation of Performance Metrics}
+\lipsum[1]
+\subsection{Vision Transformer}
+\lipsum[1]
+\subsection{Accelerator}
+\lipsum[1]
+
+\newpage
+\section{Future Work}
+\lipsum[1]
+
+\newpage
+\section{Conclusion}
+\lipsum[1]
+
+\newpage
+
+% Bibliography
 \printbibliography
+\newpage
+
+% Appendices
+\input{appendices}
+
+% Flyleaf
+\include{flyleaf}
+
+% Back cover
+\newpage
 
 \end{document}

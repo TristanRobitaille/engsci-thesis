@@ -1,3 +1,6 @@
+`ifndef _divider_sv_
+`define _divider_sv_
+
 /* Note:
     - The divider is implemented using a non-restoring division algorithm.
     - A pulse on start will initiate the division process.
@@ -92,3 +95,5 @@ module divider (
         end
     end
 endmodule
+
+`endif

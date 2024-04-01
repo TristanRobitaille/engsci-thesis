@@ -3,10 +3,7 @@
 
 // Includes
 `include "types.svh"
-`include "../top_init.sv"
-`include "master/master_init.sv"
 `include "master/master.svh"
-`include "master/master_fcn.svh"
 `include "ip/counter/counter.sv"
 
 module master #(
@@ -33,6 +30,11 @@ module master #(
     output logic ext_mem_data_read_pulse,
     output logic [$clog2(NUM_PARAMS)-1:0] ext_mem_addr
 );
+
+    // Initialize arrays
+    `include "top_init.sv"
+    `include "master/master_init.sv"
+    `include "master/master_fcn.svh"
 
     // Bus
     logic bus_drive, bus_drive_delayed;
@@ -173,7 +175,11 @@ module master #(
                     end
 
                     // Don't update external memory address if we are sending PARAM_STREAM_START_OP because it will be garbage
-                    ext_mem_addr <= (bus_op_write != PARAM_STREAM_START_OP) ? param_ext_mem_addr(gen_cnt_7b_cnt, gen_cnt_7b_2_cnt, gen_cnt_2b_cnt, params_curr_layer) : ext_mem_addr;
+                    if (bus_op_write != PARAM_STREAM_START_OP) begin
+                        ext_mem_addr <= param_ext_mem_addr(gen_cnt_7b_cnt, gen_cnt_7b_2_cnt, gen_cnt_2b_cnt, params_curr_layer);
+                    end else begin
+                        ext_mem_addr <= ext_mem_addr;
+                    end
                 end
 
                 MASTER_STATE_SIGNAL_LOAD: begin

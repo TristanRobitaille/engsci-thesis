@@ -7,7 +7,7 @@
     * Polysomnography requires (at least) 8 EEG, 5 EMG, 4 sensors for respiration physiological signals, 1 pulse oximetry, 1 ECG = 19 sensors [RUNDO2019381]
 * There is thus a need to develop a self-contained brain-machine interface (BMI) device for sleep stage detection and neuromodulation. The proposed thesis project focusses on the development of an AI model and its FPGA prototype implementation as part of the larger BMI device.
 
-* Research question: 
+* Research question:
     * Refers
 
 ### Objectives

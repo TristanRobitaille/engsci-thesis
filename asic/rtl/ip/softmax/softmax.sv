@@ -1,3 +1,6 @@
+`ifndef _softmax_sv_
+`define _softmax_sv_
+
 `include "../../types.svh"
 
 module softmax
@@ -128,3 +131,5 @@ module softmax
     end
 
 endmodule
+
+`endif

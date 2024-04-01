@@ -1,3 +1,6 @@
+`ifndef _layernorm_sv_
+`define _layernorm_sv_
+
 module layernorm (
     input wire clk,
     input wire rst_n,
@@ -230,3 +233,5 @@ module layernorm (
         end
     end
 endmodule
+
+`endif

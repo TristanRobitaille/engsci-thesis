@@ -1,35 +1,10 @@
 `ifndef _types_vh_
 `define _types_vh_
 
-/*----- PARAMETERS -----*/
-    // Fixed-point parameters
-    // verilator lint_off UNUSEDPARAM
-    parameter   N_STORAGE = 16, // 16b total (for storage)
-                N_COMP = 22, // 22b total (for temporary results of computation)
-                Q = 10; // 10b fractional
-
-    // Bus parameters
-    parameter   BUS_OP_WIDTH = 4;
-
-    // Other
-    parameter   NUM_CIMS                    = 64,
-                NUM_PATCHES                 = 60,
-                PATCH_LEN                   = 64,
-                EMB_DEPTH                   = 64, // Note: Must be a power of two as we are bit-shifting instead of dividing in the LayerNorm module based on this
-                MLP_DIM                     = 32,
-                NUM_SLEEP_STAGES            = 5,
-                NUM_HEADS                   = 8,
-                MAC_MAX_LEN                 = 64,
-                SOFTMAX_MAX_LEN             = 64,
-                NUM_SAMPLES_OUT_AVG         = 3,
-                INV_NUM_SAMPLES_OUT_AVG     = 341; // 1/NUM_SAMPLES_OUT_AVG in fixed-point
-
-    parameter   NUM_PARAMS  = 31589;
-    parameter   PARAMS_STORAGE_SIZE_CIM = 528,
-                TEMP_RES_STORAGE_SIZE_CIM = 848;
- 
-    parameter   EEG_SAMPLE_DEPTH = 16;
-    // verilator lint_on UNUSEDPARAM
+`include "parameters.svh"
+/* verilator lint_off IMPORTSTAR */
+import parameters::*;
+/* verilator lint_on IMPORTSTAR */
 
 /*----- TYPES -----*/
 typedef logic [$clog2(TEMP_RES_STORAGE_SIZE_CIM)-1:0] TEMP_RES_ADDR_T;
@@ -47,18 +22,18 @@ typedef struct packed {
 
 /*----- ENUMS -----*/
 typedef enum reg [BUS_OP_WIDTH-1:0] {
-    NOP                             = 'd0,
-    PATCH_LOAD_BROADCAST_START_OP   = 'd1,
-    PATCH_LOAD_BROADCAST_OP         = 'd2,
-    DENSE_BROADCAST_START_OP        = 'd3,
-    DENSE_BROADCAST_DATA_OP         = 'd4,
-    PARAM_STREAM_START_OP           = 'd5,
-    PARAM_STREAM_OP                 = 'd6,
-    TRANS_BROADCAST_START_OP        = 'd7,
-    TRANS_BROADCAST_DATA_OP         = 'd8,
-    PISTOL_START_OP                 = 'd9,
-    INFERENCE_RESULT_OP             = 'd10,
-    OP_NUM                          = 'd11 // Number of ops
+    NOP,
+    PATCH_LOAD_BROADCAST_START_OP,
+    PATCH_LOAD_BROADCAST_OP,
+    DENSE_BROADCAST_START_OP,
+    DENSE_BROADCAST_DATA_OP,
+    PARAM_STREAM_START_OP,
+    PARAM_STREAM_OP,
+    TRANS_BROADCAST_START_OP,
+    TRANS_BROADCAST_DATA_OP,
+    PISTOL_START_OP,
+    INFERENCE_RESULT_OP,
+    OP_NUM // Number of ops
 } BUS_OP_T;
 
 typedef enum logic {

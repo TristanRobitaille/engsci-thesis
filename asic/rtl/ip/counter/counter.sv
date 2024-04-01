@@ -1,3 +1,6 @@
+`ifndef _counter_sv_
+`define _counter_sv_
+
 /* Note:
     In posedge-triggered mode, the counter increments on the rising edge of the increment input. 
     In level-triggered mode, the counter increments as long as the increment input is high.
@@ -29,3 +32,5 @@ module counter # (
     end
 
 endmodule // counter
+
+`endif

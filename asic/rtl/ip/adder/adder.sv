@@ -1,3 +1,6 @@
+`ifndef _adder_sv_
+`define _adder_sv_
+
 /* Note:
 - Single-cycle fixed-point adder
 - Output is updated when refresh is set
@@ -37,3 +40,5 @@ module adder (
         end
     end
 endmodule // adder
+
+`endif

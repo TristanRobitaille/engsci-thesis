@@ -139,9 +139,13 @@ async def basic_test(dut):
     dut.start_param_load.value = 1
     await RisingEdge(dut.clk)
     dut.start_param_load.value = 0
+    params_curr_layer_prev = int(dut.params_curr_layer.value)
     while (int(dut.params_curr_layer.value) < 10):
         param_load_assertions(dut)
         read_param_from_ext_mem(dut)
+        if (params_curr_layer_prev != int(dut.params_curr_layer.value)):
+            print(f"Done loading layer {params_curr_layer_prev}")
+            params_curr_layer_prev = int(dut.params_curr_layer.value)
         await RisingEdge(dut.clk)
     
     # Check that all addresses that need to be read have been read

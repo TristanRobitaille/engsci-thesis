@@ -1,26 +1,38 @@
 # Thesis report content notes
 
-## Literature review
+## Acknowledgments
+- Prof. Xilin Li
+- Claude for remote PC and voluntary code review
+- Profs. Jeffrey, Anderson, Moshovos, Enright Jerger, Halupka for courses
+- Compute Canada, CMC
+- Profs. Romkey and Chong for the resources and structure of the EngSci thesis (ESC499)
+- Friends
 
-## Model design
+## Introduction
 
-## Architecture design
+## Background
+- Lit. review from interim report
+- Patent search
+    - Apple's recent AirPod patent
 
-## Methods
+## How to Design and AI Accelerator
+- The three step plan
 - Tools used
     - Python TF prototype, scratch C++ model, SV ASIC, CocoTB, etc.
     - Canada Compute, EECG and Synopsys tools, remote PC, local MacBook
     - Dataset
 
-## Results
-- Model: Number of params, number of operations, accuracy
-- ASIC: Inference time, Fmax, area usage, energy per inference, power (dynamic and leakage), memory usage
+## Vision transformer design
+- Why vision transformer?
+    - No need for decoder since it's sequence-to-one
 
-## Architecture discussion
+## ASIC Architecture
 - Centralized vs. distributed intermediate results
     - What are the clock cycles used for (number of clock cycles for data transfer vs computation for 64 CiM vs single module)
     - Extra space used by 64 CiM vs single module
     - Seeing the end results, was a multi-CiM architecture beneficial (essentially, would single CiM be fast enough)?
+- Master
+    - 
 - Communication bus
     - Data carried
     - Op codes supported
@@ -40,23 +52,27 @@
     - Use "-gate_clock" in command, but should be done automatically by default. Try to disable and see difference
 
 ## Results
+- Model: Number of params, number of operations, accuracy
+- ASIC: Inference time, Fmax, area usage, energy per inference, power (dynamic and leakage), memory usage
 - Area, power, latency (w/ and w/o parameters load)
 - Qualify the above results:
     - Assumption on external memory access latency
 
-## Next steps
+## Future Work
 - Potentially reduce number of data transpose needed (don't train beta and gamma in LayerNorm, etc.)
 - Architecture changes
     - To speed up, split memory into 3 (or have 3 read ports) to reduce by ~3 transpose/dense broadcast delays. Quantify how much time is spent in comms vs useful work.
 - Training on different datasets
+    - Including in-ear EEG PSG
 - Evaluate dynamic fixed-point (different Q and N based on layer)
 - What else could we run this on?
     - ARM-Cortex MCU and Edge TPU
     - Power consumption of STM32L4
 
 ## Interesting project metrics
-- Number of lines of code (Python, C++, SystemVerilog, Tex, Shell)
-- Number of files (Python, C++, SystemVerilog, Tex, Shell)
+- Number of lines of code (Python, C++, SystemVerilog, TeX, Shell)
+- Number of files (Python, C++, SystemVerilog, TeX, Shell)
 - Number of commits
 
 ## Reflection on learnings and experience gained
+- Owning the full-stack is powerful and gives significant design freedom. [Like what?] In turn, this can prove destabilizing as essentially all aspects of the design has compounding pros and cons. It is thus critical to spend enough time evaluating ideas in simulations of varying complexity before jumping to a HDL. I am glad to have done that to some extent with the C++ model and various Python studies, but, in retrospect, more time should have been spent desiging and obtaining proxy metrics to determine the ideal high-level architecture. However, I think such learning can only be appreciated once an architect goes through the full design cycle at least once, so I am glad to have had the opportunity to earn this wisdom, which I will carry in future projects.

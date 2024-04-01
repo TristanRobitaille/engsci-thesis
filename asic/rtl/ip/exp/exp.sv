@@ -1,3 +1,5 @@
+`ifndef _exp_sv_
+`define _exp_sv_
 /* Note:
     - Approxmiate the exponential function using the e^x = 2^(x/ln(2)) identity and Taylor series expansion.
     - A pulse on start will initiate the computation process.
@@ -167,3 +169,5 @@ wire [N_COMP-1:Q] input_mapped_complement;
 assign input_mapped_complement = ~input_mapped[N_COMP-1:Q];
 
 endmodule
+
+`endif

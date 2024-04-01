@@ -1,7 +1,7 @@
 `ifndef _master_vh_
 `define _master_vh_
 
-`include "../types.svh"
+`include "types.svh"
 
 /*----- ENUM -----*/
     typedef enum logic [2:0] {
@@ -83,10 +83,5 @@
         TEMP_RES_ADDR_T rx_addr;
         logic [$clog2(NUM_CIMS+1)-1:0] num_cim;
     } BroadcastOpInfo_t;
-
-/*----- LUT -----*/
-    ParamInfo_t param_addr_map[PARAMS_NUM-1];
-    BroadcastOpInfo_t broadcast_ops[HIGH_LEVEL_INFERENCE_STEP_NUM];
-    logic [$clog2(NUM_PARAMS/64)-1:0] ext_mem_param_addr_map[EXT_MEM_PARAM_NUM];
 
 `endif

@@ -1,3 +1,6 @@
+`ifndef _sqrt_sv_
+`define _sqrt_sv_
+
 /* Note:
     - A pulse on start will initiate the sqrt process.
     - Signal done (pulse) is asserted when the computation is complete.
@@ -77,3 +80,5 @@ always_ff @ (posedge clk) begin : sqrt_assertions
     assert (~rad_q[N_COMP-1]) else $fatal("Error from sqrt: Negative radicand detected.");
 end
 endmodule
+
+`endif

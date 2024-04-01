@@ -17,6 +17,13 @@ latex/thesis/thesis.fls
 latex/thesis/thesis.log
 latex/thesis/thesis.run.xml
 latex/thesis/thesis.synctex.gz
+latex/thesis/thesis.toc
+latex/thesis/thesis.lof
+latex/thesis/thesis.lot
+latex/thesis/thesis.out
+latex/thesis/front_cover.aux
+latex/thesis/ESC499_Thesis_Final_Document_Rubric_and_Rough_Guide.pdf
+latex/thesis/Thesis_Format_Reqs_2023-24.pdf
 
 # Proposal
 latex/proposal/proposal.aux
