@@ -135,7 +135,7 @@ class CiM {
             {ENC_MLP_IN_MEM,            NUM_PATCHES+1},
             {ENC_MLP_DENSE1_MEM,        NUM_PATCHES+1+EMB_DEPTH},
             {ENC_MLP_DENSE2_IN_MEM,     NUM_PATCHES+1},
-            {ENC_MLP_OUT_MEM,           2*EMB_DEPTH+NUM_PATCHES+2},
+            {ENC_MLP_OUT_MEM,           3*EMB_DEPTH+NUM_PATCHES+2},
             {MLP_HEAD_LN_1ST_HALF_MEM,  0},
             {MLP_HEAD_LN_2ND_HALF_MEM,  EMB_DEPTH},
             {MLP_HEAD_DENSE_1_IN_MEM,   EMB_DEPTH},

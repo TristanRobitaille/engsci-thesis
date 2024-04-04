@@ -610,7 +610,7 @@ module cim # (
                                 mac_start <= (word_rec_cnt >= MLP_DIM) & (word_rec_cnt_rst_n == RUN);
 
                                 // Start add
-                                int_res_access_signals.addr_table[LOGIC_FSM] <= {3'd0, sender_id}; // Residual connection with encoder input
+                                int_res_access_signals.addr_table[LOGIC_FSM] <= mem_map[ENC_MLP_OUT_MEM] + {3'd0, sender_id}; // Residual connection with encoder input
                                 int_res_access_signals.read_req_src[LOGIC_FSM] <= mac_done;
                                 gen_reg_2b <= (mac_done || cim_add_refresh || is_ready_internal) ? (gen_reg_2b + 'd1) : gen_reg_2b;
                                 cim_add_input_q_1 <= mac_out;
@@ -956,7 +956,7 @@ module cim # (
                             word_snt_cnt_rst_n <= RST;
                             if (bus_op_read == PISTOL_START_OP) begin
                                 $display("Inference complete at time: %d", $time);
-                                $display("Inferred sleep stage: %d", integer'inferred_sleep_stage);
+                                $display("Inferred sleep stage: %d", integer'(inferred_sleep_stage));
                                 bus_op_write <= INFERENCE_RESULT_OP;
                                 bus_data_write[0] <= {13'd0, inferred_sleep_stage};
                                 bus_target_or_sender_write <= ID;

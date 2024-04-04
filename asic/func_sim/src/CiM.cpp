@@ -328,7 +328,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                         gen_reg_2b = 1;
                     } else if (gen_reg_2b == 1) {
                         intermediate_res[mem_map.at(ENC_MLP_OUT_MEM)+sender_id] = computation_result; // MLP Dense 2
-                        ADD(sender_id, mem_map.at(ENC_MLP_OUT_MEM)+sender_id, INTERMEDIATE_RES);  // Sum with encoder's input (next step in inference pipeline, but do it now)
+                        ADD(mem_map.at(ENC_MHSA_OUT_MEM) + sender_id, mem_map.at(ENC_MLP_OUT_MEM)+sender_id, INTERMEDIATE_RES); // Sum with encoder's input for residual connection (next step in inference pipeline, but do it now)
                         gen_reg_2b = 3;
                         word_rec_cnt.reset();
                     }

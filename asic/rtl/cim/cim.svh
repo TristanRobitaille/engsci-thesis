@@ -87,7 +87,6 @@ typedef enum logic [4:0] {
 
 /*----- LUT -----*/
 TEMP_RES_ADDR_T mem_map [PREV_SOFTMAX_OUTPUT_MEM+'d1];
-ParamInfo_t param_addr_map[PARAMS_NUM-1];
 
 /*----- INTERFACE -----*/
 typedef enum logic [2:0] {
