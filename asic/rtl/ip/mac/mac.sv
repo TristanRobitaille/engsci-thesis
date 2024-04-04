@@ -4,8 +4,8 @@
 /* Note:
 - Fixed-point MAC
 - Done signal is a single-cycle pulse
-- Uses external multiplier and adder modules to be shared with other modules in the CiM.
-- Implements three different activations: No activation (no bias), linear (adds bias to MAC result) and TODO: SWISH
+- Uses external adder, multiplier, divider and exp modules to be shared with other modules in the CiM.
+- Implements three different activations: No activation (no bias), linear (adds bias to MAC result) and SWISH (adds bias to MAC result, then applies SWISH activation function)
 */
 `include "../../types.svh"
 
@@ -24,8 +24,8 @@ module mac
     output logic busy, done,
 
     // Memory access signals
-    input MemAccessSignals int_res_access_signals,
-    input MemAccessSignals params_access_signals,
+    MemAccessSignals int_res_access_signals,
+    MemAccessSignals params_access_signals,
     input STORAGE_WORD_T param_data,
     input STORAGE_WORD_T int_res_data,
 

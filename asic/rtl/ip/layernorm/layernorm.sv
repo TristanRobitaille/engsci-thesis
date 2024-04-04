@@ -1,6 +1,8 @@
 `ifndef _layernorm_sv_
 `define _layernorm_sv_
 
+`include "../../types.svh"
+
 module layernorm (
     input wire clk,
     input wire rst_n,
@@ -13,8 +15,8 @@ module layernorm (
     output logic busy, done,
 
     // Memory access signals
-    input MemAccessSignals int_res_access_signals,
-    input MemAccessSignals params_access_signals,
+    MemAccessSignals int_res_access_signals,
+    MemAccessSignals params_access_signals,
     input STORAGE_WORD_T param_data,
     input STORAGE_WORD_T int_res_data,
 

@@ -5,6 +5,7 @@
 - Single-cycle fixed-point multiplier
 - Output is updated when refresh is set
 - Provides notice of overflow (note: only valid in the cycle after the posedge on refresh, when the data is ready)
+- To avoid introducing bias, the output is rounded to the nearest integer (Gaussian rounding)
 */
 
 module multiplier (

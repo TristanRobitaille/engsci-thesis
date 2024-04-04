@@ -15,7 +15,7 @@ module softmax
     output logic busy, done,
 
     // Memory access signals
-    input MemAccessSignals int_res_access_signals,
+    MemAccessSignals int_res_access_signals,
     input STORAGE_WORD_T int_res_data,
 
     // Adder signals

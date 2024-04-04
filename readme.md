@@ -19,6 +19,7 @@ Install Python dependencies for IP verification with `pip3 install -r asic/ip_ve
 
 #### LaTeX
 To compile LaTeX documents, install `latexml`, `texlive` and `biber`: `brew install latexml texlive biber`.\
+You'll also need the Python package `SciencePlots` to export plots used in the thesis. Install it with: `python -m pip install git+https://github.com/garrettj403/SciencePlots.git`
 I recommend using the `LaTeX Workshop` extension in VSCode.
 
 ## Map

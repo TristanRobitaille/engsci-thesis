@@ -12,6 +12,8 @@
 \usepackage{quantikz}
 \usepackage{booktabs}
 \usepackage{fancyhdr} % Headers and footers
+\usepackage{siunitx}
+\newcommand{\mum}{\si{\micro\meter}}
 
 \addbibresource{../references.bib}
 % Dots (leaders) in table of contents
@@ -100,18 +102,100 @@ Finally, I would like to thank my family and friends for their support and encou
 \lipsum[1]
 
 \newpage
-\section{Design Overview}
+\section{Vision Transformer Model Design}
+\label{sec:vision_transformer}
 \lipsum[1]
 
-\subsection{Vision Transformer}
+\section{ASIC Acceleator Architecture}
+I am using the acronyme \ac{mac} such that the table below is properly formatted.
 \lipsum[1]
-\subsection{Accelerator Architecture}
-\subsubsection{Centralized vs. Distributed Architecture}
-\subsubsection{Master Architecture}
-\subsubsection{Data and Control Bus}
-\subsubsection{Compute-in-Memory: Fixed-Point Accuracy}
-\subsubsection{Compute-in-Memory: Memory}
-\subsubsection{Compute-in-Memory: Compute Modules}
+\subsection{Centralized vs. Distributed Architecture}
+\subsection{Master Architecture}
+\subsection{Data and Control Bus}
+\subsection{Compute-in-Memory: Fixed-Point Accuracy}
+\subsection{Compute-in-Memory: Memory}
+\subsection{Compute-in-Memory: Compute Modules}
+This section describes the design and performance metrics of the various compute \ac{ip} modules use by the \ac{cim} modules. Each is custom-designed for this project.
+Each module works with signed (2's complement) fixed-point representation. To avoid overflow, the modules use internal temporary variables of fixed-point format Q22.10.
+Table \ref{tab:compute_modules} shows the performance metrics of the compute modules.
+
+\begin{table}[ht]
+    \centering
+    \renewcommand{\arraystretch}{1.2} % Vertical spacing
+    \setlength{\arrayrulewidth}{1.5pt} % Thickness of vertical lines
+    \caption{Performance metrics of the compute modules}
+    \begin{tabular}{@{} p{2.5cm}ccccc @{}}
+        \toprule
+        Module      & Area (\si{\square\mum})   & Cycle/op          & Energy/op & Leakage current   & Fmax \\\midrule
+        Adder       & x                         & 1                 & x nJ      & x nA              & x MHz \\
+        Multiplier  & x                         & 1                 & x nJ      & x nA              & x MHz \\
+        Divider     & x                         & 35                & x nJ      & x nA              & x MHz \\
+        Exponential & x                         & 24                & x nJ      & x nA              & x MHz \\
+        Square Root & x                         & 17                & x nJ      & x nA              & x MHz \\
+        \ac{mac}    & x                         & \{386, 391, 456\} & x nJ      & x nA              & x MHz \\
+        Softmax     & x                         & 2024              & x nJ      & x nA              & x MHz \\
+        LayerNorm   & x                         & 1469+494          & x nJ      & x nA              & x MHz \\
+        \hline
+    \end{tabular}
+    \label{tab:compute_modules}
+\end{table}
+\subsubsection{Adder}
+The adder is a single-cycle, combinational module that adds two fixed-point numbers. It uses a ripple-carry adder architecture. The adder has a latency of 1 cycle, which simplifies the logic that uses it.
+It also provides an overflow flag. To reduce dynamic power consumption, the adder only updates its output when the \texttt{refresh} signal is high.
+
+\subsubsection{Multiplier}
+The multiplier is very similar to the adder. One difference is that it uses Gaussian rounding (also known as banker's rounding). This rounding method rounds 0.5 to the nearest even number. This reduces 
+the bias in the output that is commonly observed with standard rounding methods, which is particularly important in \ac{mac} operations where the error can accumulate. The multiplier also has a latency of 1
+cycle and provides an overflow flag. Like the adder, the multiplier only updates its output when the \texttt{refresh} signal is high.
+
+\subsubsection{Divider}
+The divider is more complicated than the adder and multiplier. It performs bit-wise long-division and has a latency of $N+Q+3$ cycles, where $N$ is the number of integer bits and $Q$ is the number of fractional
+bits. The divider also provides flags for overflow and divide-by-zero and done/busy status signals. The module start division on an active-high pulse of the \texttt{start} signal and provides the result when the
+\texttt{done} signal is high. The divider module is mostly used in the \ac{mac} module during computation of the Swish activation function.
+
+\subsubsection{Exponential}
+The exponential module computes the exponential $e^{x}$ of a fixed-point number $x$. It uses a combination of the identities of exponential and a Taylor series approximation around zero to compute the exponential.
+Specifically, the module transforms the exponential as such:
+\begin{equation}
+    e^{x} = 2^{\frac{x}{\ln(e)}} = 2^{z} = 2^{\lfloor{z}\rfloor}2^{z-\lfloor{z}\rfloor}
+\end{equation}
+\label{eq:exp_transform}
+The compute can then easily compute $2^{\lfloor{z}\rfloor}$ as an inexpensive bit-shift operation and $2^{z-\lfloor{z}\rfloor}$ as a Taylor series approximation. To determine a reasonable number of terms to use
+for the Taylor series expansion, an accuracy study was ran. Figure \ref{fig:exp_error} shows the relative error of the exponential module as a function of the order of the Taylor series expansion for both fixed-point (Q22.10)
+approximation and float (64b) approximation. As can be seen, the error decreases with an increase in the order of the expansion. However, for the fixed-point approximation, it converges to a minimum error of \~0.992\%. This
+is because the quantization of fixed-point dominates the Taylor series error. Therefore, using a 3rd order Tarlor series expansion to appriximate the exponential function is a good balance between accuracy and latency/energy.
+Note that these error was measured over the input range of [-4, 4]. According to the functional simulation, this corresponds to roughly $\pm3$ standard deviations from the mean of inputs to the exponential function.
+To further speed up the computation, the exponential module uses a lookup table to store the Taylor series coefficients as well as $1/ln(e)$. To reduce area, the exponential module does not instantiate its own adder and
+multiplier modules. Rather, it accesses the adder and multiplier modules in the \ac{cim} module shared with other compute units. The latency is 24 cycles.
+\begin{figure}
+    \centering
+    \caption{Error of exponential approximation as a function of Taylor series expansion order}
+    \includegraphics[width=0.9\textwidth]{assets/exp_approx_error.eps}
+\end{figure}
+\label{fig:exp_error}
+
+\subsubsection{Square Root}
+The square root module computes the square root of a fixed-point number using an iterative algortihm. It has a latency of $(N+Q)//2+1$ cycles, where $//$ denotes integer division. The module provides flags for overflow and 
+negative radicand and start/busy/done signals. The module starts computation on an active-high pulse of the \texttt{start} signal and provides the result when the \texttt{done} signal is high.
+
+\subsubsection{Multiply-Accumulate}
+The \ac{mac} module performs a vector dot-product for a given pair of base addresses for the data and length of the vector and applies a selectable activation function to the result. Similar to the exponential module, it
+uses shared adder, multiplier, divider and exponential modules in the \ac{cim} module. It can implement three activation functions: none, linear and Swish. For a nominal length of 64 (which corresponds to the embedding
+depth of the model, a very common value for matrix dimensions in the model) and Q22.10 formate, the latencies are 386, 391 and 456, respectively. Note that, although the Swish activation function comprises a divider operation,
+the \ac{mac} compute latency can still be kept fairly short because the divisor is the same for all elements. The module can thus perform the division once and multiply by the inverse, which is a single-cycle operation.Finally,
+the \ac{mac} module can be directed to choose the second vector from weights or intermediate results memory.
+
+\subsubsection{Softmax}
+The softmax module computes the softmax function of a vector of fixed-point numbers. Similarly to the \ac{mac} module, it uses shared adder, mulitplier, divider and exponential modules and provides \texttt{busy} and
+\texttt{done} signals. For a 64-element Q22.10 vector, the latency is 2024 cycles. This is significantly longer than other vector compute modules such as the \ac{mac} because, in the softmax operation, each element is exponantiated
+individually.
+
+\subsubsection{LayerNorm}
+The final compute module is the LayerNorm module. It computes the Layer Normalization of a vector of fixed-point numbers. As described in section \ref{sec:vision_transformer}, the LayerNorm operation consists of a normalization of
+the vector on the horizontal dimension followed by scaling and shifting using learnable parameters on the vertical dimension. Because each \ac{cim} module stores one vector at a time, the LayerNorm operation must be separated into 
+two stages with a matrix transpose broadcast between the two. The latency for the first half is 1469 cycles and the latency for the second half is 494 cycles. The module provides \texttt{busy} and \texttt{done} signals and is controlled
+with a \texttt{half-select} and \texttt{start} pulse signals. Because the length of the vector is constrained to be a power of two, the module uses bit-shifting instead of division for the normalization operation to decrease latency and energy
+per operation.
 
 \subsection{A Note About Software-Hardware Co-Design}
 

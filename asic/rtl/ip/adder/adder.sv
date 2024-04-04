@@ -33,7 +33,7 @@ module adder (
 
     assign overflow = refresh_delayed & (input_q_1[N_COMP-1] == input_q_2[N_COMP-1]) & (input_q_1[N_COMP-1] != output_q[N_COMP-1]);
 
-    // Note: Verilator does not support assertions
+    // Note: Verilator does not support assertions well
     always @(posedge clk) begin : adder_assertions
         if (overflow) begin
             $display("Overflow detected in adder at time %d!", $time);

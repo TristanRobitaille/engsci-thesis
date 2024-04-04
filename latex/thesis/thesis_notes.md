@@ -25,6 +25,7 @@
 ## Vision transformer design
 - Why vision transformer?
     - No need for decoder since it's sequence-to-one
+- Describe each operation (LayerNorm, Softmax, MAC, Swish)
 
 ## ASIC Architecture
 - Centralized vs. distributed intermediate results
@@ -68,6 +69,7 @@
 - What else could we run this on?
     - ARM-Cortex MCU and Edge TPU
     - Power consumption of STM32L4
+- Look into cutting power to accelerator when not in use to avoid leakage current
 
 ## Interesting project metrics
 - Number of lines of code (Python, C++, SystemVerilog, TeX, Shell)
