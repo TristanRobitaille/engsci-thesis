@@ -22,8 +22,6 @@ import numpy as np
 import tensorflow as tf
 import multiprocessing as mp
 
-tf.get_logger().setLevel('ERROR')
-
 SLEEP_STAGE_RESOLUTION_SEC = 30.0 #Nominal (i.e. in EDF file) length or each clip/sleep stage annotation
 NOMINAL_FREQUENCY_HZ = 256 #Sampling frequency for most channels
 HISTORICAL_LOOKBACK_LENGTH = 0 #We save the last HISTORICAL_LOOKBACK_LENGTH sleep stages. Set to 0 to disable.
@@ -32,7 +30,7 @@ NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE = 5000 #Number of pseudo-random clips to 
 MAX_VOLTAGE = 2**15 - 1
 MIN_VOLTAGE = 0
 ONE_HOT_OUTPUT = False #If true, sleep stages are exported as their one-hot classes tensor, else they are reported as a scalar
-NUM_PROCESSES = 24
+NUM_PROCESSES = 10
 DATA_TYPE = tf.uint16
 AVAILABLE_SIGNAL_PROCESSING_OPS = ["15b_offset", "notch_60Hz", "0_3Hz-100Hz_bandpass", "0_5Hz-32Hz_bandpass", "none"]
 

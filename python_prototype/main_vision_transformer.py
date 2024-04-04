@@ -30,7 +30,7 @@ RANDOM_SEED = 42
 RESAMPLE_TRAINING_DATASET = False
 SHUFFLE_TRAINING_CLIPS = True
 NUM_CLIPS_PER_FILE_EDGETPU = 500 # 500 is only valid for 256Hz
-K_FOLD_OUTPUT_TO_FILE = False # If true, will write validation accuracy to a CSV for k-fold sweep validation
+K_FOLD_OUTPUT_TO_FILE = True # If true, will write validation accuracy to a CSV for k-fold sweep validation
 K_FOLD_SETS_MANUAL_PRUNE = [4]
 
 AVAILABLE_OPTIMIZERS = ["Adam", "AdamW"]
@@ -318,6 +318,7 @@ def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_
         log += f"MLP dimension: {parser.mlp_dim}\n"
         log += f"Number of dense (+ dropout) layers in MLP head before softmax: {parser.mlp_head_num_dense}\n"
         log += f"Dropout rate: {parser.dropout_rate_percent:.3f}\n"
+        log += f"Input argument of encoder's 2nd residual sum connection: {parser.enc_2nd_res_conn_arg}\n"
         log += f"Historical prediction lookback DNN depth: {parser.historical_lookback_DNN_depth}\n"
         log += f"Activation function of first dense layer in MLP layer and MLP head: {mlp_dense_activation}\n"
         log += f"Class training weights: {parser.class_weights}\n"
@@ -362,7 +363,9 @@ def parse_arguments():
     parser.add_argument('--enable_input_rescale', help='Enables layer rescaling inputs between [0, 1] at input.', action='store_true')
     parser.add_argument('--enable_positional_embedding', help='Enables positional embedding.', action='store_true')
     parser.add_argument('--dropout_rate_percent', help='Dropout rate for all dropout layers (in integer %). Defaults to 10%.', default=10 , type=int)
+    parser.add_argument('--enc_2nd_res_conn_arg', help="2nd residual connection sum argument.", choices=["out1", "inputs", "none", "no_res_sum_at_all"], default="out1", type=str)
     parser.add_argument('--save_model', help='Saves model to disk.', action='store_true')
+    parser.add_argument('--export_plot', help='Exports plot of inference over sample night.', action='store_true')
     parser.add_argument('--load_model_filepath', help='Indicates, if not empty, the filepath of a model to load rather than training it. Defaults to None.', default=None, type=str)
     parser.add_argument('--historical_lookback_DNN_depth', help='Internal size of the output DNN for historical lookback. Defaults to 64.', default=64, type=int)
     parser.add_argument('--output_edgetpu_data', help='Select whether to output Numpy arrays when parsing input data to run on edge TPU.', action='store_true')
@@ -495,7 +498,7 @@ def manual_val(model, args, type:str, data:dict, whole_night_indices:list, out_f
         accuracy = round(total_correct/len(sleep_stages_pred), ndigits=4)
 
         # Export plots
-        export_plots(pred=sleep_stages_pred, ground_truth=data["sleep_stages_val"].numpy(), accuracy=accuracy, log_file_path=f"{out_fp}/models/{type}_man_val.ext", ds_metadata=ds_metadata)
+        if (args.export_plot): export_plots(pred=sleep_stages_pred, ground_truth=data["sleep_stages_val"].numpy(), accuracy=accuracy, log_file_path=f"{out_fp}/models/{type}_man_val.ext", ds_metadata=ds_metadata)
     except Exception as e: print(f"Failed to manually validate model type '{type}'. Exception: {e} Moving on.")
 
     print(f"[{(time.time()-start_time):.2f}s] Done manually validating model type '{type}'.")
@@ -784,6 +787,7 @@ class Encoder(tf.keras.layers.Layer):
         self.patch_length = args.patch_length
         self.num_patches = int(self.clip_length_num_samples / self.patch_length)
         self.use_class_embedding = args.use_class_embedding
+        self.enc_2nd_res_conn_arg = args.enc_2nd_res_conn_arg
 
         # Layers
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layerNorm1_encoder")
@@ -803,7 +807,8 @@ class Encoder(tf.keras.layers.Layer):
         attn_output = self.mhsa(inputs_norm) #attn_output = (batch_size, num_patches+1, embedding_depth)
         attn_output = self.dropout1(attn_output, training=training) #attn_output = (batch_size, num_patches+1, embedding_depth)
 
-        out1 = attn_output + inputs #out1 = (batch_size, num_patches+1, embedding_depth)
+        if (self.enc_2nd_res_conn_arg == "no_res_sum_at_all"): out1 = attn_output
+        else : out1 = attn_output + inputs #out1 = (batch_size, num_patches+1, embedding_depth)
         if OUTPUT_CSV: np.savetxt("python_prototype/reference_data/enc_res_sum_1.csv", out1[0], delimiter=",")
         out1_norm = self.layernorm2(out1) #out1_norm = (batch_size, num_patches+1, embedding_depth)
         if OUTPUT_CSV: np.savetxt("python_prototype/reference_data/enc_layernorm2.csv", out1_norm[0], delimiter=",")
@@ -815,8 +820,9 @@ class Encoder(tf.keras.layers.Layer):
         mlp_output = self.mlp_dropout2(mlp_output, training=training) #mlp_output = (batch_size, num_patches+1, embedding_depth)
 
         mlp_output = self.dropout2(mlp_output, training=training) #mlp_output = (batch_size, num_patches+1, embedding_depth)
-        # enc_out = mlp_output + out1 # TODO: Should this not be inputs instead of out1?
-        enc_out = mlp_output + inputs # TODO: Should this not be inputs instead of out1?
+        if (self.enc_2nd_res_conn_arg == "out1"): enc_out = mlp_output + out1
+        elif (self.enc_2nd_res_conn_arg == "inputs"): enc_out = mlp_output + inputs
+        elif ((self.enc_2nd_res_conn_arg == "none") or (self.enc_2nd_res_conn_arg == "no_res_sum_at_all")): enc_out = mlp_output
         if OUTPUT_CSV: np.savetxt("python_prototype/reference_data/enc_output.csv", enc_out[0], delimiter=",")
         return enc_out
 
