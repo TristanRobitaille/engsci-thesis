@@ -18,6 +18,7 @@ Some utility function
 
 #--- GLOBALS ---#
 PRUNE_THRESHOLD = 1e-4 # To reduce ASIC power consumption, we prune weights below this threshold and avoid computation if one of the input is 0
+SLEEP_STAGE_ANNOTATONS_CHANNEL = 2 #Channel of sleep stages in annotations file
 global_min = np.inf
 global_max = -np.inf
 global_closest_to_zero = np.inf
@@ -117,19 +118,21 @@ class SleepStageMap():
         """
         Returns a dictionary mapping the label name found in data to numerical value used in model.
         """
-        if   (self.map_name == "no_combine"):           return {"Sleep stage 1":4, "Sleep stage 2":3, "Sleep stage 3":2, "Sleep stage 4":1, "Sleep stage R":5, "Sleep stage W":6, "Sleep stage ?":0}
-        elif (self.map_name == "light_only_combine"):   return {"Sleep stage 1":3, "Sleep stage 2":3, "Sleep stage 3":2, "Sleep stage 4":1, "Sleep stage R":4, "Sleep stage W":5, "Sleep stage ?":0}
-        elif (self.map_name == "deep_only_combine"):    return {"Sleep stage 1":3, "Sleep stage 2":2, "Sleep stage 3":1, "Sleep stage 4":1, "Sleep stage R":4, "Sleep stage W":5, "Sleep stage ?":0}
-        else:                                           return {"Sleep stage 1":2, "Sleep stage 2":2, "Sleep stage 3":1, "Sleep stage 4":1, "Sleep stage R":3, "Sleep stage W":4, "Sleep stage ?":0}
+        if   (self.map_name == "no_combine"):               return {"Sleep stage 1":4, "Sleep stage 2":3, "Sleep stage 3":2, "Sleep stage 4":1, "Sleep stage R":5, "Sleep stage W":6, "Sleep stage ?":0}
+        elif (self.map_name == "light_only_combine"):       return {"Sleep stage 1":3, "Sleep stage 2":3, "Sleep stage 3":2, "Sleep stage 4":1, "Sleep stage R":4, "Sleep stage W":5, "Sleep stage ?":0}
+        elif (self.map_name == "deep_only_combine"):        return {"Sleep stage 1":3, "Sleep stage 2":2, "Sleep stage 3":1, "Sleep stage 4":1, "Sleep stage R":4, "Sleep stage W":5, "Sleep stage ?":0}
+        elif (self.map_name == "both_light_deep_combine"):  return {"Sleep stage 1":2, "Sleep stage 2":2, "Sleep stage 3":1, "Sleep stage 4":1, "Sleep stage R":3, "Sleep stage W":4, "Sleep stage ?":0}
+        else: raise Exception(f"Map name '{self.map_name}' not recognized.")
 
     def get_name_map(self):
         """
         Returns list of sleep stages name (useful for plot labels). It is ordered from deepest to lightest stage.
         """
-        if   (self.map_name == "no_combine"):           return ["Unknown", "N4 (deep)",   "N3 (deep)",    "N2 (light)",   "N1 (light)", "REM", "Wake"]
-        elif (self.map_name == "light_only_combine"):   return ["Unknown", "N4 (deep)",   "N3 (deep)",    "N1/2 (light)", "REM",        "Wake"]
-        elif (self.map_name == "deep_only_combine"):    return ["Unknown", "N3/4 (deep)", "N2 (light)",   "N1 (light)",   "REM",        "Wake"]
-        else:                                           return ["Unknown", "N3/4 (deep)", "N1/2 (light)", "REM", "Wake"]
+        if   (self.map_name == "no_combine"):               return ["Unknown", "N4 (deep)",   "N3 (deep)",    "N2 (light)",   "N1 (light)", "REM", "Wake"]
+        elif (self.map_name == "light_only_combine"):       return ["Unknown", "N4 (deep)",   "N3 (deep)",    "N1/2 (light)", "REM",        "Wake"]
+        elif (self.map_name == "deep_only_combine"):        return ["Unknown", "N3/4 (deep)", "N2 (light)",   "N1 (light)",   "REM",        "Wake"]
+        elif (self.map_name == "both_light_deep_combine"):  return ["Unknown", "N3/4 (deep)", "N1/2 (light)", "REM", "Wake"]
+        else: raise Exception(f"Map name '{self.map_name}' not recognized.")
 
     def get_num_stages(self):
         """
@@ -347,10 +350,16 @@ def round_up_to_nearest_tenth(input) -> float:
     rounded_up_input = rounded_input if (rounded_input > input) else (rounded_input + 0.1) # Round up to nearest tenth
     return rounded_up_input
 
-def edf_to_h5(edf_fp:str, h5_filename:str, channel:str, clip_length_s=30, full_night:bool=False, sampling_freq_hz:int=128) -> tf.Tensor:
+def edf_to_h5(edf_fp:str, h5_filename:str, sleep_map_name:str, channel:str, clip_length_s=30, full_night:bool=False, sampling_freq_hz:int=128) -> tf.Tensor:
     """ Reads .edf input signal file, saves to .h5 and return the signal as a Tensor.
         If full_night is True, the entire night is saved. Otherwise, only the first clip_length_s seconds are saved.
     """
+    # Ground truth
+    sleep_map = SleepStageMap(sleep_map_name)
+    sleep_stage = EdfReader(edf_fp.replace("PSG", "Base")).readAnnotations()[SLEEP_STAGE_ANNOTATONS_CHANNEL]
+    for i in range(len(sleep_stage)): sleep_stage[i] = sleep_map.get_numerical_map()[sleep_stage[i]]
+    sleep_stage = sleep_stage.astype(int)
+
     # Signals
     signal_reader = EdfReader(edf_fp)
     channels = list(signal_reader.getSignalLabels())
@@ -365,21 +374,24 @@ def edf_to_h5(edf_fp:str, h5_filename:str, channel:str, clip_length_s=30, full_n
     resample = interpolator(target_indices)
     resample = resample.astype(int)
 
-    # Grab 1 clip or all night. If one night, will save as a matrix instead of a vector.
+    # Grab 1 clip or all night. If full night, will save as a matrix instead of a vector.
     if (full_night == False): resample = resample[0:clip_length_s*sampling_freq_hz]
 
     for i in range(len(resample)):
         resample[i] += 2**15 # Offset by 15b
 
     with h5py.File(h5_filename, 'w') as file:
-        if (full_night == True): 
+        if (full_night == True):
+            length = min(len(resample), len(sleep_stage)) - 1
             resample = [resample[i : i+clip_length_s*sampling_freq_hz] for i in range(0, len(resample), clip_length_s*sampling_freq_hz)]
-            file.create_dataset('eeg', data=resample[0:-2])
-            tensor = tf.convert_to_tensor(resample[0:-2], dtype=tf.float32, name="input_1")
+            file.create_dataset('eeg', data=resample[0:length])
+            file.create_dataset('sleep_stage', data=sleep_stage[0:length])
+            tensor = tf.convert_to_tensor(resample[0:length], dtype=tf.float32, name="input_1")
             tensor = tf.expand_dims(tensor, axis=0)
             return tensor
         else:
             file.create_dataset('eeg', data=[resample, resample]) # Need a 2D dataset
+            file.create_dataset('sleep_stage', data=[sleep_stage, sleep_stage]) # Need a 2D dataset
             tensor = tf.convert_to_tensor(resample, dtype=tf.float32, name="input_1")
             tensor = tf.expand_dims(tensor, axis=0)
             return tensor
@@ -409,9 +421,14 @@ def print_stats_from_h5(h5_fp:str) -> None:
     print(f'Global Min = {global_min:.5f}, Global Max = {global_max:.5f}, Closest to zero (abs.) = {global_closest_to_zero:.8f}')
     print(f'Total prunable params (abs. < {PRUNE_THRESHOLD}) = {global_prunable_params/global_total_params*100:.2f}%')
 
-def run_accuracy_study(model_fp:str, results_fp:str, num_clips:int):
+def run_accuracy_study(model_fp:str, eeg_fp:str, results_fp:str, num_clips:int):
     model = tf.keras.models.load_model(model_fp, custom_objects={"CustomSchedule": CustomSchedule})
-    data = np.load("asic/fixed_point_accuracy_study/ref_data.npy", allow_pickle=True).item()
+
+    data = {'signals_val': tf.Tensor(), 'sleep_stages_val': tf.Tensor()}
+    with h5py.File(eeg_fp, 'r') as f:
+        data['signals_val'] = tf.convert_to_tensor(f['eeg'][:], dtype=tf.float32)
+        data['sleep_stages_val'] = tf.convert_to_tensor(f['sleep_stage'][:], dtype=tf.float32)
+
     sleep_stages_pred, ground_truth = run_model(model, data, whole_night_indices=[0], data_type=tf.float32, num_output_filtering=3, filter_post_argmax=True)
 
     # Save results to CSV
@@ -421,6 +438,7 @@ def run_accuracy_study(model_fp:str, results_fp:str, num_clips:int):
 
     # Insert the new rows into the correct position in the list
     for i, (sleep_stage, truth) in enumerate(zip(sleep_stages_pred, ground_truth)):
+        if (i == num_clips): break
         # If there's a row, modify it. Else, append a new row.
         if (i < (len(data)-2)):
             row = data[i+2]
@@ -441,7 +459,7 @@ def run_accuracy_study(model_fp:str, results_fp:str, num_clips:int):
     print("Done computing results for accuracy study.")
 
 def main():
-    run_accuracy_study(model_fp="/home/trobitaille/engsci-thesis/python_prototype/results/2024-03-17_13-38-49_vision/run_1/models/model.tf", results_fp="asic/fixed_point_accuracy_study/results_test.csv", num_clips=2000)
+    run_accuracy_study(model_fp="asic/fixed_point_accuracy_study/model.tf", eeg_fp="asic/fixed_point_accuracy_study/eeg.h5", results_fp="asic/fixed_point_accuracy_study/results_test_1.csv", num_clips=2000)
 
 if __name__ == "__main__":
     main()

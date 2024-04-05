@@ -1116,7 +1116,7 @@ def main():
         DEBUG = True
         OUTPUT_CSV = True
         tf.config.run_functions_eagerly(True) # Allows step-by-step debugging of tf.functions
-        ref_data = utilities.edf_to_h5(edf_fp=args.reference_night_fp, channel="EEG Cz-LER", clip_length_s=30, sampling_freq_hz=128, full_night=True, h5_filename="python_prototype/reference_data/eeg.h5")
+        ref_data = utilities.edf_to_h5(edf_fp=args.reference_night_fp, channel="EEG Cz-LER", sleep_map_name="both_light_deep_combine", clip_length_s=30, sampling_freq_hz=128, full_night=True, h5_filename="python_prototype/reference_data/eeg.h5")
         all_models["tf"](ref_data[0], training=False) # Run with the first clip
         shutil.copy2(base_out_fp+"/run_1/models/model.tflite", "python_prototype/reference_data/model.tflite")
         shutil.copy2(base_out_fp+"/run_1/models/model_quant.tflite", "python_prototype/reference_data/model_quant.tflite")

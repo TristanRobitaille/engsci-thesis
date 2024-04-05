@@ -71,6 +71,12 @@ python_prototype/*.zip
 python_prototype/slurm_jobs/logs
 python_prototype/reference_data/*
 
+### Other Python
+coral/
+latest_tf/
+pycoral/
+python_prototype/scratch
+
 ### ASIC
 asic/__pycache__/*
 asic/sim_build/*

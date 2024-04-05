@@ -26,7 +26,7 @@
                      "--training_set_target_count", "4600", "4600", "4600", "4600", "--dataset_resample_algo=ADASYN", "--optimizer=Adam", "--filter_self_reset_threshold=-1", "--dropout_rate_percent=30",
                      "--input_dataset=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF_Tensorized_both_light_deep_combine-stg_30-0s_128Hz_notch_60Hz_15b_offset_0_3Hz-100Hz_bandpass",
                      "--k_fold_val_results_fp=${workspaceFolder}/python_prototype/results/k_fold_val_results/val_1", "--save_model", "--enable_input_rescale",
-                     "--reference_night_fp=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF/01-03-0064 PSG.edf"]
+                     "--reference_night_fp=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF/01-03-0019 PSG.edf", "--enc_2nd_res_conn_arg=out1"]
                      // "--enable_input_rescale"] "--output_edgetpu_data", "--save_model"
         },
         {
