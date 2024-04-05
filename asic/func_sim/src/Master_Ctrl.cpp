@@ -272,9 +272,17 @@ int Master_Ctrl::load_params_from_h5(const std::string params_filepath) {
 
     HighFive::File file(params_filepath, HighFive::File::ReadOnly);
 
+    // Determine name of the transformer. Different runs in a training will have different names for the transformer.
+    string transformer_name;
+    if (file.getGroup("patch_projection_dense").exist("vision_transformer") == true) { transformer_name = "vision_transformer"; }
+    else if (file.getGroup("patch_projection_dense").exist("vision_transformer_1") == true) { transformer_name = "vision_transformer_1"; }
+    else if (file.getGroup("patch_projection_dense").exist("vision_transformer_2") == true) { transformer_name = "vision_transformer_2"; }
+    else if (file.getGroup("patch_projection_dense").exist("vision_transformer_3") == true) { transformer_name = "vision_transformer_3"; }
+    else if (file.getGroup("patch_projection_dense").exist("vision_transformer_4") == true) { transformer_name = "vision_transformer_4"; }
+
     // Patch projection
-    params.patch_proj_kernel = file.getGroup("patch_projection_dense").getGroup("vision_transformer").getGroup("patch_projection_dense").getDataSet("kernel:0").read<PatchProjKernel_t>();
-    params.patch_proj_bias = file.getGroup("patch_projection_dense").getGroup("vision_transformer").getGroup("patch_projection_dense").getDataSet("bias:0").read<EmbDepthVect_t>();
+    params.patch_proj_kernel = file.getGroup("patch_projection_dense").getGroup(transformer_name).getGroup("patch_projection_dense").getDataSet("kernel:0").read<PatchProjKernel_t>();
+    params.patch_proj_bias = file.getGroup("patch_projection_dense").getGroup(transformer_name).getGroup("patch_projection_dense").getDataSet("bias:0").read<EmbDepthVect_t>();
 
     params.class_emb = file.getGroup("top_level_model_weights").getDataSet("class_emb:0").read<EmbDepthVect_t>();
     params.pos_emb = file.getGroup("top_level_model_weights").getDataSet("pos_emb:0").read<array<array<array<float, EMB_DEPTH>, NUM_PATCHES+1>, 1>>()[0];
@@ -282,10 +290,10 @@ int Master_Ctrl::load_params_from_h5(const std::string params_filepath) {
     // Encoders
     HighFive::Group enc = file.getGroup("Encoder_1");
     // LayerNorm
-    params.layernorm_beta[0] = enc.getGroup("vision_transformer").getGroup("Encoder_1").getGroup("layerNorm1_encoder").getDataSet("beta:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 1
-    params.layernorm_gamma[0] = enc.getGroup("vision_transformer").getGroup("Encoder_1").getGroup("layerNorm1_encoder").getDataSet("gamma:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 1
-    params.layernorm_beta[1] = enc.getGroup("vision_transformer").getGroup("Encoder_1").getGroup("layerNorm2_encoder").getDataSet("beta:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 2
-    params.layernorm_gamma[1] = enc.getGroup("vision_transformer").getGroup("Encoder_1").getGroup("layerNorm2_encoder").getDataSet("gamma:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 2
+    params.layernorm_beta[0] = enc.getGroup(transformer_name).getGroup("Encoder_1").getGroup("layerNorm1_encoder").getDataSet("beta:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 1
+    params.layernorm_gamma[0] = enc.getGroup(transformer_name).getGroup("Encoder_1").getGroup("layerNorm1_encoder").getDataSet("gamma:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 1
+    params.layernorm_beta[1] = enc.getGroup(transformer_name).getGroup("Encoder_1").getGroup("layerNorm2_encoder").getDataSet("beta:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 2
+    params.layernorm_gamma[1] = enc.getGroup(transformer_name).getGroup("Encoder_1").getGroup("layerNorm2_encoder").getDataSet("gamma:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 2
 
     // MHSA
     params.enc_mhsa_Q_kernel = enc.getGroup("mhsa_query_dense").getDataSet("kernel:0").read<EncEmbDepthMat_t>();
@@ -299,18 +307,18 @@ int Master_Ctrl::load_params_from_h5(const std::string params_filepath) {
     params.enc_mhsa_inv_sqrt_num_heads = static_cast<float>(1 / sqrt(NUM_HEADS)); // To save compute, we store the reciprocal of the square root of the number of heads such that we can multiply instead of divide
 
     // MLP
-    params.enc_mlp_dense_1_kernel = enc.getGroup("vision_transformer").getGroup("Encoder_1").getGroup("mlp_dense1_encoder").getDataSet("kernel:0").read<EmbDepthxMlpDimMat_t>();
-    params.enc_mlp_dense_1_bias = enc.getGroup("vision_transformer").getGroup("Encoder_1").getGroup("mlp_dense1_encoder").getDataSet("bias:0").read<MlpDimVect_t>();
-    params.enc_mlp_dense_2_kernel = enc.getGroup("vision_transformer").getGroup("Encoder_1").getGroup("mlp_dense2_encoder").getDataSet("kernel:0").read<EncMlpDimxEmbDepthMat_t>();
-    params.enc_mlp_dense_2_bias = enc.getGroup("vision_transformer").getGroup("Encoder_1").getGroup("mlp_dense2_encoder").getDataSet("bias:0").read<EmbDepthVect_t>();
+    params.enc_mlp_dense_1_kernel = enc.getGroup(transformer_name).getGroup("Encoder_1").getGroup("mlp_dense1_encoder").getDataSet("kernel:0").read<EmbDepthxMlpDimMat_t>();
+    params.enc_mlp_dense_1_bias = enc.getGroup(transformer_name).getGroup("Encoder_1").getGroup("mlp_dense1_encoder").getDataSet("bias:0").read<MlpDimVect_t>();
+    params.enc_mlp_dense_2_kernel = enc.getGroup(transformer_name).getGroup("Encoder_1").getGroup("mlp_dense2_encoder").getDataSet("kernel:0").read<EncMlpDimxEmbDepthMat_t>();
+    params.enc_mlp_dense_2_bias = enc.getGroup(transformer_name).getGroup("Encoder_1").getGroup("mlp_dense2_encoder").getDataSet("bias:0").read<EmbDepthVect_t>();
 
     // MLP head
-    params.layernorm_beta[2] = file.getGroup("mlp_head_layerNorm").getGroup("vision_transformer").getGroup("mlp_head_layerNorm").getDataSet("beta:0").read<EmbDepthVect_t>(); // MLP head's LayerNorm 1
-    params.layernorm_gamma[2] = file.getGroup("mlp_head_layerNorm").getGroup("vision_transformer").getGroup("mlp_head_layerNorm").getDataSet("gamma:0").read<EmbDepthVect_t>(); // MLP head's LayerNorm 1
+    params.layernorm_beta[2] = file.getGroup("mlp_head_layerNorm").getGroup(transformer_name).getGroup("mlp_head_layerNorm").getDataSet("beta:0").read<EmbDepthVect_t>(); // MLP head's LayerNorm 1
+    params.layernorm_gamma[2] = file.getGroup("mlp_head_layerNorm").getGroup(transformer_name).getGroup("mlp_head_layerNorm").getDataSet("gamma:0").read<EmbDepthVect_t>(); // MLP head's LayerNorm 1
     params.mlp_head_dense_1_kernel = file.getGroup("mlp_head").getGroup("mlp_head_dense1").getDataSet("kernel:0").read<EmbDepthxMlpDimMat_t>();
     params.mlp_head_dense_1_bias = file.getGroup("mlp_head").getGroup("mlp_head_dense1").getDataSet("bias:0").read<MlpDimVect_t>();
-    params.mlp_head_dense_2_kernel = file.getGroup("mlp_head_softmax").getGroup("vision_transformer").getGroup("mlp_head_softmax").getDataSet("kernel:0").read<NumSleepStagesxMlpDimMat_t>();
-    params.mlp_head_dense_2_bias = file.getGroup("mlp_head_softmax").getGroup("vision_transformer").getGroup("mlp_head_softmax").getDataSet("bias:0").read<NumSleepStagesVect_t>();
+    params.mlp_head_dense_2_kernel = file.getGroup("mlp_head_softmax").getGroup(transformer_name).getGroup("mlp_head_softmax").getDataSet("kernel:0").read<NumSleepStagesxMlpDimMat_t>();
+    params.mlp_head_dense_2_bias = file.getGroup("mlp_head_softmax").getGroup(transformer_name).getGroup("mlp_head_softmax").getDataSet("bias:0").read<NumSleepStagesVect_t>();
 
     return 0;
 }

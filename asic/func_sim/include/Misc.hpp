@@ -16,7 +16,7 @@
 #define NUM_SAMPLES_OUT_AVG     3       // Number of samples in output averaging filter
 #define EEG_SCALE_FACTOR        65535   // Normalize from 16b
 #define DATA_BASE_DIR           "reference_data/"
-#define NUM_FRAC_BITS           20
+#define NUM_FRAC_BITS           15
 
 /*----- TYPEDEF -----*/
 // Both should the same number of fractional bits, the large_fp_t is merely to store intermediate results in computation

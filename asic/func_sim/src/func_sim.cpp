@@ -72,7 +72,7 @@ int main(int argc, char *argv[]){
     uint32_t end_index = std::stoi(argv[4]);
     if (start_index > end_index) { throw std::invalid_argument("Start index must be less than or equal to end index!"); }
     for (uint32_t i = 0; i < ((end_index + 1) - start_index); i++) {
-        cout << "Run #" << i << " out of " << (end_index-start_index+1) << " (clip index: " << (start_index+i) << ")" << std::endl;
+        cout << "Run #" << i+1 << " out of " << (end_index-start_index+1) << " (clip index: " << (start_index+i) << ")" << std::endl;
         run_sim(start_index+i, argv[6]);
     }
     cout << "Finished running all simulation runs." << endl;

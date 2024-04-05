@@ -247,9 +247,6 @@ def load_from_dataset(args):
     sleep_stages_val = tf.cast(sleep_stages_val, dtype=DATA_TYPE)
     data_dict = {"signals_train":signals_train, "signals_val":signals_val, "sleep_stages_train":sleep_stages_train, "sleep_stages_val":sleep_stages_val}
 
-    # Save data_dict to disk for future use in accuracy study
-    if (args.reference_night_fp != ""): np.save("asic/fixed_point_accuracy_study/ref_data.npy", data_dict)
-
     return data_dict, start_of_val_night_indices, original_sleep_stage_count, dataset_metadata
 
 def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_stage_count:list, sleep_stages_count_training:list,
