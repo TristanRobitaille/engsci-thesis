@@ -179,3 +179,20 @@
     - AI ASIC: 1st one in 2013 (DianNao) -> Could perform ~500G/s 16b fixed-point operations.
         - 2 years later: ShiDianNao, which already increased performance and power by 1.87x and 60x, respectively
         - TPU: Instead of HW custom-designed for a given model, basic TPUs are essentially a large MAC PE matrix and local storage. Very popular for servers.
+
+### On Quantifying the Figures of Merit of Power-Gating for Leakage Power Minimization in Nanometer CMOS Circuits
+- **Main ideas**
+    - Power gating: Place high-Vth NMOS ("sleep transistor") in supply path of cells to power gate
+    - Pros of power gating:
+        - Reduce leakage
+    - Cons of power gating:
+        - Increase area
+        - Slower Fmax
+        - Dynamic power increase
+    - Defined figures of merit:
+        - Performance degradation: Increase in critical path delay introduced by sleep transistor (paper only goes to 10%)
+        - Sleep transistor size: Depends on VGND voltage and peak current
+        - Leakage Power Savings: Obvious
+        - Power mode transition time (PM_t): How much time it takes to transition mode. Turn-on matters most because turn-off time doesn't introduce performance penalties.
+        - Power-mode transition energy: How much energy it takes to transition (non-negligible since the sleep transistor(s) can be large)
+    - With a 10% performance degradation and mid-size sleep transistor, can get >= 90% leakage current reduction
