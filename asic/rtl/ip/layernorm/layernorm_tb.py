@@ -52,7 +52,7 @@ async def test_run(dut):
         assert ((int(expected_str, base=2)-ABS_TOLERANCE) <= int(dut.int_res[start_addr+i].value) <= (int(expected_str, base=2)+ABS_TOLERANCE)), f"MAC output value is incorrect (1st half) at i={i}! Expected: {int(expected_str, base=2)}, got: {int(dut.int_res[start_addr+i].value)}"
 
     print(f"LayerNorm 1st half passed!")
-    await cocotb.triggers.ClockCycles(dut.clk, 1000)
+    await cocotb.triggers.ClockCycles(dut.clk, 1)
 
     # 2nd half
     dut.half_select.value = LayerNormHalfSelect.SECOND_HALF.value
@@ -83,7 +83,7 @@ async def test_run(dut):
 #----- TESTS -----#
 @cocotb.test()
 async def random_test(dut):
-    cocotb.start_soon(Clock(dut.clk, 1, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     await RisingEdge(dut.clk)
     await reset(dut)
 

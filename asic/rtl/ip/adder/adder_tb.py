@@ -7,6 +7,8 @@ from utilities import *
 import cocotb
 from cocotb.triggers import RisingEdge, FallingEdge
 
+NUM_TESTS = 1000
+
 #----- TESTS -----#
 @cocotb.test()
 async def basic_reset(dut):
@@ -35,7 +37,7 @@ async def basic_reset(dut):
 async def basic_count(dut):
     await start_routine_basic_arithmetic(dut)
 
-    for _ in range(100):
+    for _ in range(NUM_TESTS):
         input1 = random.uniform(-MAX_INT_ADD, MAX_INT_ADD)
         input2 = random.uniform(-MAX_INT_ADD, MAX_INT_ADD)
         expected = num_Q_comp(input1)+num_Q_comp(input2)

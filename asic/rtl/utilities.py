@@ -127,7 +127,7 @@ async def start_pulse(dut):
     await RisingEdge(dut.clk)
 
 async def start_routine_basic_arithmetic(dut):
-    cocotb.start_soon(Clock(dut.clk, 1, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start()) # 100MHz clock
     await RisingEdge(dut.clk)
     await reset(dut)
     dut.refresh.value = 1

@@ -1,16 +1,14 @@
-`include "../../types.svh"
 `include "../../cim/cim.svh"
+`include "../../top_init.sv"
 
 module top_mac # () (
     input wire clk, rst_n
 );
-    `include "../../top_init.sv"
-
     // CiM memory
-    logic [N_STORAGE-1:0] params [PARAMS_STORAGE_SIZE_CIM-1:0];
-    logic [N_STORAGE-1:0] int_res [TEMP_RES_STORAGE_SIZE_CIM-1:0];
+    STORAGE_WORD_T params [PARAMS_STORAGE_SIZE_CIM-1:0];
+    STORAGE_WORD_T int_res [TEMP_RES_STORAGE_SIZE_CIM-1:0];
 
-    logic [N_STORAGE-1:0] param_data, int_res_data = 'd0;
+    STORAGE_WORD_T param_data, int_res_data;
     MemAccessSignals params_access_signals();
     MemAccessSignals int_res_access_signals();
     always_ff @ (posedge clk) begin : memory_ctrl
@@ -25,14 +23,14 @@ module top_mac # () (
 
     // Control signals
     logic start, param_type;
-    logic [1:0] activation = 'd0;
-    logic [$clog2(MAC_MAX_LEN+1)-1:0] len = 'd0;
-    TEMP_RES_ADDR_T start_addr1 = 'd0;
-    TEMP_RES_ADDR_T start_addr2 = 'd0;
+    logic [1:0] activation;
+    logic [$clog2(MAC_MAX_LEN+1)-1:0] len;
+    TEMP_RES_ADDR_T start_addr1;
+    TEMP_RES_ADDR_T start_addr2;
 
     // MAC outputs
     wire busy, done, int_res_mem_access_req, params_mem_access_req;
-    wire [N_COMP-1:0] computation_result;
+    COMP_WORD_T computation_result;
 
     // Compute module instantiation
     wire add_overflow, mul_overflow, exp_add_refresh, mac_add_refresh, exp_mul_refresh, mac_mul_refresh, div_start, div_done, div_busy, div_dbz, div_overflow, exp_start, exp_done, exp_busy;

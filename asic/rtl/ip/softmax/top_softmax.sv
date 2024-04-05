@@ -6,15 +6,13 @@ module top_softmax # () (
 );
 
     // CiM memory
-    logic [N_STORAGE-1:0] params [PARAMS_STORAGE_SIZE_CIM-1:0];
-    logic [N_STORAGE-1:0] int_res [TEMP_RES_STORAGE_SIZE_CIM-1:0];
+    STORAGE_WORD_T params [PARAMS_STORAGE_SIZE_CIM-1:0];
+    STORAGE_WORD_T int_res [TEMP_RES_STORAGE_SIZE_CIM-1:0];
 
-    logic [N_STORAGE-1:0] param_data, int_res_data = 'd0;
-    MemAccessSignals params_access_signals();
+    STORAGE_WORD_T int_res_data;
     MemAccessSignals int_res_access_signals();
     always_ff @ (posedge clk) begin : memory_ctrl
         if (!rst_n) begin
-            param_data <= 'd0;
             int_res_data <= 'd0;
         end else begin
             // Write

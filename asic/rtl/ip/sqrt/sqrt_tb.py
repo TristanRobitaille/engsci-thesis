@@ -9,6 +9,9 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
 
+#----- CONSTANTS -----#
+NUM_TESTS = 1000
+
 #----- HELPERS -----#
 async def start_pulse(dut):
     dut.start.value = 1
@@ -18,10 +21,10 @@ async def start_pulse(dut):
 
 @cocotb.test()
 async def random_test(dut):
-    cocotb.start_soon(Clock(dut.clk, 1, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     await reset(dut)
 
-    for _ in range(1000):
+    for _ in range(NUM_TESTS):
         await RisingEdge(dut.clk)
         radicand = random.uniform(0, 200)
         dut.rad_q.value = BinToDec(radicand, num_Q_comp)

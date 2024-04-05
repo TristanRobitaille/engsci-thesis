@@ -1,6 +1,9 @@
 `ifndef _adder_sv_
 `define _adder_sv_
 
+// Includes
+`include "../../types.svh"
+
 /* Note:
 - Single-cycle fixed-point adder
 - Output is updated when refresh is set

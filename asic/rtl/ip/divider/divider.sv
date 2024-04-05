@@ -11,6 +11,9 @@
     - Computation time is N_COMP+Q+3 cycles, where N_COMP is the total number of bits, and Q is the number of fractional bits.
 */
 
+`include "../../parameters.svh"
+`include "../../types.svh"
+
 module divider (
     input wire clk,
     input wire rst_n,

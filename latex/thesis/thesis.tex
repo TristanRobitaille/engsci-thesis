@@ -117,7 +117,7 @@ I am using the acronyme \ac{mac} such that the table below is properly formatted
 \subsection{Compute-in-Memory: Compute Modules}
 This section describes the design and performance metrics of the various compute \ac{ip} modules use by the \ac{cim} modules. Each is custom-designed for this project.
 Each module works with signed (2's complement) fixed-point representation. To avoid overflow, the modules use internal temporary variables of fixed-point format Q22.10.
-Table \ref{tab:compute_modules} shows the performance metrics of the compute modules.
+Table \ref{tab:compute_modules} shows the performance metrics of the compute modules. The working principles of each modules is described briefly in subsequent sections.
 
 \begin{table}[ht]
     \centering
@@ -126,19 +126,45 @@ Table \ref{tab:compute_modules} shows the performance metrics of the compute mod
     \caption{Performance metrics of the compute modules}
     \begin{tabular}{@{} p{2.5cm}ccccc @{}}
         \toprule
-        Module      & Area (\si{\square\mum})   & Cycle/op          & Energy/op & Leakage current   & Fmax \\\midrule
-        Adder       & x                         & 1                 & x nJ      & x nA              & x MHz \\
-        Multiplier  & x                         & 1                 & x nJ      & x nA              & x MHz \\
-        Divider     & x                         & 35                & x nJ      & x nA              & x MHz \\
-        Exponential & x                         & 24                & x nJ      & x nA              & x MHz \\
-        Square Root & x                         & 17                & x nJ      & x nA              & x MHz \\
-        \ac{mac}    & x                         & \{386, 391, 456\} & x nJ      & x nA              & x MHz \\
-        Softmax     & x                         & 2024              & x nJ      & x nA              & x MHz \\
-        LayerNorm   & x                         & 1469+494          & x nJ      & x nA              & x MHz \\
+        Module                  & Area                              & Cycle/op  & Energy/op                 & Leakage power         & $F_{max}$ \\\midrule
+        Adder                   & 450.4\si{\square\micro\meter}     & 1         & 0.99\si{\pico\joule}      & 11.87\si{\micro\watt} & 6.67\si{\giga\hertz} \\
+        Multiplier              & 3535.2\si{\square\micro\meter}    & 1         & 7.05\si{\pico\joule}      & 90.50\si{\micro\watt} & 1.59\si{\giga\hertz} \\
+        Divider                 & 1719.9\si{\square\micro\meter}    & 35        & 23.44\si{\pico\joule}     & 34.56\si{\micro\watt} & 1.11\si{\giga\hertz} \\
+        Exponential             & 2442.2\si{\square\micro\meter}    & 24        & 62.73\si{\pico\joule}     & 47.10\si{\micro\watt} & 7.14\si{\giga\hertz} \\
+        Square Root             & 1325.2\si{\square\micro\meter}    & 17        & 18.32\si{\pico\joule}     & 26.30\si{\micro\watt} & 0.758\si{\giga\hertz} \\
+        \ac{mac}\footnote[1]    & |                                 & 386       & 820.20\si{\pico\joule}    & |                     & | \\
+        \ac{mac}\footnote[2]    & 3129.8\si{\square\micro\meter}    & 391       & 839.32\si{\pico\joule}    & 69.40\si{\pico\joule} & 2.17\si{\giga\hertz} \\
+        \ac{mac}\footnote[3]    & |                                 & 456       & 941.68\si{\pico\joule}    & |                     & | \\
+        Softmax                 & 2341.1\si{\square\micro\meter}    & 2024      & 1972.5\si{\pico\joule}    & 51.47\si{\micro\watt} & 1.20\si{\giga\hertz} \\
+        LayerNorm               & 3836.89\si{\square\micro\meter}   & 1469+494  & 1705.7\si{\pico\joule}    & 78.39\si{\micro\watt} & 0.877\si{\giga\hertz} \\
+        \bottomrule
+        Total                   & 18780.69\si{\square\micro\meter}  & N/A       & N/A                       & 409.59\si{\micro\watt} & 0.758\si{\giga\hertz} \\
         \hline
     \end{tabular}
+    \begin{minipage}{\textwidth}
+        \footnotesize
+        \noindent\hspace*{1cm}\textsuperscript{1} No activation function applied\\
+        \noindent\hspace*{1cm}\textsuperscript{2} Linear activation function applied\\
+        \noindent\hspace*{1cm}\textsuperscript{3} Swish activation function applied
+    \end{minipage}
     \label{tab:compute_modules}
 \end{table}
+
+Note that all measurement in Table \ref{tab:compute_modules} are given for standard 65nm \ac{tsmc} process with a 100MHz clock.
+To determine these metrics, the following methodology was used with Synopsys Design Compiler 2017.09 running on UofT's EECG cluster:
+\begin{itemize}
+    \item Area: Synthesis with the area optimization effort set to \texttt{high}, and the area was extracted from the \texttt{report\_area} command report.
+    \item Cycle/op: The latency was observed when running a single operation on a pre-synthesis simulation.
+    \item Energy/op: A single-instance testbench running 10000 operations was designed, and a \texttt{.saif} file was generated from the \ac{vcd} dump file of the testbench
+    using Synopsys' \texttt{vcd2saif} utility. This provides an average activity factor for each node, yielding an accuracy that is adequate for this discussion. The energy
+    per operation was calculated by multiplying the total dynamic power by the time to complete the 10000 operations, divided by 10000.
+    \item Leakage current: Synthesis with the power optimization effort set to \texttt{high}, and the leakage power was extracted from the \texttt{report\_area} command report.
+    \item $F_{max}$: The \texttt{report\_timing} command was used to determine the maximum frequency of the design.
+\end{itemize}
+
+It must be noted that the measurements for all composite compute units (i.e. units that make use of shared resources) \textit{exclude} the area/power/etc. of the shared resources. Including them would result
+in misleadingly high figures, given that they are explictly designed to share resources. The total area of the \ac{cim} provides figures more representative of this integration.
+
 \subsubsection{Adder}
 The adder is a single-cycle, combinational module that adds two fixed-point numbers. It uses a ripple-carry adder architecture. The adder has a latency of 1 cycle, which simplifies the logic that uses it.
 It also provides an overflow flag. To reduce dynamic power consumption, the adder only updates its output when the \texttt{refresh} signal is high.

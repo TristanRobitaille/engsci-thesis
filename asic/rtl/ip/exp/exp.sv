@@ -1,5 +1,6 @@
 `ifndef _exp_sv_
 `define _exp_sv_
+
 /* Note:
     - Approxmiate the exponential function using the e^x = 2^(x/ln(2)) identity and Taylor series expansion.
     - A pulse on start will initiate the computation process.
@@ -7,6 +8,10 @@
     - Signal busy is asserted during the computation process.
     - Computation time is 24 cycles.
 */
+
+`include "../../parameters.svh"
+`include "../../types.svh"
+
 module exp (
     input wire clk,
     input wire rst_n,

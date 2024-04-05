@@ -8,6 +8,8 @@ from FixedPoint import FXnum
 import cocotb
 from cocotb.triggers import RisingEdge
 
+NUM_TESTS = 1000
+
 #----- HELPERS -----#
 async def output_check(dut, in1:float, in2:float, expected=None):
     if expected is None:
@@ -46,14 +48,15 @@ async def basic_test(dut):
 @cocotb.test()
 async def random_test(dut):
     await start_routine_basic_arithmetic(dut)
-    input_q_1 = [0, 1, 1, 0, -1]
-    input_q_2 = [0, 1, -1, -1, -1]
 
     # Random inputs
-    for _ in range(1000):
+    for _ in range(NUM_TESTS):
         input1 = random.uniform(-MAX_INT_MULT, MAX_INT_MULT)
         input2 = random.uniform(-MAX_INT_MULT, MAX_INT_MULT)
         await output_check(dut, input1, input2)
+
+    input_q_1 = [0, 1, 1, 0, -1]
+    input_q_2 = [0, 1, -1, -1, -1]
 
     # Edge cases
     for i in range(len(input_q_1)):

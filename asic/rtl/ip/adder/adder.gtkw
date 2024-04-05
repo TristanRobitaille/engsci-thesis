@@ -1,0 +1,27 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Thu Apr  4 16:33:51 2024
+[*]
+[dumpfile] "dump.vcd"
+[dumpfile_mtime] "Thu Apr  4 16:32:07 2024"
+[dumpfile_size] 24827
+[savefile] "bus.gtkw"
+[timestart] 0
+[size] 3440 1387
+[pos] 1679 -1315
+*-14.700000 12001 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[sst_width] 253
+[signals_width] 598
+[sst_expanded] 1
+[sst_vpaned_height] 434
+@28
+clk
+@420
+input_q_1[21:0]
+input_q_2[21:0]
+output_q[21:0]
+@28
+overflow
+refresh
+[pattern_trace] 1
+[pattern_trace] 0

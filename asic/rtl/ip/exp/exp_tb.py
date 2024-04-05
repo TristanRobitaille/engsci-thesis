@@ -14,14 +14,15 @@ TOLERANCE_ABS = 0.01 # Absolute
 # Reasonable values for the input range according to functional simulation
 MIN_INPUT = -5
 MAX_INPUT = 4
+NUM_TESTS = 1000
 
 #----- TESTS -----#
 @cocotb.test()
 async def random_test(dut):
-    cocotb.start_soon(Clock(dut.clk, 1, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start()) # 100Mhz
     await reset(dut)
 
-    for _ in range(1000):
+    for _ in range(NUM_TESTS):
         await RisingEdge(dut.clk)
         input = random.uniform(MIN_INPUT, MAX_INPUT)
         dut.input_q.value = BinToDec(input, num_Q_comp)

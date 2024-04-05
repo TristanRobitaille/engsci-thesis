@@ -10,6 +10,9 @@
     - Computation time is ((N+Q)//2 + 1) cycles, where N is the total number of bits, and Q is the number of fractional bits.
 */
 
+`include "../../parameters.svh"
+`include "../../types.svh"
+
 module sqrt (
     input wire clk,
     input wire rst_n,

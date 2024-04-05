@@ -1,13 +1,14 @@
 `ifndef _mac_sv_
 `define _mac_sv_
 
+`include "../../types.svh"
+
 /* Note:
 - Fixed-point MAC
 - Done signal is a single-cycle pulse
 - Uses external adder, multiplier, divider and exp modules to be shared with other modules in the CiM.
 - Implements three different activations: No activation (no bias), linear (adds bias to MAC result) and SWISH (adds bias to MAC result, then applies SWISH activation function)
 */
-`include "../../types.svh"
 
 module mac
 (

@@ -9,6 +9,7 @@ build/*
 ### Latex
 # Thesis
 latex/thesis/thesis.aux
+latex/thesis/flyleaf.aux
 latex/thesis/thesis.bbl
 latex/thesis/thesis.bcf
 latex/thesis/thesis.blg

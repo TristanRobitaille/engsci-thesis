@@ -66,6 +66,17 @@
 - Training on different datasets
     - Including in-ear EEG PSG
 - Evaluate dynamic fixed-point (different Q and N based on layer)
+- Understand the main source of leakage power and how to reduce it.
+- Fine tune fixed-point format
+    - Save significant area and leakage power in adder/multiplier
+    - Save significant area in memory
+    - Save some latency in divides, which are the slowest operation
+- Compute blocks can be improved
+    - Is the MUX needed to share temporary compute variables worth the area?
+    - Is Gaussian rounding needed?
+    - Should add_/mult_refresh be used?
+    - Should multiplier be pipelined
+- Balance the Fmax --> This can actually save power since maximizing the Fmax will reduce inference latency, meaning we can shut down the accelerator for longer, meaning the effective leakage current (by far the dominant power loss) can be reduced
 - What else could we run this on?
     - ARM-Cortex MCU and Edge TPU
     - Power consumption of STM32L4

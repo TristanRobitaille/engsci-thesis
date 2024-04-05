@@ -8,13 +8,15 @@ from FixedPoint import FXnum
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
-   
+
+NUM_TESTS = 1000
+
 @cocotb.test()
 async def random_test(dut):
-    cocotb.start_soon(Clock(dut.clk, 1, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     await reset(dut)
 
-    for _ in range(1000):
+    for _ in range(NUM_TESTS):
         await RisingEdge(dut.clk)
         dividend = random.uniform(-200, -200)
         divisor = random.uniform(-2000, -2000)
