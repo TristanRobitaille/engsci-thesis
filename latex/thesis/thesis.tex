@@ -47,20 +47,7 @@
 
 % Acknowledgements
 \section*{Acknowledgements}
-I would like to express my gratitude to my supervisor, Prof. Xilin Liu, for his guidance and support throughout the project. He has given me the freedom to explore new ideas and had provided me with the
-support and tools I needed.
-
-I would also like to thank my father, Claude Robitaille, for letting me remotely use his workstation to train the model and run the accuracy study. He has also helped review the code for the functional simulation.
-
-In addition, I owe much to the professors who have taught me the fundamentals of computer architecture at the University of Toronto - Profs. Jason Anderson, Natalie Enright-Jerger, Andreas Moshovos and Mark C. Jeffrey.
-
-Throughout this project, I have made extensive use the Compute Canada cluster, which has provided me with the computational resources I needed to run the simulations and train the model. I would like to thank the 
-staff at Compute Canada for their initiative. I am also appreciative of the tools provided by the Canadian Microelectronics Corporation, which have been instrumental in the hardware implementation of the accelerator.
-
-I would also like to acknowledge the work of Professors Lisa Romkey and Alan Chong who organized this thesis project for us, ensuring a structured and productive environment.
-
-Finally, I would like to thank my family and friends for their support and encouragement throughout this project. I am grateful for their patience and understanding during this time.
-
+\input{acknowledgements}
 \newpage
 
 % Table of Contents
@@ -89,24 +76,21 @@ Finally, I would like to thank my family and friends for their support and encou
 
 \newpage
 \section{Background}
+\subsection{Problem Statement}
+\lipsum[1]
+\subsection{Technical Goals and Requirements}
 \lipsum[1]
 
 \newpage
 \section{How to Design an AI Accelerator}
-\lipsum[1]
-\subsection{Model Prototyping}
-\lipsum[1]
-\subsection{Accelerator Functional Simulation}
-\lipsum[1]
-\subsection{Accelerator Hardware Implementation}
-\lipsum[1]
+\input{methods}
 
 \newpage
 \section{Vision Transformer Model Design}
 \label{sec:vision_transformer}
 \lipsum[1]
 
-\section{ASIC Acceleator Architecture}
+\section{ASIC Accelerator Architecture}
 I am using the acronyme \ac{mac} such that the table below is properly formatted.
 \lipsum[1]
 \subsection{Centralized vs. Distributed Architecture}
@@ -158,7 +142,7 @@ To determine these metrics, the following methodology was used with Synopsys Des
     \item Energy/op: A single-instance testbench running 10000 operations was designed, and a \texttt{.saif} file was generated from the \ac{vcd} dump file of the testbench
     using Synopsys' \texttt{vcd2saif} utility. This provides an average activity factor for each node, yielding an accuracy that is adequate for this discussion. The energy
     per operation was calculated by multiplying the total dynamic power by the time to complete the 10000 operations, divided by 10000.
-    \item Leakage current: Synthesis with the power optimization effort set to \texttt{high}, and the leakage power was extracted from the \texttt{report\_area} command report.
+    \item Leakage power: Synthesis with the power optimization effort set to \texttt{high}, and the leakage power was extracted from the \texttt{report\_area} command report.
     \item $F_{max}$: The \texttt{report\_timing} command was used to determine the maximum frequency of the design.
 \end{itemize}
 
@@ -196,7 +180,7 @@ multiplier modules. Rather, it accesses the adder and multiplier modules in the 
 \begin{figure}
     \centering
     \caption{Error of exponential approximation as a function of Taylor series expansion order}
-    \includegraphics[width=0.9\textwidth]{assets/exp_approx_error.eps}
+    \includegraphics[width=0.9\textwidth]{assets/exp_approx_error/exp_approx_error.eps}
 \end{figure}
 \label{fig:exp_error}
 
@@ -246,7 +230,7 @@ per operation.
 \newpage
 
 % Bibliography
-\printbibliography
+\printbibliography[heading=bibintoc]
 \newpage
 
 % Appendices

@@ -11,9 +11,19 @@
 ## Introduction
 
 ## Background
-- Lit. review from interim report
-- Patent search
-    - Apple's recent AirPod patent
+- Insmonia problem
+- Sleep staging (5 stages, definition from sleep foundation)
+- PSG
+- Neuromodulation
+- Pitch the idea: Sleep staging AirPod
+    - Patent search (say that wearables are increasingly smart)
+        - Apple's recent AirPod patent
+- Sleep staging using AI
+    - Lit. review from interim report
+- Technical goals and requirements
+    - Equal to PSG
+    - ASIC specs
+- Pose research question: Can we make an accelerator that will meet the requirements
 
 ## How to Design and AI Accelerator
 - The three step plan
@@ -34,6 +44,8 @@
     - Seeing the end results, was a multi-CiM architecture beneficial (essentially, would single CiM be fast enough)?
 - Master
     - 
+- Memory
+    -
 - Communication bus
     - Data carried
     - Op codes supported
@@ -89,3 +101,4 @@
 
 ## Reflection on learnings and experience gained
 - Owning the full-stack is powerful and gives significant design freedom. [Like what?] In turn, this can prove destabilizing as essentially all aspects of the design has compounding pros and cons. It is thus critical to spend enough time evaluating ideas in simulations of varying complexity before jumping to a HDL. I am glad to have done that to some extent with the C++ model and various Python studies, but, in retrospect, more time should have been spent desiging and obtaining proxy metrics to determine the ideal high-level architecture. However, I think such learning can only be appreciated once an architect goes through the full design cycle at least once, so I am glad to have had the opportunity to earn this wisdom, which I will carry in future projects.
+- Also wanted to be able to spend more time on the memory compiler and its integration in the project
