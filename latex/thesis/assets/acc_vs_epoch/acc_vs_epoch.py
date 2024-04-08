@@ -25,5 +25,5 @@ with plt.style.context(['science']):
     ax.set(**pparam)
     ax.set_ylim(0, 1)  # Set the limits of y-axis from 0 to 1
     fig.savefig('acc_vs_epoch.eps', format='eps')
-    fig.savefig('acc_vs_epoch.png', format='png', dpi=300)
+    fig.savefig('acc_vs_epoch.png', format='png', dpi=600)
     plt.close()

@@ -1,4 +1,32 @@
 \appendix
+\section{Bus Operations}
+\label{app:bus_ops}
+This section details the instructions that can be performed on the bus in more details than is warranted in the main body of the thesis. Table \ref{tab:bus_ops} describes
+each instruction along with the fields on the bus.
+
+\begin{sidewaystable}
+    \centering
+    \renewcommand{\arraystretch}{1.2} % Vertical spacing
+    \setlength{\arrayrulewidth}{1.5pt} % Thickness of vertical lines
+    \caption{Bus operations and their fields}
+    \begin{tabular}{@{} p{6.5cm}lllllll @{}}
+        \toprule
+        Opcode                                      & Description                       & Sender        & \texttt{ID}   & \texttt{Data[0]}  & \texttt{Data[1]}  & \texttt{Data[2]} \\\midrule
+        \texttt{NOP}                                & No instruction                    & All           & -             & -                 & -                 & - \\
+        \texttt{PATCH\_LOAD\_BROADCAST\_START\_OP}  & Start loading an EEG patch        & Master        & 0-63          & \texttt{tx\_addr} & Length            & \texttt{rx\_addr} \\
+        \texttt{PATCH\_LOAD\_BROADCAST\_OP}         & \ac{eeg} patch data               & \ac{cim}      & 0-63          & Data              & Data              & Data \\
+        \texttt{DENSE\_BROADCAST\_START\_OP}        & Start dense broadcast             & Master        & 0-63          & \texttt{tx\_addr} & Length            & \texttt{rx\_addr} \\
+        \texttt{DENSE\_BROADCAST\_DATA\_OP}         & Dense broadcast data              & \ac{cim}      & 0-63          & Data              & Data              & Data \\
+        \texttt{PARAM\_STREAM\_START\_OP}           & Start streaming weights           & Master        & 0-63          & \texttt{tx\_addr} & Length            & - \\
+        \texttt{PARAM\_STREAM\_OP}                  & Weight data                       & Master        & 0-63          & Data              & Data              & Data \\
+        \texttt{TRANS\_BROADCAST\_START\_OP}        & Start transpose broadcast         & Master        & 0-63          & \texttt{tx\_addr} & Length            & - \\
+        \texttt{TRANS\_BROADCAST\_DATA\_OP}         & Transpose data broadcast          & \ac{cim}      & 0-63          & Data              & Data              & Data \\
+        \texttt{PISTOL\_START\_OP}                  & \ac{cim} to execute next step     & Master        & -             & -                 & -                 & - \\
+        \texttt{INFERENCE\_RESULT\_OP}              & Contains inferred sleep stage     & \ac{cim} \#0  & 0             & Sleep stage       & -                 & - \\
+    \end{tabular}
+    \label{tab:bus_ops}
+\end{sidewaystable}
+
 \section{Codebase Statistics}
 It may be interesting to the reader to appreciate the size of the codebase needed to develop a project of similar scale. The code for this project is available 
 in my \href{https://github.com/TristanRobitaille/engsci-thesis}{GitHub repository}. The following table provides a breakdown of the number of lines of code in the project.

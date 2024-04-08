@@ -23,8 +23,6 @@ acc = {
     "patch_len": [0.7243, 0.7668, 0.7915, 0.7941, 0.7962, 0.7568]
 }
 
-pparam = dict(xlabel='Dropout rate', ylabel='Validation accuracy')
-
 xlabels = {
     "emb_depth":"Embedding depth",
     "mlp_dim":"MLP dimension",
@@ -33,6 +31,8 @@ xlabels = {
     "sampling_freq":"Sampling frequency (Hz)",
     "patch_len": "{Patch length}"
 }
+
+pparam = dict(xlabel='Dropout rate', ylabel='Validation accuracy')
 
 for key in acc.keys():
     with plt.style.context(['science']):
@@ -49,5 +49,5 @@ for key in acc.keys():
             ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
         ax.grid(True)
         fig.savefig(f'{key}.eps', format='eps')
-        fig.savefig(f'{key}.png', format='png', dpi=300)
+        fig.savefig(f'{key}.png', format='png', dpi=600)
         plt.close()
