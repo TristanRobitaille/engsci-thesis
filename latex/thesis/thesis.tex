@@ -81,7 +81,19 @@
     I am making an \ac{asic}. It's small, low-power and fast. It's better than Google's.
 \section{Introduction}
 \label{sec:intro}
-\lipsum[1]
+As reported by Chaput \textit{et al.} \cite{insomnia_prevalence}, insomnia impacts around 24\% of Canadians adults. Detection and classification of sleep stages, known as \textit{sleep staging}, followed by neuromodulation has been recently found by Yoon
+\cite{yoon2021neuromodulation} to be a promising treatment against insomnia. The current stage-of-the-art for sleep staging involves the use of polysomnography to measure biosignals (at least 19 sensors are required, as explained by Levin and Chauvel \cite{RUNDO2019381})
+and manual annotation by a sleep expert, which requires, on average, 2 hours of work \cite{phan2022automatic}. This technique also does not provide neuromodulation. To address these downsides while effectively treating insomnia, we propose an in-ear device performing
+electroencaphalogram (EEG) sensing, sleep staging and neuromodulation. To maximize treatment potential, the device should be as small and portable as possible such that it can be used at home.
+
+This thesis focuses on the development of a deep learning model to perform sleep staging and on the design of an accelerator ASIC module to perform in-situ inference with said model. In the end, it aims to prove, by simulations, the viability of such an accelerator in order to
+potentially integrate it in the in-ear device. Multiple authors \cite{dutt2023sleepxai, fu2021deep, eldele2021attention} have published high-accuracy results using a deep learning approach to sleep staging, and have done so with significantly fewer sensors than polysomnography.
+However, these AI models run on standard computers as software frameworks and are thus unsuitable for a lightweight integrated solution. Google sells small custom AI-accelerators (such as the Coral Edge TPU) that could run these AI models, but they still consume too much
+power (1W, \cite{coral_datasheet}) and do not readily integrate with custom neuromodulation hardware.
+
+The proposed solution should match the accuracy of traditional polysomnography and published models in the literature with a power consumption low enough that the whole system can be powered for at least a full-night on a battery that fits in-ear.
+This document provides an overview of the literature in both automatic sleep staging using \ac{ai} and in \ac{asic} accelerator design, establishes technical requirements for the device, describes the model used and hardware design, evaluates their performance and discusses
+improvements and future work.
 
 \newpage
 
@@ -91,31 +103,30 @@
 
 \subsection{Problem Statement and Technical Requirements}
 \label{sec:prob_statement}
-In light of the background of Section \ref{sec:intro} and the literature review of Section \ref{sec:lit_review}, the problem statement of this thesis is to
-develop a deep learning model and an ASIC accelerator for automatic sleep staging in order to determine whether such a system can be used in an earpiece-type
-device for automatic sleep staging. The results of this thesis will guide future development in the field.
+In light of the background of Section \ref{sec:intro} and the literature review of Section \ref{sec:lit_review}, the problem statement of this thesis is to develop a deep
+learning model and an ASIC accelerator for automatic sleep staging in order to determine whether such a system can be used in an earpiece-type device for automatic sleep staging.
+The results of this thesis will guide future development in the field.
 
-Table \ref{tab:design_goals} indicates precise design goals and their justification, which helps guide design decisions and development effort. For example, to
-reach the target model size, time will be spent evaluating the impact of hyperparameters to find the combination that gives the lowest size while meeting the desired
-accuracy. Furthermore, quantization will be explored to reduce model size. For the AI accelerator, since inference power and clock frequency are inversely proportional,
-we must focus on reducing energy per inference. From first principles, this implies reducing the amount of charge that is displaced within the chip. Since the physical
-properties are locked for the target 65nm node, we focus on reducing the number of operations, simplifying operations, limiting data movement and reducing control logic.
+Table \ref{tab:design_goals} indicates precise design goals and their justification, which helps guide design decisions and development effort. For example, to reach the target
+model size, time will be spent evaluating the impact of hyperparameters to find the combination that gives the lowest size while meeting the desired accuracy. Furthermore,
+quantization will be explored to reduce model size. For the AI accelerator, since inference power and clock frequency are inversely proportional, we must focus on reducing energy
+per inference. From first principles, this implies reducing the amount of charge that is displaced within the chip. Since the physical properties are locked for the target 65nm node,
+we focus on reducing the number of operations, simplifying operations, limiting data movement and reducing control logic.
 
-To determine the average power consumption constraint, the battery capacity of the Airpods Pro, which was found in a teardown to be 0.16Wh, can be considered as a
-reference \cite*{AirpodsIfixitTeardown}. Assuming a goal of 10h of battery life (for a full night of sleep), the overall power consumption must stay below 16mW, on average.
-The speaker coil driving circuitry will consume most of the power and, leaving enough power budget for the analog front-end and overhead in the system, in addition to a
-safety factor, 5mW seems like a reasonable target for the accelerator. Regarding the target area and model size, a reasonable chip package for this application is a 4mm x 4mm
-Chip-Scale Package (CSP). According to IPC standard J-STD-012, a CSP overall area is no more than 120\% of the die, which leaves 13$mm^2$ of die area \cite*{J_STD_012}. To
-further contextualize, Apple's H1 processor, which is used in the Airpods Pro, has a similar die area of 12$mm^2$ \cite*{H1DieSize}.
+To determine the average power consumption constraint, the battery capacity of the Airpods Pro, which was found in a teardown to be 0.16Wh, can be considered as a reference
+\cite*{AirpodsIfixitTeardown}. Assuming a goal of 10h of battery life (for a full night of sleep), the overall power consumption must stay below 16mW, on average. The speaker coil
+driving circuitry will consume most of the power and, leaving enough power budget for the analog front-end and overhead in the system, in addition to a safety factor, 5mW seems
+like a reasonable target for the accelerator. Regarding the target area and model size, a reasonable chip package for this application is a 4mm x 4mm Chip-Scale Package (CSP).
+According to IPC standard J-STD-012, a CSP overall area is no more than 120\% of the die, which leaves 13$mm^2$ of die area \cite*{J_STD_012}. To further contextualize, Apple's
+H1 processor, which is used in the Airpods Pro, has a similar die area of 12$mm^2$ \cite*{H1DieSize}.
 
 Again, a significant portion will be consumed by the coil driver, RISC-V processor and memory. Therefore, a maximum area of 10\%, or 1.5$mm^2$, for the accelerator seems to be a safe
-option. According to Liu and Kursun, the area of a standard 6T SRAM cell is 0.75$\mu m^2$ \cite*{liu2008characterization}. To leave enough area for the compute elements,
-controllers and routing, reserving 50\% of the accelerator area to weights is reasonable. Thus, with 0.75$mm^2$ that can be allocated to weights, the total model size can be
-1Mb, or 125kB, ignoring memory access overhead. Finally, as mentioned above the accuracy should be close to published literature in this field to provide effective treatment.
-For this, 80\% is a reasonable goal. Current PSG divides the night in 30s ``sleep epochs''. To limit too much of an offset between the end of a 30s epoch and its predicted
-sleep stage (essentially a phase offset), which would add inaccuracy to the overall system and potentially reduce its effectiveness, a maximum phase offset of 10\% (3s)
-is appropriate. Finally, a clock of 200MHz is a typical upper-bound for low-power microcontrollers-type systems. To avoid needing two separate clock domains, which entails
-more area and power, the accelerator should be able to run at 200MHz.
+option. According to Liu and Kursun, the area of a standard 6T SRAM cell is 0.75$\mu m^2$ \cite*{liu2008characterization}. To leave enough area for the compute elements, controllers
+and routing, reserving 50\% of the accelerator area to weights is reasonable. Thus, with 0.75$mm^2$ that can be allocated to weights, the total model size can be 1Mb, or 125kB,ignoring
+memory access overhead. Finally, as mentioned above the accuracy should be close to published literature in this field to provide effective treatment. For this, 80\% is a reasonable
+goal. Current PSG divides the night in 30s ``sleep epochs''. To limit too much of an offset between the end of a 30s epoch and its predicted sleep stage (essentially a phase offset),
+which would add inaccuracy to the overall system and potentially reduce its effectiveness, a maximum phase offset of 10\% (3s) is appropriate. Finally, a clock of 200MHz is a typical
+upper-bound for low-power microcontrollers-type systems. To avoid needing two separate clock domains, which entails more area and power, the accelerator should be able to run at 200MHz.
 
 \begin{table}
     \centering
