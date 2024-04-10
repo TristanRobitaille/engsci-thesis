@@ -1,4 +1,4 @@
-\documentclass[12pt, hidelinks]{article}
+\documentclass[12pt, hidelinks, draft]{article}
 \usepackage[a4paper, margin=1in]{geometry} % Set 1-inch border
 \usepackage[backend=biber, citestyle=ieee]{biblatex}
 \usepackage{setspace}
@@ -80,22 +80,64 @@
     See~\cite{liu2021edge}.
     I am making an \ac{asic}. It's small, low-power and fast. It's better than Google's.
 \section{Introduction}
+\label{sec:intro}
 \lipsum[1]
 
 \newpage
-\section{Background}
-\subsection{Problem Statement}
-\lipsum[1]
-\subsection{Technical Goals and Requirements}
-\label{sec:reqs}
-The main objectives of the
-model are:
-\begin{itemize}
-    \item To use as few weights as possible to reduce the area and energy consumption of the accelerator.
-    \item To reduce the number of matrix transpose operations to reduce latency by limiting data movement.
-    \item To maintain high accuracy in sleep staging.
-\end{itemize}
-\lipsum[1]
+
+\section{Literature Review}
+\input{lit_review.tex}
+\label{sec:lit_review}
+
+\subsection{Problem Statement and Technical Requirements}
+\label{sec:prob_statement}
+In light of the background of Section \ref{sec:intro} and the literature review of Section \ref{sec:lit_review}, the problem statement of this thesis is to
+develop a deep learning model and an ASIC accelerator for automatic sleep staging in order to determine whether such a system can be used in an earpiece-type
+device for automatic sleep staging. The results of this thesis will guide future development in the field.
+
+Table \ref{tab:design_goals} indicates precise design goals and their justification, which helps guide design decisions and development effort. For example, to
+reach the target model size, time will be spent evaluating the impact of hyperparameters to find the combination that gives the lowest size while meeting the desired
+accuracy. Furthermore, quantization will be explored to reduce model size. For the AI accelerator, since inference power and clock frequency are inversely proportional,
+we must focus on reducing energy per inference. From first principles, this implies reducing the amount of charge that is displaced within the chip. Since the physical
+properties are locked for the target 65nm node, we focus on reducing the number of operations, simplifying operations, limiting data movement and reducing control logic.
+
+To determine the average power consumption constraint, the battery capacity of the Airpods Pro, which was found in a teardown to be 0.16Wh, can be considered as a
+reference \cite*{AirpodsIfixitTeardown}. Assuming a goal of 10h of battery life (for a full night of sleep), the overall power consumption must stay below 16mW, on average.
+The speaker coil driving circuitry will consume most of the power and, leaving enough power budget for the analog front-end and overhead in the system, in addition to a
+safety factor, 5mW seems like a reasonable target for the accelerator. Regarding the target area and model size, a reasonable chip package for this application is a 4mm x 4mm
+Chip-Scale Package (CSP). According to IPC standard J-STD-012, a CSP overall area is no more than 120\% of the die, which leaves 13$mm^2$ of die area \cite*{J_STD_012}. To
+further contextualize, Apple's H1 processor, which is used in the Airpods Pro, has a similar die area of 12$mm^2$ \cite*{H1DieSize}.
+
+Again, a significant portion will be consumed by the coil driver, RISC-V processor and memory. Therefore, a maximum area of 10\%, or 1.5$mm^2$, for the accelerator seems to be a safe
+option. According to Liu and Kursun, the area of a standard 6T SRAM cell is 0.75$\mu m^2$ \cite*{liu2008characterization}. To leave enough area for the compute elements,
+controllers and routing, reserving 50\% of the accelerator area to weights is reasonable. Thus, with 0.75$mm^2$ that can be allocated to weights, the total model size can be
+1Mb, or 125kB, ignoring memory access overhead. Finally, as mentioned above the accuracy should be close to published literature in this field to provide effective treatment.
+For this, 80\% is a reasonable goal. Current PSG divides the night in 30s ``sleep epochs''. To limit too much of an offset between the end of a 30s epoch and its predicted
+sleep stage (essentially a phase offset), which would add inaccuracy to the overall system and potentially reduce its effectiveness, a maximum phase offset of 10\% (3s)
+is appropriate. Finally, a clock of 200MHz is a typical upper-bound for low-power microcontrollers-type systems. To avoid needing two separate clock domains, which entails
+more area and power, the accelerator should be able to run at 200MHz.
+
+\begin{table}
+    \centering
+    \renewcommand{\arraystretch}{1.2} % Vertical spacing
+    \setlength{\arrayrulewidth}{1.5pt} % Thickness of vertical lines
+    \caption{Design goals for AI model and ASIC accelerator}
+    \begin{tabular}{@{} *7l @{}}
+        \toprule
+        Type        & Goals                                     & Justification &&&  \\\midrule
+        \multirow{2}{*}{Model}
+                    & Size $<$ 125\,kB                          & Help reach ASIC area/power goals \\
+                    & Accuracy $>$ 80\%                         & Competitive with state-of-the-art \\ \bottomrule
+        %%%%%%%%%%%%%%%%%%%%%%%%
+        \multirow{3}{*}{ASIC}
+                    & $P_{\mathrm{avg}} < 1.5\,\mathrm{mW}$     & System to function for whole night \\
+                    & $A_{\mathrm{total}} < 1.5\,\mathrm{mm}^2$ & Fit in ear (65nm node) \\
+                    & $T_{\mathrm{inference}} < 3\,\mathrm{s}$  & Maximum phase offset of 10\% \\
+                    & $F_{\mathrm{Max}} > 200\,\mathrm{MHz}$    & Compatibility with rest of system \\
+        \hline
+    \end{tabular}
+    \label{tab:design_goals}
+\end{table}
 
 \newpage
 \section{How to Design an AI Accelerator}
@@ -112,20 +154,16 @@ model are:
 \input{hw_design}
 
 \subsection{A Note About Software-Hardware Co-Design}
-
 \lipsum[1]
 
 \newpage
 \section{Results: Evaluation of Performance Metrics}
-This presents and discusses the most saliant high-level results of the model and hardware design.
-\subsection{Vision Transformer}
-\lipsum[1]
-\subsection{Accelerator}
-\lipsum[1]
+\label{sec:results}
+\input{results}
 
 \newpage
-\section{Future Work}
-\lipsum[1]
+\section{Results Analysis \& Future Work}
+\input{analysis_and_future_work}
 
 \newpage
 \section{Conclusion}

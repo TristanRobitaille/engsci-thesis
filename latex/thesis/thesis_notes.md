@@ -11,7 +11,7 @@
 ## Introduction
 
 ## Background
-- Insmonia problem
+- Insonia problem
 - Sleep staging (5 stages, definition from sleep foundation)
 - PSG
 - Neuromodulation
@@ -93,7 +93,7 @@
         - Is Gaussian rounding needed?
         - Should add_/mult_refresh be used?
         - Should multiplier be pipelined
-    - Balance the Fmax --> This can actually save power since maximizing the Fmax will reduce inference latency, meaning we can shut down the accelerator for longer, meaning the effective leakage current (by far the dominant power loss) can be reduced
+    - Balance the Fmax and increase FUsed --> This can actually save power since maximizing the Fmax will reduce inference latency, meaning we can shut down the accelerator for longer, meaning the effective leakage current (by far the dominant power loss) can be reduced
     - Look into cutting power to accelerator when not in use to avoid leakage current
 - Model changes:
     - Potentially reduce number of data transpose needed (don't train beta and gamma in LayerNorm, etc.)

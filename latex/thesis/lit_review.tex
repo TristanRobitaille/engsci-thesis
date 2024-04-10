@@ -1,0 +1,35 @@
+\subsection{Machine Learning for Sleep Staging}
+Deep learning for sleep staging has been studied since around 2017. Broadly speaking, basic deep neural networks (DNN) cames first, followed by convolutional neural networks (CNN) and recurrent neural-networks (RNN) \cite{phan2022sleeptransformer}.
+The transformer is a relatively new type of neural network based around the concept of ``attention'' and particularly suited for sequence inputs since it can process the input in parallel \cite{han2022survey}. Since its introduction in 2017 \cite{vaswani2017attention}, 
+the transformer has been used for sleep staging tasks. Indeed, Dai \textit{et al.} developed a transformer-like model without decoders which used three input EEG channels and achieved an impressive 87.2\% accuracy on the popular SleepEDF-20 dataset
+\cite{dai2023multichannelsleepnet}. Similarly, Phan \textit{et al.} developed a model with a focus on outputting easily-interpretable confidence metrics for clinicians. They found that a significant impediment to the adoptation of automatic sleep staging in clinics
+is lack of trust from clinicians as they perceive the system to be a ``black box''. Their model ingests multiple sleep epochs for each inference, which allowed the team to achieve 84.9\% accuracy on the SleepEDF-78 dataset. Eldele \textit{et al.} managed an
+accuracy of 85.6\% on SleepEDF-78 using a single-channel, single-epoch attention-based model \cite{eldele2021attention}.
+
+In recent years, the accuracy of sleep staging by ML models has plateaued. In fact, Phan \textit{et al.} claim that AI-based sleep-staging in heathly patients has been solved fully as the accuracy has reached the ``almost perfect'' level of Cohen's kappa
+\cite{phan2022automatic}. However, none of the models presented above meet our constraints. Indeed, we require a lightweight, single-channel, single-epoch model. Most models have more than 1M parameters \cite{phan2022sleeptransformer}; even the smallest
+model by Eldele \textit{et al.} has above 500k 32-bit float weights, which far exceeds the 125kB constraint. Furthermore, none have been optimized to run on custom hardware. Thus, there is a need to develop a novel lightweight transformer.
+
+% Lit review: AI accelerator ASIC
+\subsection{AI Accelerator Hardware}
+AI accelerators are a very active area of research at the moment. Significant gains in latency and power are possible by designing hardware optimized for machine learning. Indeed, CPUs lack in memory bandwidth and parallelism and have significant control overhead
+as required to process any arbitrary program. GPUs have high cost and high power consumption and typically have less available memory than a CPU. Hardware (FPGA and ASICs), on the other hand, can be fast and energy efficient but suffer from limited flexibility \cite{hu2022survey}.
+The first AI accelerator ASIC, publised in 2014 by Chen \textit{et al.} and named \textit{DianNao}, could perform 452G 16b fixed-point computations per second \cite{chen2014diannao}. It was quickly surpassed by \textit{ShiDianNao}, which was 1.87x faster and used 60x less
+energy \cite{du2015shidiannao}.
+
+Modern models are massive and suffer from memory access penalties. Thus, the most optimized architectures limit data movement as much as possible by placing the compute elements directly \textit{in memory}, meaning that less charge is switched per operation
+(DRAM access requires 200x more energy than on-chip memory \cite*{ding2017circnn}) and the overhead and bottleneck effect of the data bus is drastically reduced. For example, Arora \textit{et al.} describe ``CoMeFa'', a compute-in-memory (CiM) module
+for FPGA BRAM which managed to reduce energy comsumption by 55\%. They placed up to 160 single-bit processing element per BRAM (20kbit) and perform operations in a bit-serial manner instead of the traditional bit-parallel \cite*{arora2022comefa}. Similarly, 
+Wang and colleagues present a similar BRAM CiM module which speeds up compute by up to 2.3x at the cost of 1.8\% increase in area \cite*{wang2021compute}. A high-level architecture that often uses a number of CiM is known as ``dataflow''. Unlike the traditional
+von Neumann architecture, it does not rely on instructions and banks of memory cells to perform the necessary computation, but instead organizes different compute elements sequentially and in parallel to match a model's architecture. For instance, Farabet 
+\textit{et al.} present a runtime-reconfigurable dataflow architecture based on 9 pipelined ``processing tiles'' that can be reconfigured in $\sim$$10^4$-$10^5$ permutations \cite{farabetlargescale}.
+
+Another area of research is concerned with the software-hardware co-design opportunities afforded by tight integration between the model and the hardware running its inference. Ding and team describe an impressive design where both the training backpropagation
+and inference hardware are modified. By ensuring that weight matrices consist of an array of circulant matrices, the team is able to reduce time-complexity of vector-matrix mutliply from $\mathcal{O}(n^2)$ to $\mathcal{O}(n\log{}n)$. This technique reduced
+storage needs by 400x-4000x, enabling the model to be stored in on-chip memory and reducing energy consumption by 60x-70x compared to naïve FPGA implementation \cite*{ding2017circnn}. Taking a different route, by developing a so-called ``Block-Balanced Pruning'' 
+technique to pack a pruned weight matrix and its index information in an FPGA BRAM, Qi \textit{et al.} managed to double inference speed compared to a GPU \cite*{qi2021accommodating}. Another example of software-hardware co-design is the work by Zhi \textit{et al.}
+who developed a ``Clipped staircase ReLU'' activation function optimized for their custom CiM processing element and use of quantized weights. Their work consumed 5x less energy and 100x-1000x fewer memory accesses \cite*{zhi2021opportunities}.
+
+\subsection{Lessons From The Literature}
+The literature reviews presented above offer promising design directions to help reach the design goals. Firstly, a small model is critically missing from the literature since even the smallest model is 16x too large for our project. Secondly, CiM and dataflow architectures
+are proven techniques to decrease power consumption and offer promising inspiration for the design of the ASIC. Finally, good software-hardware co-design should not be overlooked as it can offer significant gains.

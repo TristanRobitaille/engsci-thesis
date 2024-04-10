@@ -1,6 +1,6 @@
 This section describes the workflow used for this project, which was divided into three main steps: model prototyping, accelerator functional simulation and accelerator hardware implementation.
 The tools used in each step are described in the following sections. The goal is to expose progressively more layers of abstraction to make hardware/software co-design and debugging easier. As
-can be seen in Figure \ref{fig:workflow}, these three steps allow iterations to converge on a design that meets the requirements described in Section \ref{sec:reqs}.
+can be seen in Figure \ref{fig:workflow}, these three steps allow iterations to converge on a design that meets the requirements described in Section \ref{sec:prob_statement}.
 \begin{figure}[H]
     \centering
     \caption{Three step workflow for designing an AI accelerator}
@@ -80,7 +80,7 @@ and more productive code. Several tools are used to design the hardware:
 \begin{itemize}
     \item Verilator: \ac{rtl} compiler and linter.
     \item CocoTB: Python testbenching framework.
-    \item Gtkwave: \ac{vcd} waveform viewer.
+    \item GTKWave: \ac{vcd} waveform viewer.
     \item ARM Artisan Physical IP: SRAM compiler.
     \item Synopsys Design Compiler: Synthesis and performance evaluation tool.
 \end{itemize}
