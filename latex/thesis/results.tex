@@ -1,6 +1,6 @@
 This presents and discusses the most salient aggregate high-level results of the model and hardware design shown in Table \ref{tab:high_level_results}.
-It can be seen that the model meets the requirements summarized in Table \ref{tab:design_goals}. Indeed, the model size (31.59\si{\kilo\byte}) is below the
-125\si{\kilo\byte} target, and the accuracy (82.87\%) is higher than the 80\% target. It is also nearly $32\times$ smaller than the smallest state-of-the-art
+It can be seen that the model meets the requirements summarized in Table \ref{tab:design_goals}. Indeed, the model size (63.18\si{\kilo\byte}) is below the
+125\si{\kilo\byte} target, and the accuracy (82.9\%) is higher than the 80\% target. It is also nearly $32\times$ smaller than the smallest state-of-the-art
 model for automatic sleep staging presented by Eldele \textit{et al.}, which has 500000 32-bit floating point parameters \cite{eldele2021attention}.
 
 The ASIC accelerator meets some of the requirements. The inference latency (6.97\si{\milli\second}) is well below the maximum allowed latency of 3\si{\second}.
@@ -27,7 +27,7 @@ that the effective leakage power is reduced by up to 94.98\%, reducing the effec
     \begin{tabularx}{0.8\textwidth}{Xlc}
         \toprule
         Metric                      & Value                         & Meets requirement? \\\midrule
-        31-fold accuracy            & 82.87\%                       & Yes   \\
+        31-fold accuracy            & 82.9\%                        & Yes   \\
         \# of parameters            & 31,589                        & Yes   \\
         Size                        & 63.18\si{\kilo\byte}          & Yes   \\ \bottomrule 
         %%%%%%%%%%%%%%%%%%%%%%

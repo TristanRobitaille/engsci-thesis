@@ -6,7 +6,7 @@ the area and the control logic occupies \percentlogic{}\% of the area.
 
 \begin{figure}
     \centering
-    \includegraphics[width=0.7\textwidth]{assets/High_level_arch.png}
+    \includegraphics[width=0.7\textwidth]{assets/high_level_arch.png}
     \caption{High-level architecture of the ASIC accelerator}
     \label{fig:high_level_arch}
 \end{figure}
@@ -18,9 +18,7 @@ itself very well to parallelization as each \ac{mac} operation is independent of
 area, but is much slower. It is relatively hard to accurately predict the \ac{ppa} of different architectures before implementation. However, designing a distributed
 architecture first can be a good starting point as it can easy be scaled up and down to optimize the design. This is the reason this design uses a distributed architecture.
 
-The design uses 64 \ac{cim} to maximize \ac{pe} utilization of the ASIC. Indeed, most weights and intermediate results matrices have at least one dimension that is 61
-(number of patches + classification token) or 64 (embedding depth of the model). With 64 \ac{cim}, all vector operations can be computed at once, avoiding extra overhead
-for control and data movement while limiting the amount of unused silicon.
+The design uses 64 \ac{cim} to maximize \ac{pe} utilization of the ASIC as mentioned in Section \ref{sec:sw_hw_co-design}
 
 \subsection{Data and Control Bus}
 The data and control bus is a bidirectional bus that connects the Master module and all the \ac{cim} modules. Once device may communicate at a each and each is connected to the bus
@@ -52,10 +50,16 @@ start a new inference. It also interfaces with the external memory holding the p
 to perform dense or transpose data broadcasts and for synchronizing their high-level (step-by-step or multi-step) operations.
 
 \subsection{Compute-in-Memory: Architecture}
-The \ac{cim} module is the heart of the accelerator. It is responsible for performing the actual computation. Each \ac{cim} module has its own memory for intermediate results and
-parameters along with control logic and several compute units needed to perform all computation in the model. The \ac{cim} module is designed to be as autonomous as possible to limit
-control overhead. It follows the dataflow model of computation, where data is passed from one step of the inference to the next without Master involvement, unless data needs to be
-broadcast or transposed. The following sections describe different aspects of the \ac{cim} module.
+The \ac{cim} module is the heart of the accelerator. Its architecture is presented in Figure \ref{fig:cim_arch}. It is responsible for performing the actual computation. Each \ac{cim}
+module has its own memory for intermediate results and parameters along with control logic and several compute units needed to perform all computation in the model. The \ac{cim} module
+is designed to be as autonomous as possible to limit control overhead. It follows the dataflow model of computation, where data is passed from one step of the inference to the next without
+Master involvement, unless data needs to be broadcast or transposed across \ac{cim}. The following sections describe different aspects of the \ac{cim} module.
+\begin{figure}
+    \centering
+    \includegraphics[width=0.7\textwidth]{assets/cim_arch.png}
+    \caption{Architecture of the Compute-in-Memory module}
+    \label{fig:cim_arch}
+\end{figure}
 
 \subsection{Compute-in-Memory: Memory}
 The \ac{cim} module contains two single-port memory banks: one for intermediate results and one for parameters containing 848 and 528 words, respectively. Having two separate banks

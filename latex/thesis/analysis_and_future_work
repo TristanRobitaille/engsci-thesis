@@ -34,7 +34,7 @@ with different types of electrodes such as \ac{emg}, \ac{eog}, \ac{ecg}, \ac{bvp
 \end{table}
 
 It would also be important to rewrite the model in efficient C code and run on a microcontroller to determine how far of requirements can a firmware approach might be. Multiple authors have 
-published relevant work for the RISC-V \ac{ISA}, such as an extension to handle vector operations \cite{perotti2022new} or compilation support for a RISC-V + CGRA heteregenous architecture
+published relevant work for the RISC-V \ac{isa}, such as an extension to handle vector operations \cite{perotti2022new} or compilation support for a RISC-V + CGRA heteregenous architecture
 \cite{lingRISC-V-CGRA}. Running the model on a microprocessor would save the significant development and verification effort of an ASIC accelerator and allow for a more flexible design since
 the model could be changed with a firmware update. However, the power consumption and area of a vector- or CGRA-augmented microcontroller may be higher than the ASIC accelerator.
 
@@ -73,9 +73,9 @@ increase area.
     \renewcommand{\arraystretch}{1.2} % Vertical spacing
     \setlength{\arrayrulewidth}{1.5pt} % Thickness of vertical lines
     \caption{Suggested improvements to the ASIC accelerator and their potential benefits}
-    \begin{tabular}{@{} p{4.75cm}cccc @{}}
+    \begin{tabular}{@{} p{3.75cm}cccc @{}}
         \toprule
-        Improvement         & Dynamic energy $\Delta$   & Leakage $\Delta$          & Latency $\Delta$      & Area $\Delta$                     \\\midrule
+        Improvement         & Dyn. energy $\Delta$      & Leakage $\Delta$          & Latency $\Delta$      & Area $\Delta$                     \\\midrule
         Centralized memory  & Slight $\downarrow$       & -13.75 \si{\milli\watt}   & Slight $\downarrow$   & -0.931\si{\square\milli\meter}    \\
         Centralized compute & Slight $\downarrow$       & -25.80\si{\milli\watt}    & +0.305\si{\second}    & -1.183\si{\square\milli\meter}    \\
         Bus elimination     & Slight $\downarrow$       & Slight $\downarrow$       & No change             & Slight $\downarrow$               \\
@@ -86,8 +86,8 @@ increase area.
 \end{table}
 
 With the quantified suggested improvements, the leakage power of the ASIC would be reduced from 56.48\si{\milli\watt} to 16.93\si{\milli\watt}. Ignoring improvements to power gating,
-this reduces the effective power consumption to from 3.046 \si{milli\watt} to 0.848\si{milli\watt}, a 72.2\% reduction. The area would decrease from 3.86\si{\square\micro\meter} to 
-1.746\si{\square\micro\meter}, a 54.8\% reduction, which is just over the objective of 1.5\si{\square\micro\meter}.
+this reduces the effective power consumption to from 3.046 \si{\milli\watt} to 0.848\si{\milli\watt}, a 72.2\% reduction. The area would decrease from 3.86\si{\square\micro\meter} to 
+1.746\si{\square\micro\meter}, a 54.8\% reduction, which is just under the objective of 2\si{\square\micro\meter}.
 
-Sections \ref{sec:results} and \ref{sec:analysis} have shown that the current design is not suitable for the sleep staging earpiece project as is. However, there is a clear path forward to
-design an AI accelerator with significantly reduced power consumption and area, which are the two most important metrics for the earpiece project.
+Section \ref{sec:results} has shown that the current design is not suitable for the sleep staging earpiece project as is. However, there is a clear path forward to design an AI accelerator
+with significantly reduced power consumption and area, which are the two most important metrics for the earpiece project.
