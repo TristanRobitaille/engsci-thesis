@@ -27,6 +27,7 @@ latex/thesis/ESC499_Thesis_Final_Document_Rubric_and_Rough_Guide.pdf
 latex/thesis/Thesis_Format_Reqs_2023-24.pdf
 latex/thesis/assets/dummy.png
 latex/thesis/assets/*eps-converted-to.pdf
+latex/thesis/assets/*/*eps-converted-to.pdf
 
 # Proposal
 latex/proposal/proposal.aux

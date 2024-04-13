@@ -1,4 +1,32 @@
 \appendix
+\section{Bus Operations}
+\label{app:bus_ops}
+This section details the instructions that can be performed on the bus in more details than is warranted in the main body of the thesis. Table \ref{tab:bus_ops} describes
+each instruction along with the fields on the bus.
+
+\begin{sidewaystable}
+    \centering
+    \renewcommand{\arraystretch}{1.2} % Vertical spacing
+    \setlength{\arrayrulewidth}{1.5pt} % Thickness of vertical lines
+    \caption{Bus operations and their fields}
+    \begin{tabular}{@{} p{6.5cm}lllllll @{}}
+        \toprule
+        Opcode                                      & Description                       & Sender        & \texttt{ID}   & \texttt{Data[0]}  & \texttt{Data[1]}  & \texttt{Data[2]} \\\midrule
+        \texttt{NOP}                                & No instruction                    & All           & -             & -                 & -                 & - \\
+        \texttt{PATCH\_LOAD\_BROADCAST\_START\_OP}  & Start loading an EEG patch        & Master        & 0-63          & \texttt{tx\_addr} & Length            & \texttt{rx\_addr} \\
+        \texttt{PATCH\_LOAD\_BROADCAST\_OP}         & \ac{eeg} patch data               & \ac{cim}      & 0-63          & Data              & Data              & Data \\
+        \texttt{DENSE\_BROADCAST\_START\_OP}        & Start dense broadcast             & Master        & 0-63          & \texttt{tx\_addr} & Length            & \texttt{rx\_addr} \\
+        \texttt{DENSE\_BROADCAST\_DATA\_OP}         & Dense broadcast data              & \ac{cim}      & 0-63          & Data              & Data              & Data \\
+        \texttt{PARAM\_STREAM\_START\_OP}           & Start streaming weights           & Master        & 0-63          & \texttt{tx\_addr} & Length            & - \\
+        \texttt{PARAM\_STREAM\_OP}                  & Weight data                       & Master        & 0-63          & Data              & Data              & Data \\
+        \texttt{TRANS\_BROADCAST\_START\_OP}        & Start transpose broadcast         & Master        & 0-63          & \texttt{tx\_addr} & Length            & - \\
+        \texttt{TRANS\_BROADCAST\_DATA\_OP}         & Transpose data broadcast          & \ac{cim}      & 0-63          & Data              & Data              & Data \\
+        \texttt{PISTOL\_START\_OP}                  & \ac{cim} to execute next step     & Master        & -             & -                 & -                 & - \\
+        \texttt{INFERENCE\_RESULT\_OP}              & Contains inferred sleep stage     & \ac{cim} \#0  & 0             & Sleep stage       & -                 & - \\
+    \end{tabular}
+    \label{tab:bus_ops}
+\end{sidewaystable}
+
 \section{Codebase Statistics}
 It may be interesting to the reader to appreciate the size of the codebase needed to develop a project of similar scale. The code for this project is available 
 in my \href{https://github.com/TristanRobitaille/engsci-thesis}{GitHub repository}. The following table provides a breakdown of the number of lines of code in the project.
@@ -27,3 +55,32 @@ In addition, there have been 200 commits to the repository.
 
 \newpage
 \section{Reflection on Learnings and Experience Gained}
+This project has been a significant learning experience for me. I have learned a great deal about artifical intelligence and the design and implementation of hardware systems.
+I'm including this section to formalize reflections on experience gained, experience I wasn't able to gain and what I would have done differently.
+
+\subsection{Acquired Experience}
+Firstly, I gained good knownledge in the basics of artificial intelligence through Andrew Ng's Deep Learning Specialization on Coursera and practical experience using TensorFlow.
+I also further reinforced my skills in C++ and SystemVerilog and was able to use industry-standard tools such as Synopsys Design Compiler and ARM Artisan IP. I developed my own
+local workflow for developing RTL with Verilator, CocoTB and GTKWave, whose flexibility will be a great asset and enabler in my future projects.
+
+That being said, the largest takeway from this project is a direct appreciation for the complexity of hardware-software co-design. This project took me from the high-level frameworks
+of Python to bit-level arithmetic, \ac{fsm} and cycle-level parallelism. Through this, I've realized that owning the full-stack is powerful and gives significant design freedom to optimize
+the system. In turn, this can prove destabilizing as essentially all aspects of the design have compounding pros and cons. It is thus critical to develop flexible, accurate and actionable
+functional simulations to evaluate small different aspects of th design before committing to a full implementation. I am glad to have done that to some extent with the C++ model 
+and various Python studies, but, in retrospect, more time should have been spent desiging and obtaining proxy metrics to determine the ideal high-level architecture. For instance, I 
+did not need to design the full system before being able to obtain \ac{ppa} figures for the memory and compute units. This would have allowed me to make more informed decisions about
+the architecture and potentially save time in the long run. However, I think such learning can only be appreciated once an architect goes through the full design cycle at least once,
+so I am glad to have had the opportunity to earn this wisdom, which I will carry in future projects. I'm realizing that a informed, complete, analysis of a design without necessarily
+implementing it is more insightful and and impactful than a somewhat underdiscussed but working design
+
+\subsection{Topics Warranting Further Exploration}
+I would have liked to have had more time to explore design synthesis and implementation. I only managed to make use of Design Compiler and Artisan IP for about six weeks, and I would have
+liked to be able to learn more about its different features, optimization strategies and how to contol it. I would have also liked to have had more time to explore the impact of different
+of memory compilation. Finally, this project stopped at design synthesis. Implementation and post-routing simulations are another area that I did not have time to explore.
+
+\subsection{Alternative Approaches for Consideration}
+In my opinion, the three steps plan presented in Section \ref{sec:methods} was a good approach to the project. However, it was too coarse and I would add two steps: a step between the model
+and the functional simulation to translate the model to software-style C++ instead of hardware-style C++. This would have allowed to more easily test things such as fixed-point strategies
+and collect metrics such as exact number of different types of operations and memory accesses without getting slowed down by hardware-style coding. I would also write the functional simulation
+from the bottom up along with coding hardware modules in parallel. This would allow progressively more precise evaluation of the \ac{ppa} metrics and provide more time to make architecture 
+decisions.

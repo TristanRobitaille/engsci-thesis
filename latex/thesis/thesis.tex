@@ -1,4 +1,4 @@
-\documentclass[12pt, hidelinks]{article}
+\documentclass[12pt]{article}
 \usepackage[a4paper, margin=1in]{geometry} % Set 1-inch border
 \usepackage[backend=biber, citestyle=ieee]{biblatex}
 \usepackage{setspace}
@@ -13,9 +13,23 @@
 \usepackage{booktabs}
 \usepackage{fancyhdr} % Headers and footers
 \usepackage{siunitx}
-\newcommand{\mum}{\si{\micro\meter}}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{tabularx}
+\usepackage{rotating}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    filecolor=black,      
+    urlcolor=blue,
+    citecolor=black,
+    pdftitle={Overleaf Example},
+    pdfpagemode=FullScreen,
+}
 
 \addbibresource{../references.bib}
+
 % Dots (leaders) in table of contents
 \renewcommand{\cftsecleader}{\cftdotfill{\cftdotsep}}
 \renewcommand{\cftsubsecleader}{\cftdotfill{\cftdotsep}}
@@ -23,6 +37,9 @@
 \renewcommand{\thetable}{\Roman{table}}
 
 \begin{document}
+% Includes
+\include{data}
+
 % Front cover
 \include{front_cover.tex}
 \maketitle
@@ -39,28 +56,25 @@
 \pagenumbering{roman}
 % Abstract
 \section*{Abstract}
-    \lipsum[1]
+Insomnia is a wide-spread sleep disorder affecting hundreds of million of people worldwide. New treatments are being developed to address this issue, including neuromodulation,
+which aims to modify nervous activity in the brain to improve sleep quality. Effective neuromodulation requires live, practical and accurate assessment of the user's sleep stage.
+The state-of-the-art for sleep staging involves polysomnography, which requires at least up to 24 sensors, technician supervisor and manual annotation by a sleep expert for the
+most accurate results. Needless to say, polysomnography is not suitable for widespread, frequent, at-home use. Wearable devices, such as in-ear sensors, may be able to provide
+automatic sleep staging. In this work, we investigate the feasibility of running an AI model in-ear via an ASIC accelerator for automatic sleep staging. This thesis present a vision
+transformer-based model achieving 82.9\% accuracy on the MASS SS3 dataset with a model size of 31.59kB. It also develops an ASIC accelerator to measure the power, area and latency
+cost of running such a model. The accelerator consumes 3.046mW on average, has an area of 3.86$mm^2$ and an inference latency of 6.97ms. The results show that the accelerator is 
+viable for in-ear use in all aspects except area. Further work is suggested to reduce the power consumption and area of the accelerator by 72.2\% and 54.8\%, respectively.
 \newline
 \newline
 {\bf Keywords:} Sleep staging, ASIC accelerator, vision transformer, computer architecture
+\newline
+\newline
+{\bf Note:} The code is available on my GitHub repository: \href{https://github.com/TristanRobitaille/engsci-thesis}{TristanRobitaille/engsci\_thesis}
 \newpage
 
 % Acknowledgements
 \section*{Acknowledgements}
-I would like to express my gratitude to my supervisor, Prof. Xilin Liu, for his guidance and support throughout the project. He has given me the freedom to explore new ideas and had provided me with the
-support and tools I needed.
-
-I would also like to thank my father, Claude Robitaille, for letting me remotely use his workstation to train the model and run the accuracy study. He has also helped review the code for the functional simulation.
-
-In addition, I owe much to the professors who have taught me the fundamentals of computer architecture at the University of Toronto - Profs. Jason Anderson, Natalie Enright-Jerger, Andreas Moshovos and Mark C. Jeffrey.
-
-Throughout this project, I have made extensive use the Compute Canada cluster, which has provided me with the computational resources I needed to run the simulations and train the model. I would like to thank the 
-staff at Compute Canada for their initiative. I am also appreciative of the tools provided by the Canadian Microelectronics Corporation, which have been instrumental in the hardware implementation of the accelerator.
-
-I would also like to acknowledge the work of Professors Lisa Romkey and Alan Chong who organized this thesis project for us, ensuring a structured and productive environment.
-
-Finally, I would like to thank my family and friends for their support and encouragement throughout this project. I am grateful for their patience and understanding during this time.
-
+\input{acknowledgements}
 \newpage
 
 % Table of Contents
@@ -82,171 +96,127 @@ Finally, I would like to thank my family and friends for their support and encou
 
 % Body
 \pagenumbering{arabic}
-    See~\cite{liu2021edge}.
-    I am making an \ac{asic}. It's small, low-power and fast. It's better than Google's.
-\section{Introduction}
-\lipsum[1]
 
+\section{Introduction}
+\label{sec:intro}
+As reported by Chaput \textit{et al.} \cite{insomnia_prevalence}, insomnia impacts around 24\% of Canadians adults. Detection and classification of sleep stages, known as
+\textit{sleep staging}, followed by neuromodulation has been recently found by Yoon \cite{yoon2021neuromodulation} to be a promising treatment against insomnia. The current
+stage-of-the-art for sleep staging involves the use of polysomnography to measure biosignals (at least 19 sensors are required, as explained by Levin and Chauvel \cite{RUNDO2019381})
+and manual annotation by a sleep expert, which requires, on average, 2 hours of work \cite{phan2022automatic}. This technique also does not provide neuromodulation. To address
+these downsides while effectively treating insomnia, we propose an in-ear device performing electroencaphalogram (EEG) sensing, sleep staging and neuromodulation. To maximize
+treatment potential, the device should be as small and portable as possible such that it can be used at home.
+
+This thesis focuses on the development of a deep learning model to perform sleep staging and on the design of an accelerator ASIC module to perform in-situ inference with said
+model. In the end, it aims to prove, by simulations, the viability of such an accelerator in order to potentially integrate it in the in-ear device. Multiple authors
+\cite{dutt2023sleepxai, fu2021deep, eldele2021attention} have published high-accuracy results using a deep learning approach to sleep staging, and have done so with significantly
+fewer sensors than polysomnography. However, these AI models run on standard computers as software frameworks and are thus unsuitable for a lightweight integrated solution.
+Google sells small custom AI-accelerators (such as the Coral Edge TPU) that could run these AI models, but they still consume too much power (1W, \cite{coral_datasheet}) and do
+not readily integrate with custom neuromodulation hardware.
+
+The proposed solution should match the accuracy of traditional polysomnography and published models in the literature with a power consumption low enough that the whole system
+can be powered for at least a full-night on a battery that fits in-ear. This document provides an overview of the literature in both automatic sleep staging using \ac{ai} and in
+\ac{asic} accelerator design, establishes technical requirements for the device, describes the model used and hardware design, evaluates their performance and discusses improvements
+and future work.
 \newpage
-\section{Background}
-\lipsum[1]
+
+\section{Problem Statement and Technical Requirements}
+\label{sec:prob_statement}
+In light of the background of Section \ref{sec:intro}, the problem statement of this thesis is to develop a deep learning model and an ASIC accelerator for automatic sleep staging
+in order to determine whether such a system can be used in an earpiece-type device for automatic sleep staging. The results of this thesis will guide future development in the field.
+
+Table \ref{tab:design_goals} indicates precise design goals and their justification, which helps guide design decisions and development effort. For example, to reach the target
+model size, time will be spent evaluating the impact of hyperparameters to find the combination that gives the lowest size while meeting the desired accuracy. Furthermore,
+quantization will be explored to reduce model size. For the AI accelerator, since inference power and clock frequency are inversely proportional, we must focus on reducing energy
+per inference. From first principles, this implies reducing the amount of charge that is displaced within the chip. Since the physical properties are locked for the target 65nm node,
+we focus on reducing the number of operations, simplifying operations, limiting data movement and reducing control logic.
+
+To determine the average power consumption constraint, the battery capacity of the Airpods Pro, which was found in a teardown to be 0.16Wh, can be considered as a reference
+\cite*{AirpodsIfixitTeardown}. Assuming a goal of 10h of battery life (for a full night of sleep), the overall power consumption must stay below 16mW, on average. The speaker coil
+driving circuitry will consume most of the power and, leaving enough power budget for the analog front-end and overhead in the system, in addition to a safety factor, 5mW seems
+like a reasonable target for the accelerator. Regarding the target area and model size, a reasonable chip package for this application is a 4mm x 4mm Chip-Scale Package (CSP).
+According to IPC standard J-STD-012, a CSP overall area is no more than 120\% of the die, which leaves 13$mm^2$ of die area \cite*{J_STD_012}. To further contextualize, Apple's
+H1 processor, which is used in the Airpods Pro, has a similar die area of 12$mm^2$ \cite*{H1DieSize}.
+
+Again, a significant portion will be consumed by the coil driver, RISC-V processor and memory. Therefore, a maximum area of 15\%, or 2$mm^2$, for the accelerator seems to be a safe
+option. According to Liu and Kursun, the area of a standard 6T SRAM cell is 0.75$\mu m^2$ \cite*{liu2008characterization}. To leave enough area for the compute elements, controllers
+and routing, reserving 0.75$mm^2$ of the accelerator area to weights is reasonable. This provides up to 1Mb, or 125kB, ignoring memory access overhead, for the weights of the model.
+Finally, as mentioned above the accuracy should be close to published literature in this field to provide effective treatment. For this, 80\% is a reasonable goal. Current PSG divides
+the night in 30s ``sleep epochs''. To limit too much of an offset between the end of a 30s epoch and its predicted sleep stage (essentially a phase offset), which would add inaccuracy to
+the overall system and potentially reduce its effectiveness, a maximum phase offset of 10\% (3s) is appropriate. Finally, a clock of 200MHz is a typical upper-bound for low-power
+microcontroller-type systems. To avoid needing two separate clock domains, which entails more area and power, the accelerator should be able to run at 200MHz.
+
+\begin{table}
+    \centering
+    \renewcommand{\arraystretch}{1.2} % Vertical spacing
+    \setlength{\arrayrulewidth}{1.5pt} % Thickness of vertical lines
+    \caption{Design goals for AI model and ASIC accelerator}
+    \begin{tabular}{@{} *7l @{}}
+        \toprule
+        Type        & Goals                                     & Justification &&&  \\\midrule
+        \multirow{2}{*}{Model}
+                    & Size $<$ 125\,kB                          & Help reach ASIC area/power goals \\
+                    & Accuracy $>$ 80\%                         & Competitive with state-of-the-art \\ \bottomrule
+        %%%%%%%%%%%%%%%%%%%%%%%%
+        \multirow{3}{*}{ASIC}
+                    & $P_{\mathrm{avg}} < 5\,\mathrm{mW}$       & System to function for whole night \\
+                    & $A_{\mathrm{total}} < 2\,\mathrm{mm}^2$   & Fit in ear (65nm node) \\
+                    & $T_{\mathrm{inference}} < 3\,\mathrm{s}$  & Maximum phase offset of 10\% \\
+                    & $F_{\mathrm{Max}} > 200\,\mathrm{MHz}$    & Compatibility with rest of system \\
+        \hline
+    \end{tabular}
+    \label{tab:design_goals}
+\end{table}
+
+\section{Literature Review}
+\input{lit_review.tex}
+\label{sec:lit_review}
 
 \newpage
 \section{How to Design an AI Accelerator}
-\lipsum[1]
-\subsection{Model Prototyping}
-\lipsum[1]
-\subsection{Accelerator Functional Simulation}
-\lipsum[1]
-\subsection{Accelerator Hardware Implementation}
-\lipsum[1]
+\label{sec:methods}
+\input{methods}
 
 \newpage
 \section{Vision Transformer Model Design}
 \label{sec:vision_transformer}
-\lipsum[1]
+\input{vit_design}
 
-\section{ASIC Acceleator Architecture}
-I am using the acronyme \ac{mac} such that the table below is properly formatted.
-\lipsum[1]
-\subsection{Centralized vs. Distributed Architecture}
-\subsection{Master Architecture}
-\subsection{Data and Control Bus}
-\subsection{Compute-in-Memory: Fixed-Point Accuracy}
-\subsection{Compute-in-Memory: Memory}
-\subsection{Compute-in-Memory: Compute Modules}
-This section describes the design and performance metrics of the various compute \ac{ip} modules use by the \ac{cim} modules. Each is custom-designed for this project.
-Each module works with signed (2's complement) fixed-point representation. To avoid overflow, the modules use internal temporary variables of fixed-point format Q22.10.
-Table \ref{tab:compute_modules} shows the performance metrics of the compute modules. The working principles of each modules is described briefly in subsequent sections.
-
-\begin{table}[ht]
-    \centering
-    \renewcommand{\arraystretch}{1.2} % Vertical spacing
-    \setlength{\arrayrulewidth}{1.5pt} % Thickness of vertical lines
-    \caption{Performance metrics of the compute modules}
-    \begin{tabular}{@{} p{2.5cm}ccccc @{}}
-        \toprule
-        Module                  & Area                              & Cycle/op  & Energy/op                 & Leakage power         & $F_{max}$ \\\midrule
-        Adder                   & 450.4\si{\square\micro\meter}     & 1         & 0.99\si{\pico\joule}      & 11.87\si{\micro\watt} & 6.67\si{\giga\hertz} \\
-        Multiplier              & 3535.2\si{\square\micro\meter}    & 1         & 7.05\si{\pico\joule}      & 90.50\si{\micro\watt} & 1.59\si{\giga\hertz} \\
-        Divider                 & 1719.9\si{\square\micro\meter}    & 35        & 23.44\si{\pico\joule}     & 34.56\si{\micro\watt} & 1.11\si{\giga\hertz} \\
-        Exponential             & 2442.2\si{\square\micro\meter}    & 24        & 62.73\si{\pico\joule}     & 47.10\si{\micro\watt} & 7.14\si{\giga\hertz} \\
-        Square Root             & 1325.2\si{\square\micro\meter}    & 17        & 18.32\si{\pico\joule}     & 26.30\si{\micro\watt} & 0.758\si{\giga\hertz} \\
-        \ac{mac}\footnote[1]    & |                                 & 386       & 820.20\si{\pico\joule}    & |                     & | \\
-        \ac{mac}\footnote[2]    & 3129.8\si{\square\micro\meter}    & 391       & 839.32\si{\pico\joule}    & 69.40\si{\pico\joule} & 2.17\si{\giga\hertz} \\
-        \ac{mac}\footnote[3]    & |                                 & 456       & 941.68\si{\pico\joule}    & |                     & | \\
-        Softmax                 & 2341.1\si{\square\micro\meter}    & 2024      & 1972.5\si{\pico\joule}    & 51.47\si{\micro\watt} & 1.20\si{\giga\hertz} \\
-        LayerNorm               & 3836.89\si{\square\micro\meter}   & 1469+494  & 1705.7\si{\pico\joule}    & 78.39\si{\micro\watt} & 0.877\si{\giga\hertz} \\
-        \bottomrule
-        Total                   & 18780.69\si{\square\micro\meter}  & N/A       & N/A                       & 409.59\si{\micro\watt} & 0.758\si{\giga\hertz} \\
-        \hline
-    \end{tabular}
-    \begin{minipage}{\textwidth}
-        \footnotesize
-        \noindent\hspace*{1cm}\textsuperscript{1} No activation function applied\\
-        \noindent\hspace*{1cm}\textsuperscript{2} Linear activation function applied\\
-        \noindent\hspace*{1cm}\textsuperscript{3} Swish activation function applied
-    \end{minipage}
-    \label{tab:compute_modules}
-\end{table}
-
-Note that all measurement in Table \ref{tab:compute_modules} are given for standard 65nm \ac{tsmc} process with a 100MHz clock.
-To determine these metrics, the following methodology was used with Synopsys Design Compiler 2017.09 running on UofT's EECG cluster:
-\begin{itemize}
-    \item Area: Synthesis with the area optimization effort set to \texttt{high}, and the area was extracted from the \texttt{report\_area} command report.
-    \item Cycle/op: The latency was observed when running a single operation on a pre-synthesis simulation.
-    \item Energy/op: A single-instance testbench running 10000 operations was designed, and a \texttt{.saif} file was generated from the \ac{vcd} dump file of the testbench
-    using Synopsys' \texttt{vcd2saif} utility. This provides an average activity factor for each node, yielding an accuracy that is adequate for this discussion. The energy
-    per operation was calculated by multiplying the total dynamic power by the time to complete the 10000 operations, divided by 10000.
-    \item Leakage current: Synthesis with the power optimization effort set to \texttt{high}, and the leakage power was extracted from the \texttt{report\_area} command report.
-    \item $F_{max}$: The \texttt{report\_timing} command was used to determine the maximum frequency of the design.
-\end{itemize}
-
-It must be noted that the measurements for all composite compute units (i.e. units that make use of shared resources) \textit{exclude} the area/power/etc. of the shared resources. Including them would result
-in misleadingly high figures, given that they are explictly designed to share resources. The total area of the \ac{cim} provides figures more representative of this integration.
-
-\subsubsection{Adder}
-The adder is a single-cycle, combinational module that adds two fixed-point numbers. It uses a ripple-carry adder architecture. The adder has a latency of 1 cycle, which simplifies the logic that uses it.
-It also provides an overflow flag. To reduce dynamic power consumption, the adder only updates its output when the \texttt{refresh} signal is high.
-
-\subsubsection{Multiplier}
-The multiplier is very similar to the adder. One difference is that it uses Gaussian rounding (also known as banker's rounding). This rounding method rounds 0.5 to the nearest even number. This reduces 
-the bias in the output that is commonly observed with standard rounding methods, which is particularly important in \ac{mac} operations where the error can accumulate. The multiplier also has a latency of 1
-cycle and provides an overflow flag. Like the adder, the multiplier only updates its output when the \texttt{refresh} signal is high.
-
-\subsubsection{Divider}
-The divider is more complicated than the adder and multiplier. It performs bit-wise long-division and has a latency of $N+Q+3$ cycles, where $N$ is the number of integer bits and $Q$ is the number of fractional
-bits. The divider also provides flags for overflow and divide-by-zero and done/busy status signals. The module start division on an active-high pulse of the \texttt{start} signal and provides the result when the
-\texttt{done} signal is high. The divider module is mostly used in the \ac{mac} module during computation of the Swish activation function.
-
-\subsubsection{Exponential}
-The exponential module computes the exponential $e^{x}$ of a fixed-point number $x$. It uses a combination of the identities of exponential and a Taylor series approximation around zero to compute the exponential.
-Specifically, the module transforms the exponential as such:
-\begin{equation}
-    e^{x} = 2^{\frac{x}{\ln(e)}} = 2^{z} = 2^{\lfloor{z}\rfloor}2^{z-\lfloor{z}\rfloor}
-\end{equation}
-\label{eq:exp_transform}
-The compute can then easily compute $2^{\lfloor{z}\rfloor}$ as an inexpensive bit-shift operation and $2^{z-\lfloor{z}\rfloor}$ as a Taylor series approximation. To determine a reasonable number of terms to use
-for the Taylor series expansion, an accuracy study was ran. Figure \ref{fig:exp_error} shows the relative error of the exponential module as a function of the order of the Taylor series expansion for both fixed-point (Q22.10)
-approximation and float (64b) approximation. As can be seen, the error decreases with an increase in the order of the expansion. However, for the fixed-point approximation, it converges to a minimum error of \~0.992\%. This
-is because the quantization of fixed-point dominates the Taylor series error. Therefore, using a 3rd order Tarlor series expansion to appriximate the exponential function is a good balance between accuracy and latency/energy.
-Note that these error was measured over the input range of [-4, 4]. According to the functional simulation, this corresponds to roughly $\pm3$ standard deviations from the mean of inputs to the exponential function.
-To further speed up the computation, the exponential module uses a lookup table to store the Taylor series coefficients as well as $1/ln(e)$. To reduce area, the exponential module does not instantiate its own adder and
-multiplier modules. Rather, it accesses the adder and multiplier modules in the \ac{cim} module shared with other compute units. The latency is 24 cycles.
-\begin{figure}
-    \centering
-    \caption{Error of exponential approximation as a function of Taylor series expansion order}
-    \includegraphics[width=0.9\textwidth]{assets/exp_approx_error.eps}
-\end{figure}
-\label{fig:exp_error}
-
-\subsubsection{Square Root}
-The square root module computes the square root of a fixed-point number using an iterative algortihm. It has a latency of $(N+Q)//2+1$ cycles, where $//$ denotes integer division. The module provides flags for overflow and 
-negative radicand and start/busy/done signals. The module starts computation on an active-high pulse of the \texttt{start} signal and provides the result when the \texttt{done} signal is high.
-
-\subsubsection{Multiply-Accumulate}
-The \ac{mac} module performs a vector dot-product for a given pair of base addresses for the data and length of the vector and applies a selectable activation function to the result. Similar to the exponential module, it
-uses shared adder, multiplier, divider and exponential modules in the \ac{cim} module. It can implement three activation functions: none, linear and Swish. For a nominal length of 64 (which corresponds to the embedding
-depth of the model, a very common value for matrix dimensions in the model) and Q22.10 formate, the latencies are 386, 391 and 456, respectively. Note that, although the Swish activation function comprises a divider operation,
-the \ac{mac} compute latency can still be kept fairly short because the divisor is the same for all elements. The module can thus perform the division once and multiply by the inverse, which is a single-cycle operation.Finally,
-the \ac{mac} module can be directed to choose the second vector from weights or intermediate results memory.
-
-\subsubsection{Softmax}
-The softmax module computes the softmax function of a vector of fixed-point numbers. Similarly to the \ac{mac} module, it uses shared adder, mulitplier, divider and exponential modules and provides \texttt{busy} and
-\texttt{done} signals. For a 64-element Q22.10 vector, the latency is 2024 cycles. This is significantly longer than other vector compute modules such as the \ac{mac} because, in the softmax operation, each element is exponantiated
-individually.
-
-\subsubsection{LayerNorm}
-The final compute module is the LayerNorm module. It computes the Layer Normalization of a vector of fixed-point numbers. As described in section \ref{sec:vision_transformer}, the LayerNorm operation consists of a normalization of
-the vector on the horizontal dimension followed by scaling and shifting using learnable parameters on the vertical dimension. Because each \ac{cim} module stores one vector at a time, the LayerNorm operation must be separated into 
-two stages with a matrix transpose broadcast between the two. The latency for the first half is 1469 cycles and the latency for the second half is 494 cycles. The module provides \texttt{busy} and \texttt{done} signals and is controlled
-with a \texttt{half-select} and \texttt{start} pulse signals. Because the length of the vector is constrained to be a power of two, the module uses bit-shifting instead of division for the normalization operation to decrease latency and energy
-per operation.
+\section{ASIC Accelerator Architecture}
+\label{sec:arch}
+\input{hw_design}
 
 \subsection{A Note About Software-Hardware Co-Design}
-
-\lipsum[1]
-
-\newpage
-\section{Evaluation of Performance Metrics}
-\lipsum[1]
-\subsection{Vision Transformer}
-\lipsum[1]
-\subsection{Accelerator}
-\lipsum[1]
+\label{sec:sw_hw_co-design}
+To maximize utilization (and thus time- and physical efficiency) and reduce latency (thus reducing inference energy), the acclerator and models were designed together. An example
+of this software-hardware co-design concerns the number of \ac{cim} in the accelerator. Most weights and intermediate results matrices have at least one dimension that is 61 (number
+of patches + classification token) or 64 (embedding depth of the model). With 64 \ac{cim}s, all vector operations can be computed simulatenously, avoiding extra overhead for control
+and data movement while limiting the amount of unused silicon. This is the main reason behind the choice of 64 samples for the patch length, which also yields 60 patches per sleep
+epoch. Furthermore, the embedding depth of the model is a power of 2, meaning that all divisions (such as in the LayerNorm) with this number can be accomplished with inexpensive bit shifts.
 
 \newpage
-\section{Future Work}
-\lipsum[1]
+\section{Results: Evaluation of Performance Metrics}
+\label{sec:results}
+\input{results}
+
+\newpage
+\section{Results Analysis \& Future Work}
+\input{analysis_and_future_work}
 
 \newpage
 \section{Conclusion}
-\lipsum[1]
+\label{ref:conclusion}
+This thesis has presented a vision transformer-based model for automatic sleep staging and an ASIC accelerator to run the model. This work is part of a larger project aimed at developing
+an in-ear device capable of acoustic neuromodulation to treat insomnia, which requires live, accurate and practical sleep staging. The model achieved 82.9\% accuracy on the MASS SS3
+The model achieved 82.9\% accuracy on the MASS SS3 using a single EEG input and has a size of 31,589 parameters. The ASIC accelerator consumes 3.046mW on average, has an area of 3.86$mm^2$
+and an inference latency of 6.97ms. The results show that performing sleep staging in-ear is not only possible but also practical. The model meets all the requirements summarized in Table
+\ref{tab:design_goals}, except for the area of the accelerator. Future work should focus on reducing the power consumption and area of the accelerator by 72.2\% and 54.8\%, respectively. It is
+also advised to investigate running the model on a RISC-V processor with vector extension or CGRA add-on for additional flexibility and decreased development risk and timeline.
 
 \newpage
 
 % Bibliography
-\printbibliography
+\AtNextBibliography{\footnotesize}
+\printbibliography[heading=bibintoc]
 \newpage
 
 % Appendices

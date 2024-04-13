@@ -1,0 +1,93 @@
+Based on the design and results discussions of Sections \ref{sec:vision_transformer}, \ref{sec:vision_transformer} and \ref{sec:vision_transformer}, the designed as presented
+is not recommended to be used further for the sleep staging earpiece project. This section discusses suggested improvements and future work to maximize the utility of this project.
+Tables \ref{tab:model_improvements} and \ref{tab:hw_improvements} summarize the suggested improvements and attempts to quantify their benefit wherever reasonable.
+
+\subsection{Vision Transformer Model Improvements}
+The vision transformer can be improved in different ways, from training to simplification of operations. Firstly, the model could be pre-trained on the \ac{stages} dataset
+\cite{zhang2018national}, which contains PSG recordings from 1500 patients, significantly more than the 62 nights available in the dataset (\ac{mass} SS3 \cite{SP3/9MYUCS_2022})
+currently used. Although \ac{mass} is widely used for model benchmarking, it is worthwhile to try pre-training the model on \ac{stages} and perform transfer learning and k-fold
+validation on the \ac{mass} dataset. In addition, the model should be trained and validated on the Expanded Sleep-EDF dataset, which is the most widely used dataset in the literature
+\cite{physiobank2000physionet}. Once the annotated \ac{eeg} data measured in-ear is available, the model will need to be trained on the new dataset. Weight pruning could further
+reduce the size of the model. Pruning consists of eliminating a subset of weights to reduce model size and compute with minimal loss of accuracy at the cost of more complicated
+control logic. In some cases, pruning may also increase accuracy. Indeed, Chen \textit{et al.} applied 50\% pruning on DeiT-Small, a vision transformer model, and observed a 0.28\%
+accuracy boost. Furthemore, it would be beneficial to eliminate the $\gamma$ and $\beta$ learned parameters used to scale and shift the normalized values in the three LayerNorm steps.
+These add six broadcast transpose operations to the inference, which represents 9.69\% of the total inference time and effective total power. Finally, it would be beneficial to explore
+an architecture that uses more than one \ac{eeg} electrode or different input signals such as heartrate or temperature as a means of increasing accuracy further. Most models in the
+literature use 2-5 electrodes \cite{zhuang2022intelligent}, \cite{phan2021xsleepnet}, \cite{zhuang2022intelligent}. This improvement is particularly relevant given the earbud form
+factor which can accommodate multiple contact eletrodes and other biosignals. Indeed, in the summer of 2023, Apple was granted a patent for an in-ear ``biosignal sensing device'' covered
+with different types of electrodes such as \ac{emg}, \ac{eog}, \ac{ecg}, \ac{bvp} and \ac{gsr} \cite{apple2023biosignal}. This modification will undoubtedly increase the area and latency.
+
+\begin{table}[ht]
+    \centering
+    \renewcommand{\arraystretch}{1.2} % Vertical spacing
+    \setlength{\arrayrulewidth}{1.5pt} % Thickness of vertical lines
+    \caption{Suggested improvements to the model and their potential benefits}
+    \begin{tabular}{@{} p{7cm}ccc @{}}
+        \toprule
+        Improvement                         & Accuracy $\Delta$ & Latency $\Delta$                  & Area $\Delta$ \\\midrule
+        \ac{stages} and Expanded Sleep-EDF  & Unknown           & No change                         & No change     \\
+        Weight pruning                      & Unknown           & $\downarrow$                      & $\downarrow$  \\ 
+        $\gamma$ and $\beta$ elimination    & Unknown           & 0.666\si{\milli\second}/-9.69\%   & No change     \\
+        Additional channels and electrodes  & $\uparrow$        & $\uparrow$                        & $\uparrow$    \\\bottomrule
+    \end{tabular}
+    \label{tab:model_improvements}
+\end{table}
+
+It would also be important to rewrite the model in efficient C code and run on a microcontroller to determine how far of requirements can a firmware approach might be. Multiple authors have 
+published relevant work for the RISC-V \ac{isa}, such as an extension to handle vector operations \cite{perotti2022new} or compilation support for a RISC-V + CGRA heteregenous architecture
+\cite{lingRISC-V-CGRA}. Running the model on a microprocessor would save the significant development and verification effort of an ASIC accelerator and allow for a more flexible design since
+the model could be changed with a firmware update. However, the power consumption and area of a vector- or CGRA-augmented microcontroller may be higher than the ASIC accelerator.
+
+\subsection{Accelerator ASIC Improvements}
+The bulk of suggested improvements to this project are in the hardware design. It can be made much smaller and more power-efficient. The first reccomendation is to use a centralized
+architecture for the memory. This will save significant area and leakage power mainly from the reduction of memory overhead and deduplication of lookup-tables used to store addresses.
+Specifically, for centralizing memory alone, Figure \ref{fig:mem_overhead} shows that, using two banks holding 15,794 words (enough to contain the full model) and 4 banks for the
+intermediate results will reduce the memory overhead from 49.5\% (weighted average of the overhead of the parameters memory and the weights memory in the current \ac{cim} architecture)
+to 12.0\%, saving 0.931\si{\square\milli\meter}. The total leakage will also decrease by 13.75\si{\milli\watt}. Centralizing the memory will also slightly reduce the inference latency
+since some compute elements that operate on two intermediate results, such as some configurations of the \ac{mac} will be able to load the data in parallel. However, this reduction is
+expected to be small.
+
+The second recommendation is to use a centralized compute architecture with a single instance of each of the compute elements of Section \ref{sec:arch_compute}. According to Table
+\ref{tab:compute_modules}, this will save 1.183\si{\square\milli\meter} of area and 25.80\si{\milli\watt} of leakage power. The dynamic power will also decrease slightly due to reduction
+in wiring, although an exact figure is hard to estimate without an implemented design. Although inference time will increase, it will remain far under the requirement of 3s. In fact, the
+inference time is expected to be less than 64 times longer than the distributed architecture. Indeed, as mentionned in section \ref{sec:results}, the \ac{cim} spends roughly 50.8\% percent
+of its time in compute. The rest is mainly data broadcast. In data broadcast, the majority of the time (4/7 cycles) is spent waiting for data from the single-port memory. With the
+centralized memory banks and a careful addressing scheme, the inference time is expected to increase by $64\times(1-0.508*4/7) = 45.42\times$ or 0.312\si{\second}, which is the same
+as the current design.
+
+The complete centralization of the memory and compute will eliminate the need for the bus. This will save area and power, although the exact amount is hard to estimate without an implemented
+design. Finally, it may be interesting to explore the impact of using a different Q format for the weights and intermediate results at different layers in the model. The current design uses
+a constant Q6.10 format for stored data. It may be possible to use fewer bits overall if the Q format can be adjusted for layers that are known to produce large numbers. This can save storage
+area and shrink the compute units; however, it will increase the complexity of the control logic and require storing the Q format to use. The net impact is hard to estimate without a design,
+and is expected to be fairly small so this recommendation should not be prioritized. For this, the functional simulation of the accelerator should be extended to perform the study. Shifting
+away from the \texttt{fpm} library to a more flexible fixed-point library or writing one from scratch to properly emulate non-powers-of-two bitwidth will be necessary to implement this change.
+
+A key insight from Section \ref{sec:results} is that the leakage power represents 96.7\% of the effective power consumption. The key factor to effective power consumption is thus power gating
+effectiveness. To reduce it further and extend battery life of the final device, the power gating investigation of \cite{sathanur2008quantifying} should be extended to further reduce leakage,
+perhaps by cascoding sleep transistors or adjusting their body bias to shift their threshold voltage and reduce subthreshold conducton. Stacking transistors will reduce $F_{Max}$ and increase
+dynamic energy given the increase in resistance and capacitance, but given that both these metrics are well below their constraints, this is acceptable. Cascoding sleep transistors will also
+increase area.
+
+\begin{table}[ht]
+    \centering
+    \renewcommand{\arraystretch}{1.2} % Vertical spacing
+    \setlength{\arrayrulewidth}{1.5pt} % Thickness of vertical lines
+    \caption{Suggested improvements to the ASIC accelerator and their potential benefits}
+    \begin{tabular}{@{} p{3.75cm}cccc @{}}
+        \toprule
+        Improvement         & Dyn. energy $\Delta$      & Leakage $\Delta$          & Latency $\Delta$      & Area $\Delta$                     \\\midrule
+        Centralized memory  & Slight $\downarrow$       & -13.75 \si{\milli\watt}   & Slight $\downarrow$   & -0.931\si{\square\milli\meter}    \\
+        Centralized compute & Slight $\downarrow$       & -25.80\si{\milli\watt}    & +0.305\si{\second}    & -1.183\si{\square\milli\meter}    \\
+        Bus elimination     & Slight $\downarrow$       & Slight $\downarrow$       & No change             & Slight $\downarrow$               \\
+        Optimize Q format   & Indeterminate             & Indeterminate             & Indeterminate         & Indeterminate                     \\
+        Power gating        & Slight $\uparrow$         & Significant $\downarrow$  & Slight $\uparrow$     & Slight $\uparrow$                 \\\bottomrule
+    \end{tabular}
+    \label{tab:hw_improvements}
+\end{table}
+
+With the quantified suggested improvements, the leakage power of the ASIC would be reduced from 56.48\si{\milli\watt} to 16.93\si{\milli\watt}. Ignoring improvements to power gating,
+this reduces the effective power consumption to from 3.046 \si{\milli\watt} to 0.848\si{\milli\watt}, a 72.2\% reduction. The area would decrease from 3.86\si{\square\micro\meter} to 
+1.746\si{\square\micro\meter}, a 54.8\% reduction, which is just under the objective of 2\si{\square\micro\meter}.
+
+Section \ref{sec:results} has shown that the current design is not suitable for the sleep staging earpiece project as is. However, there is a clear path forward to design an AI accelerator
+with significantly reduced power consumption and area, which are the two most important metrics for the earpiece project.
