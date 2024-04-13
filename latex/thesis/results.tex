@@ -1,23 +1,26 @@
-This presents and discusses the most salient aggregate high-level results of the model and hardware design shown in Table \ref{tab:high_level_results}.
+This Section presents and discusses the most salient aggregate high-level results of the model and hardware design as shown in Table \ref{tab:high_level_results}.
 It can be seen that the model meets the requirements summarized in Table \ref{tab:design_goals}. Indeed, the model size (63.18\si{\kilo\byte}) is below the
-125\si{\kilo\byte} target, and the accuracy (82.9\%) is higher than the 80\% target. It is also nearly $32\times$ smaller than the smallest state-of-the-art
-model for automatic sleep staging presented by Eldele \textit{et al.}, which has 500000 32-bit floating point parameters \cite{eldele2021attention}.
+125\si{\kilo\byte} constraint, and the accuracy (82.9\%) is higher than the 80\% target. It is also nearly $32\times$ smaller than the smallest state-of-the-art
+model for automatic sleep staging presented by Eldele \textit{et al.}, which has 500,000 32-bit floating point parameters \cite{eldele2021attention}.
 
 The ASIC accelerator meets some of the requirements. The inference latency (6.97\si{\milli\second}) is well below the maximum allowed latency of 3\si{\second}.
 The \ac{pe} utilization (50.8\%) of the accelerator suggests that there is non-negligible time overhead (mostly from inter-\ac{cim} communication) that could be
-reduced in future work. The toral area is 3.86\si{\square\milli\meter}, which is above the target of 1.5\si{\square\milli\meter}. The effective power is below the
-ceiling of 5\si{\milli\watt}.
+reduced in future work. The \ac{pe} utilization computes the amount of time that any one compute module is busy or refreshing its output relative to the total inference
+time. The toral area is 3.86\si{\square\milli\meter}, which is above the target of 2\si{\square\milli\meter}. The effective power of 3.046 \si{\milli\watt} is below
+the ceiling of 5\si{\milli\watt}.
 
 The effective total power considers the effects of power gating, which is a common technique used in modern processors to reduce power consumption. The idea
-is to turn off power to the ASIC accelerator when it is not in use through one or more low-side \ac{nmos} (known as a ``sleep transistor''). Investigating this
-technique for 65nm \ac{cmos} technology, Sathanur \textit{et al.} found that leakage power can be reduced by up to 95\% using power gating \cite{sathanur2008quantifying}.
+is to turn off power to the ASIC accelerator when it is not in use through one or more low-side \ac{nmos} transistor (known as a ``sleep transistor''). Investigating
+this technique for 65nm \ac{cmos} technology, Sathanur \textit{et al.} found that leakage power can be reduced by up to 95\% using power gating \cite{sathanur2008quantifying}.
 The effective total power is calculated as the sum of the average dynamic power from inference energy and the leakage power pro-rated with power gating. It assumes a
-sleep epoch duration of 30\si{second}. The average dynamic power is computed for an inference with the techniques of analyzing a \ac{vcd} file as described in 
+sleep epoch duration of 30\si{\second}. The average dynamic power is computed for an inference with the techniques of analyzing a \ac{vcd} file as described in 
 Section \ref{sec:arch}.
 
 With an inference latency of 6.97\si{\milli\second} and a sleep epoch duration of 30\si{\second}, the ASIC accelerator only runs for 0.0232\% of the time, meaning
 that the effective leakage power is reduced by up to 94.98\%, reducing the effective leakage power to 2.947\si{\milli\watt}. The accelerator consumes a total of
-63.07\si{\milli\watt} during inference, which is reduced to 3.046\si{\milli\watt} with power gating. The energy per inference is 433.29\si{\micro\joule}. 
+63.07\si{\milli\watt} during inference, which brings the effective power consumption to 3.046\si{\milli\watt} with power gating. The energy per inference is
+433.29\si{\micro\joule}. The $f_{max}$ is 758\si{\mega\hertz}, which is above the target of 200\si{\mega\hertz}. This gives us ample leeway to modify the design to reduce
+power consumption or area further. The $f_{max}$ is limited by the multiplier module as shown in Table \ref{tab:compute_modules}.
 
 \begin{table}[ht]
     \centering
@@ -38,7 +41,15 @@ that the effective leakage power is reduced by up to 94.98\%, reducing the effec
         Average dynamic power       & 6.59\si{\milli\watt}          & N/A   \\
         Effective total power       & 3.046\si{\milli\watt}         & Yes   \\
         Energy/inference            & 433.29\si{\micro\joule}       & N/A   \\
-        $F_{Max}$                   & 758\si{\mega\hertz}           & Yes   \\ \bottomrule
+        $f_{Max}$                   & 758\si{\mega\hertz}           & Yes   \\ \bottomrule
     \end{tabularx}
     \label{tab:high_level_results}
 \end{table}
+
+\subsection{Comparison Against the Coral Edge TPU}
+The Coral Edge \ac{tpu} is a low-power USB accelerator designed by Google optimized for inference. It consumes up to 2\si{\watt} and can process up to 4TOPS \cite{coral_datasheet}.
+It represents one of the AI accelerator with the lower power consumption available in the market, and as such is a good reference point for comparison. The TensorFlow
+model was converted to a TensorFlow Lite model and run 2000 times on the Coral Edge \ac{tpu} to compare the results. The mean inference time was 0.754\si{\milli\second}
+with a standard deviation of 0.038\si{\milli\second}. Although the Coral Edge \ac{tpu} is faster than the ASIC accelerator, it consumes too much power to be used for this
+project. Furthermore, the integrated circuit measures roughly 5\si{\milli\meter} by 5\si{\milli\meter}, which is too large for the target application. It also doesn't not readily
+integrate with the rest of the system, such as the \ac{afe} for sensing, the external memory for weight storage or the neuromodulation coil driver.

@@ -1,12 +1,11 @@
 \subsection{Machine Learning for Sleep Staging}
-Deep learning for sleep staging has been studied since around 2017. Broadly speaking, basic deep neural networks (DNN) cames first, followed by convolutional neural networks (CNN)
-and recurrent neural networks (RNN) \cite{phan2022sleeptransformer}. The transformer is a relatively new type of neural network based around the concept of ``attention'' and particularly
-suited for sequence inputs since it can process the input in parallel \cite{han2022survey}. Since its introduction in 2017 \cite{vaswani2017attention}, the transformer has been used for
-sleep staging tasks. Indeed, Dai \textit{et al.} developed a transformer-like model without decoders which used three input EEG channels and achieved 87.2\% accuracy on the popular SleepEDF-20
-dataset \cite{dai2023multichannelsleepnet}. Similarly, Phan \textit{et al.} developed a model with a focus on outputting easily-interpretable confidence metrics for clinicians. They found
-that a significant impediment to the adoptation of automatic sleep staging in clinics is lack of trust from clinicians as they perceive the system to be a ``black box''. Their model
-ingests multiple sleep epochs for each inference, which allowed the team to achieve 84.9\% accuracy on the SleepEDF-78 dataset. Eldele \textit{et al.} managed an accuracy of 85.6\% on
-SleepEDF-78 using a single-channel, single-epoch attention-based model \cite{eldele2021attention}.
+Deep learning for sleep staging has been studied since around 2017. Broadly speaking, basic \ac{dnn} cames first, followed by \ac{cnn} and \ac{rnn} \cite{phan2022sleeptransformer}. The transformer
+is a relatively new type of neural network based around the concept of ``attention'' and particularly suited for sequence inputs since it can process the input in parallel \cite{han2022survey}.
+Since its introduction in 2017 \cite{vaswani2017attention}, the transformer has been used for sleep staging tasks. Indeed, Dai \textit{et al.} developed a transformer-like model without decoders
+which used three input EEG channels and achieved 87.2\% accuracy on the popular SleepEDF-20 dataset \cite{dai2023multichannelsleepnet}. Similarly, Phan \textit{et al.} developed a model with a
+focus on outputting easily-interpretable confidence metrics for clinicians. They found that a significant impediment to the adoptation of automatic sleep staging in clinics is lack of trust from
+clinicians as they perceive the system to be a ``black box''. Their model ingests multiple sleep epochs for each inference, which allowed the team to achieve 84.9\% accuracy on the SleepEDF-78
+dataset. Eldele \textit{et al.} managed an accuracy of 85.6\% on SleepEDF-78 using a single-channel, single-epoch attention-based model \cite{eldele2021attention}.
 
 In recent years, the accuracy of sleep staging by ML models has plateaued. In fact, Phan \textit{et al.} claim that AI-based sleep-staging in heathly patients has been solved fully as the
 accuracy has reached the ``almost perfect'' level of Cohen's kappa \cite{phan2022automatic}. However, none of the models presented above meet our constraints. Indeed, we require a lightweight,

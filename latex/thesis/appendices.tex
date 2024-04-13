@@ -40,9 +40,9 @@ in my \href{https://github.com/TristanRobitaille/engsci-thesis}{GitHub repositor
         \toprule
         File type       & File count    & Line count    & Percent of total & \\\midrule
         Python          & 12            & 3000          & 33.7\% \\
+        TeX             & 12            & 670           & 8.2\%  \\
         SystemVerilog   & 12            & 2500          & 30.4\% \\
         C++             & 12            & 1250          & 18.9\% \\
-        TeX             & 12            & 670           & 8.2\%  \\
         Shell           & 12            & 300           & 4.3\%  \\
         Other           & 12            & 20            & 4.5\%  \\\midrule
         Total           & 60            & 13,000        & 100\%  \\
@@ -55,32 +55,32 @@ In addition, there have been 200 commits to the repository.
 
 \newpage
 \section{Reflection on Learnings and Experience Gained}
-This project has been a significant learning experience for me. I have learned a great deal about artifical intelligence and the design and implementation of hardware systems.
-I'm including this section to formalize reflections on experience gained, experience I wasn't able to gain and what I would have done differently.
+This project has been a significant learning experience for me. I have learned a great deal about artifical intelligence and the design and implementation of hardware systems. I'm including this
+section to formalize my reflections on experience gained, experience I wasn't able to gain and what I would have done differently.
 
 \subsection{Acquired Experience}
-Firstly, I gained good knownledge in the basics of artificial intelligence through Andrew Ng's Deep Learning Specialization on Coursera and practical experience using TensorFlow.
-I also further reinforced my skills in C++ and SystemVerilog and was able to use industry-standard tools such as Synopsys Design Compiler and ARM Artisan IP. I developed my own
-local workflow for developing RTL with Verilator, CocoTB and GTKWave, whose flexibility will be a great asset and enabler in my future projects.
+Firstly, I gained good knowledge in the basics of artificial intelligence through Andrew Ng's Deep Learning Specialization on Coursera and practical experience using TensorFlow. I also reinforced
+my skills in C++, SystemVerilog and \LaTeX\ and was able to use industry-standard tools such as Synopsys Design Compiler and ARM Artisan IP. I developed my own local workflow for developing RTL
+with Verilator, CocoTB and GTKWave, whose flexibility will be a great asset and enabler in my future projects.
 
-That being said, the largest takeway from this project is a direct appreciation for the complexity of hardware-software co-design. This project took me from the high-level frameworks
-of Python to bit-level arithmetic, \ac{fsm} and cycle-level parallelism. Through this, I've realized that owning the full-stack is powerful and gives significant design freedom to optimize
-the system. In turn, this can prove destabilizing as essentially all aspects of the design have compounding pros and cons. It is thus critical to develop flexible, accurate and actionable
-functional simulations to evaluate small different aspects of th design before committing to a full implementation. I am glad to have done that to some extent with the C++ model 
-and various Python studies, but, in retrospect, more time should have been spent desiging and obtaining proxy metrics to determine the ideal high-level architecture. For instance, I 
-did not need to design the full system before being able to obtain \ac{ppa} figures for the memory and compute units. This would have allowed me to make more informed decisions about
-the architecture and potentially save time in the long run. However, I think such learning can only be appreciated once an architect goes through the full design cycle at least once,
-so I am glad to have had the opportunity to earn this wisdom, which I will carry in future projects. I'm realizing that a informed, complete, analysis of a design without necessarily
-implementing it is more insightful and and impactful than a somewhat underdiscussed but working design
+That being said, the largest takeway from this project is a direct appreciation for the complexity of hardware-software co-design. This project took me from the high-level frameworks of Python
+to bit-level arithmetic, \ac{fsm} and cycle-level parallelism. Through this, I've realized that owning the full-stack is powerful and gives significant design freedom to optimize the system. In
+turn, this can prove destabilizing as essentially all aspects of the design have compounding pros and cons. It is thus critical to develop flexible, accurate and actionable functional simulations
+to evaluate different aspects of the design before committing to a full implementation. I am glad to have done that to some extent with the C++ model and various Python studies, but, in retrospect,
+more time should have been spent desiging and obtaining proxy metrics to determine the ideal high-level architecture. For instance, I did not need to design the full system before being able to
+obtain \ac{ppa} figures for the memory and compute units. This would have allowed me to make more informed decisions about the architecture and potentially save time in the long run. However, I
+think such learning can only be appreciated once an architect goes through the full design cycle at least once, so I am glad to have had the opportunity to earn this wisdom early in my career,
+which I will carry in future projects. I'm realizing that an informed and complete analysis of a design without necessarily implementing it is more insightful and impactful than a somewhat
+underdiscussed but working design
 
 \subsection{Topics Warranting Further Exploration}
 I would have liked to have had more time to explore design synthesis and implementation. I only managed to make use of Design Compiler and Artisan IP for about six weeks, and I would have
-liked to be able to learn more about its different features, optimization strategies and how to contol it. I would have also liked to have had more time to explore the impact of different
-of memory compilation. Finally, this project stopped at design synthesis. Implementation and post-routing simulations are another area that I did not have time to explore.
+liked to be able to learn more about their different features, optimization strategies and how to contol them. I would have also liked to have had more time to explore the impact of different
+of memory compilation. Finally, this project stopped at design synthesis. Implementation and post-routing simulations are other areas that I did not have time to explore.
 
 \subsection{Alternative Approaches for Consideration}
-In my opinion, the three steps plan presented in Section \ref{sec:methods} was a good approach to the project. However, it was too coarse and I would add two steps: a step between the model
-and the functional simulation to translate the model to software-style C++ instead of hardware-style C++. This would have allowed to more easily test things such as fixed-point strategies
-and collect metrics such as exact number of different types of operations and memory accesses without getting slowed down by hardware-style coding. I would also write the functional simulation
-from the bottom up along with coding hardware modules in parallel. This would allow progressively more precise evaluation of the \ac{ppa} metrics and provide more time to make architecture 
-decisions.
+In my opinion, the three-steps plan presented in Section \ref{sec:methods} was a good approach to the project. However, it was too coarse and I would add two steps: a step between the model
+and the functional simulation to translate the model to software-style C++ instead of hardware-style C++. This allows for easier testing of design choices such as fixed-point strategies and
+allows to collect metrics such as exact number of different types of operations and memory accesses without getting slowed down by hardware-style coding. The second additional step would be to
+write the functional simulation from the bottom up along with coding RTL hardware modules in parallel. This would allow progressively more precise evaluation of the \ac{ppa} metrics and provide
+more time to make architecture  decisions.

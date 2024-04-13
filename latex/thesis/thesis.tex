@@ -58,7 +58,7 @@
 \section*{Abstract}
 Insomnia is a wide-spread sleep disorder affecting hundreds of million of people worldwide. New treatments are being developed to address this issue, including neuromodulation,
 which aims to modify nervous activity in the brain to improve sleep quality. Effective neuromodulation requires live, practical and accurate assessment of the user's sleep stage.
-The state-of-the-art for sleep staging involves polysomnography, which requires at least up to 24 sensors, technician supervisor and manual annotation by a sleep expert for the
+The state-of-the-art for sleep staging involves polysomnography, which may require up to 24 sensors, technician supervision and manual annotation by a sleep expert for the
 most accurate results. Needless to say, polysomnography is not suitable for widespread, frequent, at-home use. Wearable devices, such as in-ear sensors, may be able to provide
 automatic sleep staging. In this work, we investigate the feasibility of running an AI model in-ear via an ASIC accelerator for automatic sleep staging. This thesis present a vision
 transformer-based model achieving 82.9\% accuracy on the MASS SS3 dataset with a model size of 31.59kB. It also develops an ASIC accelerator to measure the power, area and latency
@@ -69,7 +69,7 @@ viable for in-ear use in all aspects except area. Further work is suggested to r
 {\bf Keywords:} Sleep staging, ASIC accelerator, vision transformer, computer architecture
 \newline
 \newline
-{\bf Note:} The code is available on my GitHub repository: \href{https://github.com/TristanRobitaille/engsci-thesis}{TristanRobitaille/engsci\_thesis}
+{\bf Note:} The code is available on my GitHub repository: \href{https://github.com/TristanRobitaille/engsci-thesis}{TristanRobitaille/engsci-thesis}
 \newpage
 
 % Acknowledgements
@@ -103,20 +103,20 @@ As reported by Chaput \textit{et al.} \cite{insomnia_prevalence}, insomnia impac
 \textit{sleep staging}, followed by neuromodulation has been recently found by Yoon \cite{yoon2021neuromodulation} to be a promising treatment against insomnia. The current
 stage-of-the-art for sleep staging involves the use of polysomnography to measure biosignals (at least 19 sensors are required, as explained by Levin and Chauvel \cite{RUNDO2019381})
 and manual annotation by a sleep expert, which requires, on average, 2 hours of work \cite{phan2022automatic}. This technique also does not provide neuromodulation. To address
-these downsides while effectively treating insomnia, we propose an in-ear device performing electroencaphalogram (EEG) sensing, sleep staging and neuromodulation. To maximize
-treatment potential, the device should be as small and portable as possible such that it can be used at home.
+these downsides while effectively treating insomnia, we propose an in-ear device performing \ac{eeg} sensing, sleep staging and neuromodulation. To maximize treatment potential,
+the device should be as small and portable as possible such that it can be used at home.
 
 This thesis focuses on the development of a deep learning model to perform sleep staging and on the design of an accelerator ASIC module to perform in-situ inference with said
 model. In the end, it aims to prove, by simulations, the viability of such an accelerator in order to potentially integrate it in the in-ear device. Multiple authors
 \cite{dutt2023sleepxai, fu2021deep, eldele2021attention} have published high-accuracy results using a deep learning approach to sleep staging, and have done so with significantly
-fewer sensors than polysomnography. However, these AI models run on standard computers as software frameworks and are thus unsuitable for a lightweight integrated solution.
-Google sells small custom AI-accelerators (such as the Coral Edge TPU) that could run these AI models, but they still consume too much power (1W, \cite{coral_datasheet}) and do
-not readily integrate with custom neuromodulation hardware.
+fewer sensors than polysomnography. However, these AI models run on standard computers as software frameworks and are thus unsuitable for a lightweight, integrated solution.
+Google sells small custom AI-accelerators (such as the Coral Edge TPU) that could run these AI models, but they still consume too much power (at least 1W, \cite{coral_datasheet})
+and do not readily integrate with custom neuromodulation hardware.
 
 The proposed solution should match the accuracy of traditional polysomnography and published models in the literature with a power consumption low enough that the whole system
-can be powered for at least a full-night on a battery that fits in-ear. This document provides an overview of the literature in both automatic sleep staging using \ac{ai} and in
-\ac{asic} accelerator design, establishes technical requirements for the device, describes the model used and hardware design, evaluates their performance and discusses improvements
-and future work.
+can be powered for at least a full-night on a battery that fits in-ear. The silicon area of the accelerator should allow it to fit, along with the rest of the system, on an integrated
+circuit fit for integration in an earbud-type device. This document provides an overview of the literature in both automatic sleep staging using \ac{ai} and in \ac{asic} accelerator
+design, establishes technical requirements for the device, describes the model used and hardware design, evaluates their performance and discusses improvements and future work.
 \newpage
 
 \section{Problem Statement and Technical Requirements}
@@ -125,10 +125,10 @@ In light of the background of Section \ref{sec:intro}, the problem statement of 
 in order to determine whether such a system can be used in an earpiece-type device for automatic sleep staging. The results of this thesis will guide future development in the field.
 
 Table \ref{tab:design_goals} indicates precise design goals and their justification, which helps guide design decisions and development effort. For example, to reach the target
-model size, time will be spent evaluating the impact of hyperparameters to find the combination that gives the lowest size while meeting the desired accuracy. Furthermore,
-quantization will be explored to reduce model size. For the AI accelerator, since inference power and clock frequency are inversely proportional, we must focus on reducing energy
-per inference. From first principles, this implies reducing the amount of charge that is displaced within the chip. Since the physical properties are locked for the target 65nm node,
-we focus on reducing the number of operations, simplifying operations, limiting data movement and reducing control logic.
+model size, time will be spent evaluating the impact of hyperparameters to find the combination that gives the lowest size while meeting the desired accuracy. For the AI accelerator,
+since inference power and clock frequency are inversely proportional, we must focus on reducing energy per inference. From first principles, this implies reducing the amount of
+charge that is displaced within the chip. Since the physical properties are locked for the target 65nm node, we focus on reducing the number of operations, simplifying operations,
+limiting data movement and reducing control logic.
 
 To determine the average power consumption constraint, the battery capacity of the Airpods Pro, which was found in a teardown to be 0.16Wh, can be considered as a reference
 \cite*{AirpodsIfixitTeardown}. Assuming a goal of 10h of battery life (for a full night of sleep), the overall power consumption must stay below 16mW, on average. The speaker coil
@@ -140,10 +140,10 @@ H1 processor, which is used in the Airpods Pro, has a similar die area of 12$mm^
 Again, a significant portion will be consumed by the coil driver, RISC-V processor and memory. Therefore, a maximum area of 15\%, or 2$mm^2$, for the accelerator seems to be a safe
 option. According to Liu and Kursun, the area of a standard 6T SRAM cell is 0.75$\mu m^2$ \cite*{liu2008characterization}. To leave enough area for the compute elements, controllers
 and routing, reserving 0.75$mm^2$ of the accelerator area to weights is reasonable. This provides up to 1Mb, or 125kB, ignoring memory access overhead, for the weights of the model.
-Finally, as mentioned above the accuracy should be close to published literature in this field to provide effective treatment. For this, 80\% is a reasonable goal. Current PSG divides
-the night in 30s ``sleep epochs''. To limit too much of an offset between the end of a 30s epoch and its predicted sleep stage (essentially a phase offset), which would add inaccuracy to
-the overall system and potentially reduce its effectiveness, a maximum phase offset of 10\% (3s) is appropriate. Finally, a clock of 200MHz is a typical upper-bound for low-power
-microcontroller-type systems. To avoid needing two separate clock domains, which entails more area and power, the accelerator should be able to run at 200MHz.
+Finally, as mentioned above the accuracy should be close to published literature in this field to provide effective treatment. For this, 80\% is a reasonable goal. Current \ac{psg}
+divides the night in 30s ``sleep epochs''. To limit too much of an offset between the end of a 30s epoch and its predicted sleep stage (essentially a phase offset), which would add
+inaccuracy to the overall system and potentially reduce its effectiveness, a maximum phase offset of 10\% (3s) is appropriate. Finally, a clock of 200MHz is a typical upper-bound
+for low-power microcontroller-type systems. To avoid needing two separate clock domains, which entails more area and power, the accelerator should be able to run at 200MHz.
 
 \begin{table}
     \centering
@@ -161,12 +161,13 @@ microcontroller-type systems. To avoid needing two separate clock domains, which
                     & $P_{\mathrm{avg}} < 5\,\mathrm{mW}$       & System to function for whole night \\
                     & $A_{\mathrm{total}} < 2\,\mathrm{mm}^2$   & Fit in ear (65nm node) \\
                     & $T_{\mathrm{inference}} < 3\,\mathrm{s}$  & Maximum phase offset of 10\% \\
-                    & $F_{\mathrm{Max}} > 200\,\mathrm{MHz}$    & Compatibility with rest of system \\
+                    & $f_{\mathrm{Max}} > 200\,\mathrm{MHz}$    & Compatibility with rest of system \\
         \hline
     \end{tabular}
     \label{tab:design_goals}
 \end{table}
 
+\newpage
 \section{Literature Review}
 \input{lit_review.tex}
 \label{sec:lit_review}
@@ -181,13 +182,14 @@ microcontroller-type systems. To avoid needing two separate clock domains, which
 \label{sec:vision_transformer}
 \input{vit_design}
 
+\newpage
 \section{ASIC Accelerator Architecture}
 \label{sec:arch}
 \input{hw_design}
 
 \subsection{A Note About Software-Hardware Co-Design}
 \label{sec:sw_hw_co-design}
-To maximize utilization (and thus time- and physical efficiency) and reduce latency (thus reducing inference energy), the acclerator and models were designed together. An example
+To maximize utilization (and thus time- and physical efficiency) and reduce latency (thus reducing inference energy), the model and accelerator were designed together. An example
 of this software-hardware co-design concerns the number of \ac{cim} in the accelerator. Most weights and intermediate results matrices have at least one dimension that is 61 (number
 of patches + classification token) or 64 (embedding depth of the model). With 64 \ac{cim}s, all vector operations can be computed simulatenously, avoiding extra overhead for control
 and data movement while limiting the amount of unused silicon. This is the main reason behind the choice of 64 samples for the patch length, which also yields 60 patches per sleep
@@ -205,12 +207,13 @@ epoch. Furthermore, the embedding depth of the model is a power of 2, meaning th
 \newpage
 \section{Conclusion}
 \label{ref:conclusion}
-This thesis has presented a vision transformer-based model for automatic sleep staging and an ASIC accelerator to run the model. This work is part of a larger project aimed at developing
-an in-ear device capable of acoustic neuromodulation to treat insomnia, which requires live, accurate and practical sleep staging. The model achieved 82.9\% accuracy on the MASS SS3
-The model achieved 82.9\% accuracy on the MASS SS3 using a single EEG input and has a size of 31,589 parameters. The ASIC accelerator consumes 3.046mW on average, has an area of 3.86$mm^2$
-and an inference latency of 6.97ms. The results show that performing sleep staging in-ear is not only possible but also practical. The model meets all the requirements summarized in Table
-\ref{tab:design_goals}, except for the area of the accelerator. Future work should focus on reducing the power consumption and area of the accelerator by 72.2\% and 54.8\%, respectively. It is
-also advised to investigate running the model on a RISC-V processor with vector extension or CGRA add-on for additional flexibility and decreased development risk and timeline.
+This thesis has presented a vision transformer-based model for automatic sleep staging and an ASIC accelerator to run the model. This work is part of a larger project aimed at developing an 
+in-ear device capable of acoustic neuromodulation to treat insomnia, which requires live, accurate and practical sleep staging. The model achieved 82.9\% accuracy on the MASS SS3 dataset using
+a single \ac{eeg} input and has a size of 31,589 parameters. The ASIC accelerator consumes 3.046\si{\milli\watt} on average, has an area of 3.86\si{\square\milli\watt} and an inference latency
+of 6.97ms. The results show that performing sleep staging in-ear is not only possible but also practical. The model meets all the requirements summarized in Table \ref{tab:design_goals}, except
+for the area of the accelerator. Future work should focus on reducing the power consumption and area of the accelerator. Centralizing compute and memory can reduce power consumption and area by
+72.2\% and 54.8\%, respectively. It is also advised to investigate running the model on a RISC-V processor with vector extension or CGRA add-on for additional flexibility and decreased development
+risk and timeline.
 
 \newpage
 
