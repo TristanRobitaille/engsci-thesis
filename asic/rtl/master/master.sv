@@ -3,7 +3,7 @@
 
 // Includes
 `include "types.svh"
-`include "../top_init.sv"
+`include "top_init.sv"
 `include "master/master_init.sv"
 `include "master/master.svh"
 `include "master/master_fcn.svh"

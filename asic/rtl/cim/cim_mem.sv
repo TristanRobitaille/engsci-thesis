@@ -1,26 +1,32 @@
 `ifndef _cim_mem_sv_
 `define _cim_mem_sv_
 
-module cim_mem (
+module cim_mem # (
+    parameter int SRAM = 1 // Choose whether to synthesize general-purpose memory or 
+)(
     input wire clk,
 
     // Access signals
-    input MemAccessSignals int_res_access_signals,
-    input MemAccessSignals params_access_signals,
+    MemAccessSignals int_res_access_signals,
+    MemAccessSignals params_access_signals,
 
     // Data
-    output logic [N_STORAGE-1:0] int_res_read_data,
-    output logic [N_STORAGE-1:0] params_read_data
+    output STORAGE_WORD_T int_res_read_data,
+    output STORAGE_WORD_T params_read_data
 );
 
     logic int_res_wen, params_wen;
+    STORAGE_WORD_T int_res_write_data, params_write_data;
     TEMP_RES_ADDR_T int_res_addr;
     PARAMS_ADDR_T params_addr;
 
-    // TODO: Replace with actual (single port) generated memory
-    logic [N_STORAGE-1:0] params [PARAMS_STORAGE_SIZE_CIM-1:0];
-    logic [N_STORAGE-1:0] int_res [TEMP_RES_STORAGE_SIZE_CIM-1:0];
+    always_comb begin : memory_wen
+        // Memory in write mode when WEN = 0, else in read mode
+        int_res_wen = ~(int_res_access_signals.write_req_src > 0); // One bit is set in the one-hot signal
+        params_wen = ~(params_access_signals.write_req_src > 0); // One bit is set in the one-hot signal
+    end
 
+    // MUXing
     always_latch begin : memory_addr_MUX
         // Intermediate results memory
         if (int_res_access_signals.read_req_src[BUS_FSM] || int_res_access_signals.write_req_src[BUS_FSM]) begin
@@ -52,32 +58,67 @@ module cim_mem (
         end
     end
 
-    always_comb begin : memory_wen
-        // Memory in write mode when WEN = 1, else in read mode
-        int_res_wen = (int_res_access_signals.write_req_src > 0); // One bit is set in the one-hot signal
-        params_wen = (params_access_signals.write_req_src > 0); // One bit is set in the one-hot signal
+    always_latch begin : memory_data_mux
+        case (int_res_access_signals.write_req_src)
+            7'b0000001: int_res_write_data = int_res_access_signals.write_data[0];
+            7'b0000010: int_res_write_data = int_res_access_signals.write_data[1];
+            7'b0000100: int_res_write_data = int_res_access_signals.write_data[2];
+            7'b0001000: int_res_write_data = int_res_access_signals.write_data[3];
+            7'b0010000: int_res_write_data = int_res_access_signals.write_data[4];
+            7'b0100000: int_res_write_data = int_res_access_signals.write_data[5];
+            7'b1000000: int_res_write_data = int_res_access_signals.write_data[6];
+            default: ; // Add appropriate default handling here
+        endcase
+
+        case (params_access_signals.write_req_src)
+            7'b0000001: params_write_data = params_access_signals.write_data[0];
+            7'b0000010: params_write_data = params_access_signals.write_data[1];
+            7'b0000100: params_write_data = params_access_signals.write_data[2];
+            7'b0001000: params_write_data = params_access_signals.write_data[3];
+            7'b0010000: params_write_data = params_access_signals.write_data[4];
+            7'b0100000: params_write_data = params_access_signals.write_data[5];
+            7'b1000000: params_write_data = params_access_signals.write_data[6];
+            default: ; // Add appropriate default handling here
+        endcase
     end
 
-    always_ff @ (posedge clk) begin : memory_access
-        if (int_res_wen) begin // Write
-            int_res[int_res_addr] <= int_res_access_signals.write_data[$clog2(int_res_access_signals.write_req_src)];
-        end else begin // Read
-            int_res_read_data <= int_res[int_res_addr];
-        end
+    // Memory instantiation (will get optimized away if SRAM == 1)
+    STORAGE_WORD_T params [PARAMS_STORAGE_SIZE_CIM-1:0];
+    STORAGE_WORD_T int_res [TEMP_RES_STORAGE_SIZE_CIM-1:0];
 
-        if (params_wen) begin // Write
-            params[params_addr] <= params_access_signals.write_data[$clog2(params_access_signals.write_req_src)];
-        end else begin // Read
-            params_read_data <= params[params_addr];
+    if (SRAM == 1) begin : sram_instantiation
+        mem_528x16 params_inst (
+            .Q(params_read_data), // Output data
+            .CLK(clk), // Clock
+            .CEN(1'b0), //Active-low chip enable
+            .WEN(params_wen), // Active-low write enable
+            .A(params_addr), // Address
+            .D(params_write_data), // Input data
+            .EMA(3'b011), // Extra Margin Adjustment --> Increases delay of internal timing pulses for extra margin
+            .RETN(1'b1), // Active-low Retention Mode Enable 
+            .PGEN(1'b1) // Active-low Power Down Mode Enable
+        );
+        mem_848x16 int_res_inst (
+            .Q(int_res_read_data), .CLK(clk), .CEN(1'b0), .WEN(int_res_wen), .A(int_res_addr), .D(int_res_write_data), .EMA(3'b011), .RETN(1'b1), .PGEN(1'b1)
+        );
+    end else begin : reg_array_access
+        always_ff @ (posedge clk) begin
+            if (~int_res_wen) begin // Write
+                int_res[int_res_addr] <= int_res_write_data;
+            end else begin
+                int_res_read_data <= int_res[int_res_addr];
+            end
+
+            if (~params_wen) begin // Write
+                params[params_addr] <= params_write_data;
+            end else begin // Read
+                params_read_data <= params[params_addr];
+            end
         end
     end
-
+    //synopsys translate_off
     // Assertions
     always_ff @ (posedge clk) begin : mem_assertions
-        // MAC is not allowed to write to memory
-        assert (!int_res_access_signals.write_req_src[MAC]) else $fatal("MAC is not allowed to write to intermediate results memory");
-        assert (!params_access_signals.write_req_src[MAC]) else $fatal("MAC is not allowed to write to model parameters memory");
-
         // Only one request at a time
         if ($countones({int_res_access_signals.read_req_src, int_res_access_signals.write_req_src}) > 1)
             $display("Got more than one read/write request for intermediate results memory: %b at time %d", {int_res_access_signals.read_req_src, int_res_access_signals.write_req_src}, $time);
@@ -87,6 +128,7 @@ module cim_mem (
         assert ($countones({int_res_access_signals.read_req_src, int_res_access_signals.write_req_src}) <= 1) else $display("Got more than one read/write request for intermediate results memory");
         assert ($countones({params_access_signals.read_req_src, params_access_signals.write_req_src}) <= 1) else $display("Got more than one read/write request for params memory");
     end
+    //synopsys translate_on
 endmodule
 
 `endif

@@ -1,7 +1,7 @@
 `ifndef _mac_sv_
 `define _mac_sv_
 
-`include "../../types.svh"
+`include "types.svh"
 
 /* Note:
 - Fixed-point MAC
@@ -179,9 +179,11 @@ module mac
                     done <= (delay_signal[1]);
                     state <= (delay_signal[1]) ? IDLE : SWISH_ACTIVATION_FINAL_ADD;
                 end
+                // synopsys translate_off
                 default: begin
                     $fatal("Invalid state in MAC FSM");
                 end
+                // synopsys translate_on
             endcase
         end
     end

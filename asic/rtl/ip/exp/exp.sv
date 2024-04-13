@@ -9,8 +9,8 @@
     - Computation time is 24 cycles.
 */
 
-`include "../../parameters.svh"
-`include "../../types.svh"
+`include "parameters.svh"
+`include "types.svh"
 
 module exp (
     input wire clk,

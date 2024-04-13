@@ -10,8 +10,8 @@
     - Computation time is ((N+Q)//2 + 1) cycles, where N is the total number of bits, and Q is the number of fractional bits.
 */
 
-`include "../../parameters.svh"
-`include "../../types.svh"
+`include "parameters.svh"
+`include "types.svh"
 
 module sqrt (
     input wire clk,
@@ -79,9 +79,11 @@ module sqrt (
         end
     end
 
-always_ff @ (posedge clk) begin : sqrt_assertions
-    assert (~rad_q[N_COMP-1]) else $fatal("Error from sqrt: Negative radicand detected.");
-end
+    // synopsys translate_off
+    always_ff @ (posedge clk) begin : sqrt_assertions
+        assert (~rad_q[N_COMP-1]) else $fatal("Error from sqrt: Negative radicand detected.");
+    end
+    // synopsys translate_on
 endmodule
 
 `endif

@@ -78,10 +78,12 @@ module top_softmax # () (
         mul_refresh = (exp_mul_refresh | softmax_mul_refresh);
     end
 
+    // synopsys translate_off
     always_ff @ (posedge clk) begin : compute_mux_assertions
         assert ($countones({exp_add_refresh, softmax_add_refresh}) <= 1) else $fatal("Multiple add_refresh signals are asserted simultaneously!");
         assert ($countones({exp_mul_refresh, softmax_mul_refresh}) <= 1) else $fatal("Multiple mul_refresh signals are asserted simultaneously!");
     end
+    // synopsys translate_on
 
     always_comb begin: comp_out_flipped
         add_out_flipped = ~add_output_q + 'd1;

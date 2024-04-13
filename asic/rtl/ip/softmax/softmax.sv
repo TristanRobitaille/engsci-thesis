@@ -1,7 +1,7 @@
 `ifndef _softmax_sv_
 `define _softmax_sv_
 
-`include "../../types.svh"
+`include "types.svh"
 
 module softmax
 (
@@ -19,7 +19,7 @@ module softmax
     input STORAGE_WORD_T int_res_data,
 
     // Adder signals
-    input COMP_WORD_T add_output_q, add_out_flipped,
+    input COMP_WORD_T add_output_q,
     output COMP_WORD_T add_input_q_1, add_input_q_2,
     output logic add_refresh,
 
@@ -29,13 +29,13 @@ module softmax
     output logic mult_refresh,
 
     // Divide signals
-    input wire div_busy, div_done,
+    input wire div_done,
     input COMP_WORD_T div_output_q,
     output COMP_WORD_T div_dividend, div_divisor,
     output logic div_start,
 
     // Exponential signals
-    input wire exp_busy, exp_done,
+    input wire exp_done,
     input COMP_WORD_T exp_output_q, exp_out_flipped,
     output COMP_WORD_T exp_input_q,
     output logic exp_start
@@ -123,9 +123,11 @@ module softmax
                     state <= (index == len) ? IDLE : DIV;
                     done <= (index == len);
                 end
+                //synopsys translate_off
                 default: begin
                     $fatal("Softmax in unexpected state %d", state);
                 end
+                //synopsys translate_on
             endcase
         end
     end

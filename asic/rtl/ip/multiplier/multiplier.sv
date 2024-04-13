@@ -8,7 +8,7 @@
 - To avoid introducing bias, the output is rounded to the nearest integer (Gaussian rounding)
 */
 
-`include "../../types.svh"
+`include "types.svh"
 
 module multiplier (
     input wire clk,

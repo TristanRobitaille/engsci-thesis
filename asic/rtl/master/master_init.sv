@@ -1,7 +1,7 @@
 `ifndef _master_init_sv_
 `define _master_init_sv_
 
-`include "master.svh"
+`include "master/master.svh"
 
 const BroadcastOpInfo_t broadcast_ops[25] = '{ 
     {/*op*/ TRANS_BROADCAST_START_OP,   /*tx_addr*/ $clog2(TEMP_RES_STORAGE_SIZE_CIM)'(0),                              /*len*/ $clog2(NUM_CIMS+1)'(NUM_PATCHES+1), /*rx_addr*/ $clog2(TEMP_RES_STORAGE_SIZE_CIM)'(NUM_PATCHES+1),                  /*num_cim*/ $clog2(NUM_CIMS+1)'(NUM_CIMS)},

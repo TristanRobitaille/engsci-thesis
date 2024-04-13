@@ -68,10 +68,12 @@ module top_mac # () (
         mul_refresh = (exp_mul_refresh || mac_mul_refresh);
     end
 
+    // synopsys translate_off
     always_ff @ (posedge clk) begin : mux_assertions
         assert ($countones({exp_add_refresh, mac_add_refresh}) <= 1) else $fatal("Multiple add_refresh signals are asserted simultaneously!");
         assert ($countones({exp_mul_refresh, mac_mul_refresh}) <= 1) else $fatal("Multiple mul_refresh signals are asserted simultaneously!");
     end
+    // synopsys translate_on
 
     mac mac_inst (
         .clk(clk),

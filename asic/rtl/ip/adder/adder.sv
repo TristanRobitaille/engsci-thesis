@@ -2,7 +2,7 @@
 `define _adder_sv_
 
 // Includes
-`include "../../types.svh"
+`include "types.svh"
 
 /* Note:
 - Single-cycle fixed-point adder

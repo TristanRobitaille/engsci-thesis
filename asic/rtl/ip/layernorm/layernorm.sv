@@ -1,7 +1,7 @@
 `ifndef _layernorm_sv_
 `define _layernorm_sv_
 
-`include "../../types.svh"
+`include "types.svh"
 
 module layernorm (
     input wire clk,

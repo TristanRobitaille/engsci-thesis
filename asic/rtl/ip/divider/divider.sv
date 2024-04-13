@@ -11,8 +11,8 @@
     - Computation time is N_COMP+Q+3 cycles, where N_COMP is the total number of bits, and Q is the number of fractional bits.
 */
 
-`include "../../parameters.svh"
-`include "../../types.svh"
+`include "parameters.svh"
+`include "types.svh"
 
 module divider (
     input wire clk,
@@ -92,11 +92,14 @@ module divider (
         end
     end
 
+    // synopsys translate_off
     always_ff @ (posedge clk) begin : div_assertions
         if (start && ($countones(divisor[N_COMP-2:0]) == 1)) begin
             $display("Warning from divide module: Divisor is a power of 2, consider using a bit-shift instead of division.");
         end
     end
+    // synopsys translate_on
+    
 endmodule
 
 `endif

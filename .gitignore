@@ -90,6 +90,7 @@ asic/alib-52/*
 asic/reports/*
 asic/results/*
 asic/command.log
+asic/TSMC65_Digital_Flow_data_collection/
 
 ### ASIC functional simulation
 asic/~$*
@@ -103,8 +104,7 @@ asic/func_sim/include/CMakeFiles/
 asic/func_sim/include/doc/
 asic/func_sim/include/src/
 asic/func_sim/Makefile
-asic/mem/528_by_16/*
-asic/mem/848_by_16/*
+asic/mem/
 
 ### ASIC RTL
 asic/rtl/__pycache__
@@ -124,6 +124,15 @@ asic/rtl/cim/dump.vcd
 asic/rtl/cim/results.xml
 asic/rtl/cim/~*
 asic/rtl/rtl_env
+asic/rtl/ip/adder/adder.saif
+asic/rtl/ip/multiplier/multiplier.saif
+asic/rtl/ip/divider/divider.saif
+asic/rtl/ip/exp/exp.saif
+asic/rtl/ip/layernorm/layernorm.saif
+asic/rtl/ip/sqrt/sqrt.saif
+asic/rtl/ip/softmax/softmax.saif
+asic/rtl/top.saif
+asic/rtl/master/master.saif
 
 ### ASIC functional simulation
 asic/fixed_point_accuracy_study/results_test.csv
@@ -131,3 +140,5 @@ asic/fixed_point_accuracy_study/ref_data.npy
 
 ### Documentation
 doc/CMC_VLSI_User_Manual_2023.pdf
+doc/Synopsys_DC_commands.pdf
+doc/PUG0086A1a_65nm_cln65gp_hd_sram_compiler_ug.pdf
