@@ -5,8 +5,10 @@ Project description: https://tristan.cbcr.me/?type=a#edge_AI
 
 ## Dependencies
 #### Tensorflow
-Install Python dependencies with: `pip3 install -r python_prototype/requirements.txt`.\
-Install EdgeTPU runtime and PyCoral by following this [guide](https://coral.ai/docs/accelerator/get-started/).
+Create a virtualenv named `asic_sleep_trans` by running `python -m venv asic_sleep_trans` inside the `python_prototype/` directory
+Activate the venv and install Python dependencies with: `source asic_sleep_trans/bin/activate && pip3 install -r requirements.txt`.\
+Run the Python file from VS Code or look at `.vscode/launch.json` to for the required arguments if running from command line (don't forget to `source asic_sleep_trans/bin/activate` if running from command line).
+(Optional) Install EdgeTPU runtime and PyCoral by following this [guide](https://coral.ai/docs/accelerator/get-started/).
 
 #### ASIC Function Simulation
 To generate the Makefile, `CMake` is required. Install it with `brew install cmake`. \

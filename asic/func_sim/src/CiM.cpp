@@ -1,7 +1,3 @@
-/* TODO:
-    - Adjust temporary storage locations for encoder's MHSA intermediate storage as we can overwrite all but the first element of encoder input (which is used in the residual connection) since we will only send the first row of encoder output to MLP head anyways
-*/
-
 #include <CiM.hpp>
 
 /*----- NAMESPACE -----*/

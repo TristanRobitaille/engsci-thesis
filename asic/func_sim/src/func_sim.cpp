@@ -1,4 +1,4 @@
-#include <func_sim.hpp>
+#include <Func_Sim.hpp>
 
 /*----- NAMESPACE -----*/
 using namespace std;
@@ -58,22 +58,33 @@ void run_sim(uint32_t clip_num, string results_csv_fp) {
 }
 
 int main(int argc, char *argv[]){
-    if (argc == 1) { throw std::invalid_argument("No arguments provided!"); }
-    if (std::string(argv[1]) == "--help") {
+    uint32_t start_index;
+    uint32_t end_index;
+    std::string results_csv_fp;
+
+    if (argc == 1) { // No arguments provided, run on first clip and don't write to CSV
+        start_index = 0;
+        end_index = 0;
+        results_csv_fp = "";
+    } else if ((argc == 1) && (std::string(argv[1]) == "--help")) {
         std::cout << "Usage: " << argv[0] << " [--start_index] [--end_index] [--results_csv_fp]" << std::endl;
         std::cout << "--start_index: The index of the clip to use for the first run" << std::endl;
         std::cout << "--end_index: The index of the clip to use for the last run" << std::endl;
         std::cout << "--results_csv_fp: The file path to the results CSV file" << std::endl;
         return 0;
+    } else if (argc == 7) { // All arguments provided
+        start_index = std::stoi(argv[2]);
+        end_index = std::stoi(argv[4]);
+        results_csv_fp = std::string(argv[6]);
+    } else {
+        throw std::invalid_argument("Please provide all or none of the arguments! Use --help for more information.");
     }
 
     init();
-    uint32_t start_index = std::stoi(argv[2]);
-    uint32_t end_index = std::stoi(argv[4]);
     if (start_index > end_index) { throw std::invalid_argument("Start index must be less than or equal to end index!"); }
     for (uint32_t i = 0; i < ((end_index + 1) - start_index); i++) {
         cout << "Run #" << i+1 << " out of " << (end_index-start_index+1) << " (clip index: " << (start_index+i) << ")" << std::endl;
-        run_sim(start_index+i, argv[6]);
+        run_sim(start_index+i, results_csv_fp);
     }
     cout << "Finished running all simulation runs." << endl;
 

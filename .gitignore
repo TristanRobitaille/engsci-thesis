@@ -74,6 +74,7 @@ python_prototype/error_logs/*
 python_prototype/*.zip
 python_prototype/slurm_jobs/logs
 python_prototype/reference_data/*
+python_prototype/asic_sleep_trans/*
 
 ### Other Python
 coral/
@@ -102,7 +103,7 @@ asic/func_sim/*.cmake
 asic/func_sim/*/*.cmake
 asic/func_sim/*/Makefile
 asic/func_sim/CMakeCache.txt
-asic/func_sim/func_sim
+asic/func_sim/Func_Sim
 asic/func_sim/CMakeFiles/*
 asic/func_sim/include/CMakeFiles/
 asic/func_sim/include/doc/

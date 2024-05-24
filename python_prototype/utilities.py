@@ -219,9 +219,10 @@ def find_txt_file_name(candidate_file_name:str, directory:str) -> str:
     return candidate_filepath
 
 def log_error_and_exit(exception, manual_description:str="", additional_msg:str="") -> None:
-    if socket.gethostname() == "claude-ryzen":              error_log = find_txt_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/home/trobitaille/engsci-thesis/python_prototype/error_logs/")
-    elif socket.gethostname() == "MBP_Tristan":             error_log = find_txt_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/Users/tristan/Desktop/engsci-thesis/python_prototype/error_logs/")
-    elif "cedar.computecanada.ca" in socket.gethostname():  error_log = find_txt_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/error_logs/")
+    print(f"socket.gethostname(): {socket.gethostname()}")
+    if socket.gethostname() == "claude-ryzen":                      error_log = find_txt_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/home/trobitaille/engsci-thesis/python_prototype/error_logs/")
+    elif socket.gethostname() == "Tristans-MacBook-Pro-3.local":    error_log = find_txt_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/Users/tristan/Developer/engsci-thesis/python_prototype/error_logs/")
+    elif "cedar.computecanada.ca" in socket.gethostname():          error_log = find_txt_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/error_logs/")
 
     print(f"{manual_description} Received error: {exception}")
 
@@ -330,9 +331,9 @@ def run_tflite_model(model_fp:str, data:str, whole_night_indices:list, data_type
     return predictions
 
 def folder_base_path() -> str:
-    if socket.gethostname() == "claude-ryzen":              return f"/home/trobitaille/engsci-thesis/python_prototype/"
-    elif socket.gethostname() == "MBP_Tristan":             return f"/Users/tristan/Desktop/engsci-thesis/python_prototype/"
-    elif "cedar.computecanada.ca" in socket.gethostname():  return f"/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/"
+    if socket.gethostname() == "claude-ryzen":                      return f"/home/trobitaille/engsci-thesis/python_prototype/"
+    elif socket.gethostname() == "Tristans-MacBook-Pro-3.local":    return f"/Users/tristan/Developer/engsci-thesis/python_prototype/"
+    elif "cedar.computecanada.ca" in socket.gethostname():          return f"/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/"
 
 def shuffle(signal:tf.Tensor, sleep_stages:tf.Tensor, random_seed:int) -> tuple[tf.Tensor, tf.Tensor]:
     """
