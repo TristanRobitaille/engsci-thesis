@@ -1,3 +1,4 @@
+import os
 import csv
 import h5py
 import glob
@@ -219,10 +220,11 @@ def find_txt_file_name(candidate_file_name:str, directory:str) -> str:
     return candidate_filepath
 
 def log_error_and_exit(exception, manual_description:str="", additional_msg:str="") -> None:
-    print(f"socket.gethostname(): {socket.gethostname()}")
-    if socket.gethostname() == "claude-ryzen":                      error_log = find_txt_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/home/trobitaille/engsci-thesis/python_prototype/error_logs/")
-    elif socket.gethostname() == "Tristans-MacBook-Pro-3.local":    error_log = find_txt_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/Users/tristan/Developer/engsci-thesis/python_prototype/error_logs/")
-    elif "cedar.computecanada.ca" in socket.gethostname():          error_log = find_txt_file_name(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt", "/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/error_logs/")
+    # Create file path for error log
+    current_dir = os.path.dirname(os.path.realpath(__file__))
+    relative_path = os.path.join(current_dir, "error_logs")
+    os.makedirs(relative_path, exist_ok=True)
+    error_log = os.path.join(relative_path, datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_error.txt")
 
     print(f"{manual_description} Received error: {exception}")
 
@@ -236,6 +238,9 @@ def get_weight_distribution(model:tf.keras.Model) -> None:
     """
     Plots the distribution of weights in a given model.
     """
+    os.makedirs("./scratch", exist_ok=True)
+    current_dir = os.path.dirname(os.path.realpath(__file__))
+    relative_path = os.path.join(current_dir, "scratch")
 
     for layer in model.layers:
         # Plot distribution of weights
@@ -245,7 +250,9 @@ def get_weight_distribution(model:tf.keras.Model) -> None:
             plt.clf() # Clear the current figure
             plt.hist(list(weights), bins=100)
             plt.title(f"Layer {layer.name}")
-            plt.savefig(f"/home/trobitaille/engsci-thesis/python_prototype/scratch/{layer.name}.png")
+
+            image_fp = os.path.join(relative_path, f"{layer.name}.png")
+            plt.savefig(image_fp)
         else:
             print(f"No weights found for layer {layer.name}")
 
@@ -329,11 +336,6 @@ def run_tflite_model(model_fp:str, data:str, whole_night_indices:list, data_type
         total += 1
 
     return predictions
-
-def folder_base_path() -> str:
-    if socket.gethostname() == "claude-ryzen":                      return f"/home/trobitaille/engsci-thesis/python_prototype/"
-    elif socket.gethostname() == "Tristans-MacBook-Pro-3.local":    return f"/Users/tristan/Developer/engsci-thesis/python_prototype/"
-    elif "cedar.computecanada.ca" in socket.gethostname():          return f"/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/"
 
 def shuffle(signal:tf.Tensor, sleep_stages:tf.Tensor, random_seed:int) -> tuple[tf.Tensor, tf.Tensor]:
     """

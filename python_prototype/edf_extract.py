@@ -459,7 +459,7 @@ def save_metadata_json(ds_filepath:str, args, channels_to_read:list, fields:list
         "sleep_stages_cnt": stages_cnt,
         "dataset_filesize_GB": round(get_dir_size(path=ds_filepath)/2**30, ndigits=2),
         "signal_processing_operations": args.signal_processing_ops
-        }
+    }
 
     with open(ds_filepath+".json", 'w') as json_file:
         json.dump(json_metadata, json_file, sort_keys=True, indent=4)
@@ -508,7 +508,7 @@ def main():
         if os.path.exists(path=ds_filepath): 
             shutil.rmtree(path=ds_filepath) # Delete file if it exists
         
-        if "cedar.computecanada.ca" in socket.gethostname(): # Compute Canada (aka running on GPU needs Tensorflow 2.8.0) needs a Tensorflow downgrade (or gets a compilation error)
+        if "cedar.computecanada.ca" in socket.gethostname(): # Compute Canada Cedar (aka running on GPU needs Tensorflow 2.8.0) needs a Tensorflow downgrade (or gets a compilation error)
             tf.data.experimental.save(ds, compression=None, path=ds_filepath)
         else: tf.data.Dataset.save(ds, compression=None, path=ds_filepath)
 

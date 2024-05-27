@@ -178,8 +178,10 @@ def load_from_dataset(args):
         raise ValueError(f"Number of class weights ({len(args.class_weights)}) should be equal to number of sleep stages ({sleep_map.get_num_stages()+1})")
     if (dataset_metadata["num_files_used"] % NUM_NIGHTS_VALIDATION != 0):
         raise ValueError(f"Number of nights in dataset ({dataset_metadata['num_files_used']}) not a multiple of number of nights to use in validation ({NUM_NIGHTS_VALIDATION})!")
-    if not os.path.exists(os.path.dirname(args.k_fold_val_results_fp)):
-        raise ValueError(f"Base path for k-fold validation results ({os.path.dirname(args.k_fold_val_results_fp)}) doesn't exist!")
+    os.makedirs(os.path.dirname(args.k_fold_val_results_fp), exist_ok=True)
+    
+    # if not os.path.exists(os.path.dirname(args.k_fold_val_results_fp)):
+    #     raise ValueError(f"Base path for k-fold validation results ({os.path.dirname(args.k_fold_val_results_fp)}) doesn't exist!")
     if max(val_nights) >= dataset_metadata["num_files_used"]:
         raise ValueError(f"One of more nights used for validation ({list(val_nights)}) exceeds number of files in dataset ({dataset_metadata['num_files_used']})!")
     if (CLIP_LENGTH_NUM_SAMPLES % args.patch_length != 0):
@@ -627,7 +629,7 @@ def save_models(model, all_models:dict, out_fp:str):
     model.save_weights(filepath=f"{out_fp}/models/model_weights.h5")
     print(f"[{(time.time()-start_time):.2f}s] Saved model to {out_fp}/models/model.tf")
 
-    if "cedar.computecanada.ca" not in socket.gethostname(): # Only export model if not running on Cedar (aka running TF 2.8) since it doesn't support it
+    if "cedar.computecanada.ca" not in socket.gethostname(): # Only plot model if not running on Cedar (aka running TF 2.8) since it doesn't support it
         tf.keras.utils.plot_model(model.build_graph(), to_file=f"{out_fp}/model_architecture.png", expand_nested=True, show_trainable=True, show_shapes=True, show_layer_activations=True, dpi=300, show_dtype=True)
 
     # Convert to Tensorflow Lite model and save
@@ -1060,7 +1062,8 @@ def main():
     print(f"[{(time.time()-start_time):.2f}s] Dataset ready.")
     mlp_dense_act = "swish"
     time_of_export = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    base_out_fp = utilities.find_folder_path(utilities.folder_base_path()+f"results/{time_of_export}_vision", utilities.folder_base_path()+"results")
+    current_dir = os.path.dirname(os.path.realpath(__file__))
+    base_out_fp = utilities.find_folder_path(f"{current_dir}/results/{time_of_export}_vision", f"{current_dir}/results")
     os.makedirs(base_out_fp, exist_ok=True)
 
     acc = {"tf":[], "tflite":[], "tflite (quant)":[], "tflite (full quant)":[], "tflite (16bx8b full quant)":[]}
@@ -1107,7 +1110,7 @@ def main():
         export_k_fold_results(args, acc)
         print(f"[{(time.time()-start_time):.2f}s] Wrote to k-fold results file.")
 
-    # Run reference night to help validate C++ functional model (make sure the parameters match the dataset)
+    # Run reference night to help validate C++ functional model (ensure the parameters match the dataset)
     if (args.reference_night_fp != ""):
         global DEBUG
         global OUTPUT_CSV
