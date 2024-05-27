@@ -7,11 +7,11 @@ accuracy of different fixed-point formats.
 
 ### Setup
 Clone repo.\
-From the `asic/func_sim/` directory: \
+From the `asic/func_sim/` directory:
 1. To initialize the submodules: `git submodule update --init --recursive`
-2. To generate the Makefile, run `cmake CMakeLists.txt` \
+2. To generate the Makefile, run `cmake CMakeLists.txt`
 
 ### How to run
-Run from the `asic/func_sim/` directory. \
+Run from the `asic/func_sim/` directory.\
 To compile and run the executable without writing the inferred sleep stage to the CSV, run `make && ./Func_Sim`
 To compile and run the executable on a given set of clips in `reference_data/eeg.h5` and save to CSV, run `make && ./Func_Sim --start_index <index> --end_index <index> --results_csv_fp "<filepath>"`
