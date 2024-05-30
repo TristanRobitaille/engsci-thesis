@@ -5,6 +5,8 @@ You can define a start and end index for the simulation to run on select clips. 
 configurable in `include/Misc.hpp`. The simulation writes the inferred sleep stage in a column respective to `NUM_FRAC_BITS` in a given CSV, which can be used to run a study on the
 accuracy of different fixed-point formats.
 
+Note: The functional simulation makes use of Xilinx's HLS Arbitrary Precision Types library to accurately model fixed-point arithmetic of arbitrary width. Documentation can be found here: https://docs.amd.com/r/en-US/ug1399-vitis-hls/C-Arbitrary-Precision-Fixed-Point-Types.
+
 ### Setup
 Clone repo.\
 From the `asic/func_sim/` directory:

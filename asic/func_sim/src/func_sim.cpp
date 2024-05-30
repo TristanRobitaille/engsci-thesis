@@ -34,7 +34,7 @@ int init(){
 /*----- FUNCTIONS -----*/
 void update_results_csv(uint32_t inferred_sleep_stage, uint32_t clip_num, string results_csv_fp) {
     rapidcsv::Document results_csv(results_csv_fp);
-    results_csv.SetCell<int>((NUM_FRAC_BITS-1+3), (clip_num+1), inferred_sleep_stage); // +3 and +1 are to account for headers
+    results_csv.SetCell<int>((Q_BITS-1+3), (clip_num+1), inferred_sleep_stage); // +3 and +1 are to account for headers
     results_csv.Save();
 }
 

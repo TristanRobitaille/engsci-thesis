@@ -3,7 +3,7 @@ WAVES = 1
 TOPLEVEL_LANG ?= verilog
 EXTRA_ARGS += --trace --trace-structs --Wall
 
-VERILOG_SOURCES = sqrt.sv
+VERILOG_SOURCES = ../../parameters.svh ../../types.svh sqrt.sv
 TOPLEVEL = sqrt
 MODULE = sqrt_tb
 

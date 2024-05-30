@@ -1,6 +1,5 @@
 tensorflow==2.14.0 # This should be 2.8.0 for Compute Canada (else get a compilation error when running on GPU)
 tensorflow_addons>=0.23.0
-# tensorrt==8.6.*
 numpy>=1.24.0
 matplotlib>=3.8.0
 six>=1.16.0

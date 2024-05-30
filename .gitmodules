@@ -4,6 +4,3 @@
 [submodule "asic/func_sim/rapidcsv"]
 	path = asic/func_sim/rapidcsv
 	url = git@github.com:d99kris/rapidcsv.git
-[submodule "asic/func_sim/fpm"]
-	path = asic/func_sim/fpm
-	url = git@github.com:MikeLankamp/fpm.git

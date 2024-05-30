@@ -667,7 +667,7 @@ void CiM::MAC(uint16_t in1_start_addr, uint16_t in2_start_addr, uint16_t len, ui
         if ((-compute_temp_fp - compute_temp_fp_2) < _min_exp_input_arg) { _min_exp_input_arg = -compute_temp_fp - compute_temp_fp_2; }
         if ((-compute_temp_fp - compute_temp_fp_2) > _max_exp_input_arg) { _max_exp_input_arg = -compute_temp_fp - compute_temp_fp_2; }
         compute_temp_fp = compute_temp_fp + compute_temp_fp_2;
-        compute_temp_fp = compute_temp_fp / (large_fp_t { 1 } + exp(-compute_temp_fp));
+        compute_temp_fp = compute_temp_fp / (large_fp_t { 1 } + EXP_APPROX(-compute_temp_fp));
         break;
     case NO_ACTIVATION:
     default:
@@ -681,7 +681,7 @@ void CiM::DIV(uint16_t num_addr, uint16_t in2, INPUT_TYPE in2_type) {
     if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start DIV!"); }
     compute_in_progress = true;
 
-    compute_temp_fp = large_fp_t { 0 }; // Accumulator
+    compute_temp_fp = large_fp_t { 0 };
 
     if (in2_type == MODEL_PARAM) { compute_temp_fp = large_fp_t { intermediate_res[num_addr] } / large_fp_t { params[in2] }; } // Second input is a model parameter
     else if (in2_type == IMMEDIATE_VAL) { compute_temp_fp = large_fp_t { intermediate_res[num_addr] } / large_fp_t { in2 }; } // Second input is an immediate value
@@ -735,7 +735,7 @@ void CiM::LAYERNORM_1ST_HALF(uint16_t input_addr) {
 
     compute_temp_fp_2 /= EMB_DEPTH;
     verify_result(VARIANCE, static_cast<float> (compute_temp_fp_2), intermediate_res, input_addr, EMB_DEPTH, id);
-    compute_temp_fp_2 = sqrt(compute_temp_fp_2); // Standard deviation
+    compute_temp_fp_2 = SQRT(compute_temp_fp_2); // Standard deviation
     compute_temp_fp_3 = large_fp_t {1.0f} / compute_temp_fp_2; // Inverse standard deviation (so we can simply multiply instead of divide in the next step)
 
     // Partial normalization (excludes gamma and beta, which are applied in LAYERNORM_FINAL_NORM() since they need to be applied column-wise)
@@ -772,7 +772,7 @@ void CiM::SOFTMAX(uint16_t input_addr, uint16_t len) {
         if (large_fp_t { intermediate_res[input_addr+i] } < _min_exp_input_arg) { _min_exp_input_arg = large_fp_t { intermediate_res[input_addr+i] }; }
         if (large_fp_t { intermediate_res[input_addr+i] } > _max_exp_input_arg) { _max_exp_input_arg = large_fp_t { intermediate_res[input_addr+i] }; }
         _total_exp_cnt++;
-        intermediate_res[input_addr+i] = static_cast<float> ( fix_pt_t {exp(large_fp_t { intermediate_res[input_addr+i] })});
+        intermediate_res[input_addr+i] = static_cast<float> ( fix_pt_t { EXP_APPROX(large_fp_t { intermediate_res[input_addr+i] }) });
         compute_temp_fp += large_fp_t { intermediate_res[input_addr+i] };
     }
 
@@ -801,24 +801,45 @@ void CiM::ARGMAX(uint16_t input_addr, uint16_t len) {
     computation_result = static_cast<float> (fix_pt_t { compute_temp_fp_3 });
 }
 
-large_fp_t CiM::exp_approx(large_fp_t input) {
+large_fp_t CiM::EXP_APPROX(large_fp_t input) {
     /* Approximation of exp(x) as used in the ASIC
-       Uses the identy exp(x) = 2^(x/ln(2)), float/int exponent splitting and Taylor approximation of the fractional part.
+       Uses the identy exp(x) = 2^(x/ln(2)), float/int exponent splitting and Taylor approximation of the fractional part (first 4 terms).
     */
-
-    large_fp_t ln_2 = log(large_fp_t{2});
+    large_fp_t ln_2 = large_fp_t{0.69314718056}; //ln(2)
     large_fp_t input_mapped = input/ln_2;
-    large_fp_t input_mapped_fract = input/ln_2 - floor_fpm(input/ln_2);
+    large_fp_t input_mapped_fract = input/ln_2 - FLOOR(input/ln_2);
 
     // Taylor approximation of the fractional part
-    large_fp_t exp_approx_fract = 1 + ln_2*input_mapped_fract + pow(ln_2,large_fp_t{2})/large_fp_t{2}*pow(input_mapped_fract, large_fp_t{2}) + pow(ln_2,large_fp_t{3})/large_fp_t{6}*pow(input_mapped_fract, large_fp_t{3});
+    large_fp_t exp_approx_fract = 1 + ln_2*input_mapped_fract + POW(ln_2,2)/large_fp_t{2}*POW(input_mapped_fract,2) + POW(ln_2,3)/large_fp_t{6}*POW(input_mapped_fract,3);
 
     // Integer part
-    return pow(large_fp_t{2}, floor_fpm(input_mapped)) * exp_approx_fract;
+    large_fp_t exp_approx_int = POW(large_fp_t{2}, static_cast<int>(FLOOR(input_mapped)));
+    
+    return exp_approx_int * exp_approx_fract;
 }
 
-large_fp_t CiM::floor_fpm(large_fp_t input) {
-    /* Performs floor() on fpm input */
+large_fp_t CiM::SQRT(large_fp_t input) {
+    // Approximate sqrt. Convert to float, use standard sqrt() function and convert back to fixed-point.
+    if (input <= 0) { return large_fp_t{0}; }
+
+    return large_fp_t { sqrt(static_cast<float>(input)) };
+}
+
+large_fp_t CiM::POW(large_fp_t base, int exp) {
+    // Implements base^exp, where exp is an integer.
+    if (exp == 0) { return large_fp_t{1}; }
+    
+    large_fp_t temp = base;
+    for (int i=1; i<std::abs(exp); i++){
+        temp *= base;
+    }
+
+    if (exp > 0) { return temp; }
+    else { return large_fp_t{1}/temp; }
+}
+
+large_fp_t CiM::FLOOR(large_fp_t input) {
+    /* Performs floor() on fixed-point input */
     return large_fp_t { floor(static_cast<float>(input)) };
 }
 
