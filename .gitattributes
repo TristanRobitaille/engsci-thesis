@@ -1,2 +1,4 @@
 asic/func_sim/Xilinx_Precision_Types/* linguist-generated=true
 asic/func_sim/Xilinx_Precision_Types linguist-generated=true
+python_prototype/edgetpu_data/* binary
+asic/func_sim/reference_data/* binary
