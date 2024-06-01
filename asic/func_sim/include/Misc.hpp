@@ -21,8 +21,8 @@
 
 /*----- TYPEDEF -----*/
 // Both should the same number of fractional bits, the large_fp_t is merely to store intermediate results in computation
-using fix_pt_t =    ap_fixed</*width*/N_STORAGE, /*Integral part width*/N_STORAGE-Q_BITS,  AP_RND_CONV, AP_SAT>;
-using large_fp_t =  ap_fixed<N_COMP, N_COMP-Q_BITS, AP_RND_CONV, AP_SAT>;
+using fix_pt_t =    ap_fixed</*width*/N_STORAGE, /*Integral part width*/N_STORAGE-Q_BITS,  AP_RND_CONV, AP_SAT_SYM>;
+using large_fp_t =  ap_fixed<N_COMP, N_COMP-Q_BITS, AP_RND_CONV, AP_SAT_SYM>;
 
 /*----- MACROS -----*/
 #define NUM_TRANS(x) ceil((x)/3.0f) // Returns the number of transactions each CiM will send (3 elements per transaction)

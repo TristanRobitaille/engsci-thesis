@@ -736,7 +736,8 @@ void CiM::LAYERNORM_1ST_HALF(uint16_t input_addr) {
     compute_temp_fp_2 /= EMB_DEPTH;
     verify_result(VARIANCE, static_cast<float> (compute_temp_fp_2), intermediate_res, input_addr, EMB_DEPTH, id);
     compute_temp_fp_2 = SQRT(compute_temp_fp_2); // Standard deviation
-    compute_temp_fp_3 = large_fp_t {1.0f} / compute_temp_fp_2; // Inverse standard deviation (so we can simply multiply instead of divide in the next step)
+    if (compute_temp_fp_2 == large_fp_t { 0.0f }) { compute_temp_fp_3 = POW(large_fp_t{2}, N_COMP); } // Avoid division by zero by saturating
+    else { compute_temp_fp_3 = large_fp_t {1.0f} / compute_temp_fp_2; } // Inverse standard deviation (so we can simply multiply instead of divide in the next step)
 
     // Partial normalization (excludes gamma and beta, which are applied in LAYERNORM_FINAL_NORM() since they need to be applied column-wise)
     for (uint16_t i = 0; i < EMB_DEPTH; i++) {
