@@ -4,3 +4,6 @@
 [submodule "asic/func_sim/rapidcsv"]
 	path = asic/func_sim/rapidcsv
 	url = git@github.com:d99kris/rapidcsv.git
+[submodule "asic/func_sim/HLS_Arb_Precision_Types"]
+	path = asic/func_sim/HLS_Arb_Precision_Types
+	url = git@github.com:TristanRobitaille/HLS_Arb_Precision_Types.git
