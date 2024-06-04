@@ -64,7 +64,7 @@ void verify_computation(COMPUTE_VERIFICATION_STEP cim_state, uint8_t id, float* 
             are_equal(col[0], data[starting_addr], 0, id); // Only check the first row since we are not computing the rest
         } else {
             std::vector<float> ref_data;
-            if (cim_state == MLP_HEAD_LAYERNORM_VERIF || cim_state == MLP_HEAD_DENSE_1_VERIF || cim_state == MLP_HEAD_SOFTMAX_VERIF) { ref_data = csv.GetRow<float>(id); }
+            if (cim_state == MLP_HEAD_LAYERNORM_VERIF || cim_state == MLP_HEAD_DENSE_1_VERIF) { ref_data = csv.GetRow<float>(id); }
             else { ref_data = csv.GetColumn<float>(id); }
             for (int i = 0; i < ref_data.size(); i++) { 
                 if (cim_state == MLP_HEAD_SOFTMAX_DIV_VERIF) { are_equal(ref_data[i]/NUM_SAMPLES_OUT_AVG, data[i+starting_addr], i, id); }
@@ -72,6 +72,20 @@ void verify_computation(COMPUTE_VERIFICATION_STEP cim_state, uint8_t id, float* 
             }
         }
     }
+}
+
+void print_softmax_error(float* data, uint16_t starting_addr) {
+    rapidcsv::Document csv(step_verif_info[MLP_HEAD_SOFTMAX_VERIF].csv_fp, rapidcsv::LabelParams(-1, -1));
+    std::vector<float> ref_softmax = csv.GetColumn<float>(0);
+    std::vector<float> softmax_err_rel, softmax_err_abs;
+
+    cout << "Error on final softmax: ";
+    for (int i = 0; i < NUM_SLEEP_STAGES; i++) { 
+        softmax_err_rel.push_back(100*(ref_softmax[i] - data[starting_addr+i]) / ref_softmax[i]);
+        softmax_err_abs.push_back(ref_softmax[i] - data[starting_addr+i]);
+        cout << softmax_err_abs[i] << " (" << softmax_err_rel[i] << "%) ";
+    }
+    cout << endl;
 }
 
 void verify_result(RESULT_TYPE type, float result, float* input_data, uint16_t starting_addr, uint16_t len, uint8_t id) {

@@ -62,7 +62,7 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
         if (all_cims_ready == true) {
             if ((eeg != eeg_ds[clip_index].end()) && (all_cims_ready == true)) {
                 float data = *eeg;
-                struct instruction inst = {/*op*/ PATCH_LOAD_BROADCAST_OP, /*target_or_sender*/ 0, /*data*/ {static_cast<float>(large_fp_t{data/EEG_SCALE_FACTOR}),0,0}};
+                struct instruction inst = {/*op*/ PATCH_LOAD_BROADCAST_OP, /*target_or_sender*/ 0, /*data*/ {static_cast<float>(fx_1_x_t{data/EEG_SCALE_FACTOR}),0,0}};
                 bus->push_inst(inst); // Broadcast on bus
                 ++eeg;
             } else if ((eeg == eeg_ds[clip_index].end()) && (all_cims_ready == true)) {

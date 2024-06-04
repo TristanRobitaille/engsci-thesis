@@ -37,8 +37,8 @@ int CiM::reset(){
     word_snt_cnt.reset();
     _neg_exp_cnt = 0;
     _total_exp_cnt = 0;
-    _max_exp_input_arg = large_fp_t(0);
-    _min_exp_input_arg = large_fp_t(0);
+    _max_exp_input_arg = comp_fx_t(0);
+    _min_exp_input_arg = comp_fx_t(0);
     _compute_process_cnt = 0;
     _num_compute_done = 0;
     load_previous_softmax(); // Load in dummy softmax data of previous epochs for verification
@@ -191,7 +191,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
     case PATCH_LOAD_CIM:
         if ((compute_in_progress == false) && (word_rec_cnt.get_cnt() == PATCH_LEN) && (gen_reg_2b == 0)) { // Received my complete patch, perform part of Dense layer
-            MAC(/* patch starting addr */ 0,/* weight starting addr */ 0, /*len*/ PATCH_LEN, /* bias addr */ param_addr_map[SINGLE_PARAMS].addr+PATCH_PROJ_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION);
+            MAC<fx_2_x_t,fx_2_x_t>(0, 0, PATCH_LEN, param_addr_map[SINGLE_PARAMS].addr+PATCH_PROJ_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION);
             gen_reg_2b = 1;
             word_rec_cnt.reset();
         } else if ((compute_in_progress == false) && (gen_reg_2b == 1)) { // Done computation
@@ -222,7 +222,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     intermediate_res[gen_cnt_7b.get_cnt() + mem_map.at(POS_EMB_MEM)] = computation_result;
                     gen_cnt_7b.inc();
                 }
-                ADD(mem_map.at(CLASS_TOKEN_MEM)+gen_cnt_7b.get_cnt(), param_addr_map[POS_EMB_PARAMS].addr+gen_cnt_7b.get_cnt(), MODEL_PARAM);
+                ADD<fx_2_x_t>(mem_map.at(CLASS_TOKEN_MEM)+gen_cnt_7b.get_cnt(), param_addr_map[POS_EMB_PARAMS].addr+gen_cnt_7b.get_cnt(), MODEL_PARAM);
                 gen_reg_2b = 1;
             } else if ((compute_in_progress == false) && (gen_cnt_7b.get_cnt() == NUM_PATCHES+1)) { // Done with positional embedding
                 intermediate_res[gen_cnt_7b.get_cnt() + mem_map.at(POS_EMB_MEM)] = computation_result; // Save the last result
@@ -241,9 +241,9 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case ENC_LAYERNORM_2_1ST_HALF_STEP:
         case ENC_LAYERNORM_3_1ST_HALF_STEP:
             if (word_rec_cnt.get_cnt() == EMB_DEPTH && compute_in_progress == false) { // No more data to receive, start LayerNorm
-                if (current_inf_step == ENC_LAYERNORM_1_1ST_HALF_STEP) { LAYERNORM_1ST_HALF(mem_map.at(ENC_LN1_1ST_HALF_MEM)); }
-                else if (current_inf_step == ENC_LAYERNORM_2_1ST_HALF_STEP) { LAYERNORM_1ST_HALF(mem_map.at(ENC_LN2_1ST_HALF_MEM)); }
-                else if (current_inf_step == ENC_LAYERNORM_3_1ST_HALF_STEP) { LAYERNORM_1ST_HALF(mem_map.at(MLP_HEAD_LN_1ST_HALF_MEM)); }
+                if (current_inf_step == ENC_LAYERNORM_1_1ST_HALF_STEP) { LAYERNORM_1ST_HALF<fx_2_x_t>(mem_map.at(ENC_LN1_1ST_HALF_MEM)); }
+                else if (current_inf_step == ENC_LAYERNORM_2_1ST_HALF_STEP) { LAYERNORM_1ST_HALF<fx_4_x_t>(mem_map.at(ENC_LN2_1ST_HALF_MEM)); }
+                else if (current_inf_step == ENC_LAYERNORM_3_1ST_HALF_STEP) { LAYERNORM_1ST_HALF<fx_5_x_t>(mem_map.at(MLP_HEAD_LN_1ST_HALF_MEM)); }
                 word_rec_cnt.reset();
             }
 
@@ -259,11 +259,11 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             if (((word_rec_cnt.get_cnt() == 1) && (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP)) || (word_rec_cnt.get_cnt() == NUM_PATCHES+1)) { // No more data to receive, start LayerNorm
                 if (compute_in_progress == false) {
                     if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) {
-                        LAYERNORM_2ND_HALF(mem_map.at(ENC_LN1_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_BETA_OFF);
+                        LAYERNORM_2ND_HALF<fx_3_x_t>(mem_map.at(ENC_LN1_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_BETA_OFF);
                     } else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) {
-                        LAYERNORM_2ND_HALF(mem_map.at(ENC_LN2_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_BETA_OFF);
+                        LAYERNORM_2ND_HALF<fx_4_x_t>(mem_map.at(ENC_LN2_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_BETA_OFF);
                     } else if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) {
-                        LAYERNORM_2ND_HALF(mem_map.at(MLP_HEAD_LN_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_BETA_OFF);
+                        LAYERNORM_2ND_HALF<fx_4_x_t>(mem_map.at(MLP_HEAD_LN_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_BETA_OFF);
                     }
                     word_rec_cnt.reset();
                 }
@@ -294,42 +294,42 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 if ((compute_in_progress == false) && (current_inf_step == ENC_MHSA_DENSE_STEP)) {
                     if (gen_reg_2b == 0) {
                         is_ready = false;
-                        MAC(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_Q_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_Q_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION); // Q
+                        MAC<fx_3_x_t,fx_3_x_t>(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_Q_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_Q_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION); // Q
                         gen_reg_2b = 1;
                     } else if (gen_reg_2b == 1) {
                         intermediate_res[mem_map.at(ENC_Q_MEM)+sender_id] = computation_result; // Q
-                        MAC(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_K_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_K_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION); // K
+                        MAC<fx_3_x_t,fx_3_x_t>(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_K_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_K_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION); // K
                         gen_reg_2b = 2;
                     } else if (gen_reg_2b == 2) {
                         intermediate_res[mem_map.at(ENC_K_MEM)+sender_id] = computation_result; // K
-                        MAC(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_V_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_V_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION); // V
+                        MAC<fx_3_x_t,fx_3_x_t>(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_V_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_V_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION); // V
                         gen_reg_2b = 3;
                         word_rec_cnt.reset();
                     }
                 } else if ((compute_in_progress == false) && (current_inf_step == MLP_DENSE_1_STEP)) { // Only least significant MLP_DIM number of CiMs will perform this computation
                     if (id < MLP_DIM) {
-                        MAC(mem_map.at(ENC_MLP_IN_MEM), param_addr_map[ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_1_MLP_HEAD_DENSE_1_BIAS_OFF, MODEL_PARAM, SWISH_ACTIVATION);
+                        MAC<fx_3_x_t,fx_3_x_t>(mem_map.at(ENC_MLP_IN_MEM), param_addr_map[ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_1_MLP_HEAD_DENSE_1_BIAS_OFF, MODEL_PARAM, SWISH_ACTIVATION);
                         gen_reg_2b = 3;
                     }
                     word_rec_cnt.reset();
                 } else if ((compute_in_progress == false) && (current_inf_step == MLP_HEAD_DENSE_1_STEP) && (id >= MLP_DIM)) { // Only most significant MLP_DIM number of CiMs will perform this computation
-                    MAC(mem_map.at(MLP_HEAD_DENSE_1_IN_MEM), param_addr_map[ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_1_MLP_HEAD_DENSE_1_BIAS_OFF, MODEL_PARAM, SWISH_ACTIVATION);
+                    MAC<fx_3_x_t,fx_3_x_t>(mem_map.at(MLP_HEAD_DENSE_1_IN_MEM), param_addr_map[ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_1_MLP_HEAD_DENSE_1_BIAS_OFF, MODEL_PARAM, SWISH_ACTIVATION);
                     gen_reg_2b = 3;
                     word_rec_cnt.reset();
                 }
             } else if ((word_rec_cnt.get_cnt() >= MLP_DIM) && (current_inf_step == MLP_DENSE_2_AND_SUM_STEP || current_inf_step == MLP_HEAD_DENSE_2_STEP)) { // No more data to receive for this broadcast (for MLP's dense #2), start MACs
                 if ((compute_in_progress == false) && (current_inf_step == MLP_DENSE_2_AND_SUM_STEP)) {
                     if (gen_reg_2b == 0) {
-                        MAC(mem_map.at(ENC_MLP_DENSE2_IN_MEM), param_addr_map[ENC_MLP_DENSE_2_PARAMS].addr, MLP_DIM, param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_2_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION);
+                        MAC<fx_4_x_t,fx_4_x_t>(mem_map.at(ENC_MLP_DENSE2_IN_MEM), param_addr_map[ENC_MLP_DENSE_2_PARAMS].addr, MLP_DIM, param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_2_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION);
                         gen_reg_2b = 1;
                     } else if (gen_reg_2b == 1) {
                         intermediate_res[mem_map.at(ENC_MLP_OUT_MEM)+sender_id] = computation_result; // MLP Dense 2
-                        ADD(mem_map.at(ENC_MHSA_OUT_MEM) + sender_id, mem_map.at(ENC_MLP_OUT_MEM)+sender_id, INTERMEDIATE_RES); // Sum with encoder's input for residual connection (next step in inference pipeline, but do it now)
+                        ADD<fx_4_x_t>(mem_map.at(ENC_MHSA_OUT_MEM) + sender_id, mem_map.at(ENC_MLP_OUT_MEM)+sender_id, INTERMEDIATE_RES); // Sum with encoder's input for residual connection (next step in inference pipeline, but do it now)
                         gen_reg_2b = 3;
                         word_rec_cnt.reset();
                     }
                 } else if ((compute_in_progress == false) && (current_inf_step == MLP_HEAD_DENSE_2_STEP) && (id < NUM_SLEEP_STAGES)) {
-                    MAC(mem_map.at(MLP_HEAD_DENSE_2_IN_MEM), param_addr_map[MLP_HEAD_DENSE_2_PARAMS].addr, MLP_DIM, param_addr_map[SINGLE_PARAMS].addr+MLP_HEAD_DENSE_2_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION);
+                    MAC<fx_2_x_t,fx_2_x_t>(mem_map.at(MLP_HEAD_DENSE_2_IN_MEM), param_addr_map[MLP_HEAD_DENSE_2_PARAMS].addr, MLP_DIM, param_addr_map[SINGLE_PARAMS].addr+MLP_HEAD_DENSE_2_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION);
                     gen_reg_2b = 3;
                     word_rec_cnt.reset();
                 }
@@ -415,12 +415,12 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     uint16_t K_T_addr = mem_map.at(ENC_K_T_MEM) + gen_cnt_7b_2.get_cnt()*NUM_HEADS;
                     uint16_t Q_addr = mem_map.at(ENC_QK_T_IN_MEM); // Temporary storage location for Q's dense broadcast, so it remains the same for all heads
                     gen_reg_2b = 1;
-                    MAC(Q_addr, K_T_addr, NUM_HEADS, /*bias addr unused when NO_ACTIVATION*/ 0, INTERMEDIATE_RES, NO_ACTIVATION);
+                    MAC<fx_4_x_t,fx_4_x_t>(Q_addr, K_T_addr, NUM_HEADS, /*bias addr unused when NO_ACTIVATION*/ 0, INTERMEDIATE_RES, NO_ACTIVATION);
                     word_rec_cnt.reset();
                 }
             } else if (compute_in_progress == false && gen_reg_2b == 1) { // Done with this MAC
                 gen_reg_2b = 0;
-                computation_result = static_cast<float> (fix_pt_t { large_fp_t { computation_result } * large_fp_t { params[param_addr_map[SINGLE_PARAMS].addr+ENC_INV_SQRT_NUM_HEADS_OFF] } }); // Divide by sqrt(NUM_HEADS)
+                computation_result = static_cast<float>(static_cast<fx_5_x_t>(computation_result) * static_cast<fx_4_x_t>(params[param_addr_map[SINGLE_PARAMS].addr+ENC_INV_SQRT_NUM_HEADS_OFF])); // Divide by sqrt(NUM_HEADS)
                 intermediate_res[MAC_storage_addr] = computation_result;
                 gen_cnt_7b.inc();
                 if (gen_cnt_7b.get_cnt() == (NUM_PATCHES+1)) { // All MACs for one matrix are done
@@ -439,11 +439,14 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         }
         case MLP_HEAD_SOFTMAX_STEP:
             if ((compute_in_progress == false) && (gen_reg_2b == 0) && (id < NUM_SLEEP_STAGES)) {
-                SOFTMAX(/*input addr*/ mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM), /*len*/ NUM_SLEEP_STAGES);
+                SOFTMAX<fx_5_x_t>(/*input addr*/ mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM), /*len*/ NUM_SLEEP_STAGES);
                 gen_reg_2b = 1; // Just a signal to avoid coming here every time FSM runs
             } else if (compute_in_progress == false) {
-                if (id == 0) { cout << "CiM: Finished MLP head's Softmax" << endl; }
-                if (id == 0) { verify_computation(MLP_HEAD_SOFTMAX_VERIF, id, intermediate_res, mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM)); }
+                if (id == 0) {
+                    cout << "CiM: Finished MLP head's Softmax" << endl;
+                    verify_computation(MLP_HEAD_SOFTMAX_VERIF, id, intermediate_res, mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM));
+                    print_softmax_error(intermediate_res, mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM));
+                }
                 is_ready = false;
                 gen_cnt_7b.reset();
                 gen_reg_2b = 0;
@@ -454,7 +457,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
         case POST_SOFTMAX_DIVIDE_STEP:
             if ((compute_in_progress == false) && (gen_cnt_7b.get_cnt() < NUM_SLEEP_STAGES)) { // Divide all elements by NUM_SAMPLES_OUT_AVG
-                computation_result = static_cast<float> (large_fp_t { intermediate_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM)+gen_cnt_7b.get_cnt()] } * large_fp_t { 1.0f / NUM_SAMPLES_OUT_AVG }); // Multiply by 1/NUM_SAMPLES_OUT_AVG saves cycles on the ASIC vs dividing by NUM_SAMPLES_OUT_AVG
+                computation_result = static_cast<float> (comp_fx_t { intermediate_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM)+gen_cnt_7b.get_cnt()] } * comp_fx_t { 1.0f / NUM_SAMPLES_OUT_AVG }); // Multiply by 1/NUM_SAMPLES_OUT_AVG saves cycles on the ASIC vs dividing by NUM_SAMPLES_OUT_AVG
                 intermediate_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM)+gen_cnt_7b.get_cnt()] = computation_result;
                 intermediate_res[mem_map.at(SOFTMAX_AVG_SUM_MEM)+gen_cnt_7b.get_cnt()] = computation_result; // Copy there for averaging sum step
                 gen_cnt_7b.inc();
@@ -478,7 +481,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
                 intermediate_res[gen_cnt_7b.get_cnt()] = intermediate_res[addr_prev_softmax]; // Move previous softmax result to intermediate storage
                 intermediate_res[addr_softmax_divide_sum-1] = computation_result; // Save previous sum result
-                ADD(gen_cnt_7b.get_cnt(), addr_softmax_divide_sum, INTERMEDIATE_RES); // Sum with previous result
+                ADD<fx_1_x_t>(gen_cnt_7b.get_cnt(), addr_softmax_divide_sum, INTERMEDIATE_RES); // Sum with previous result
 
                 gen_cnt_7b.inc();
                 if (gen_cnt_7b.get_cnt() == NUM_SLEEP_STAGES) {
@@ -495,7 +498,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
         case POST_SOFTMAX_ARGMAX_STEP:
             if ((compute_in_progress == false) && (gen_reg_2b == 0)) {
-                ARGMAX(/*addr*/ mem_map.at(SOFTMAX_AVG_SUM_MEM), /*len*/ NUM_SLEEP_STAGES); // Start a ARGMAX in the background
+                ARGMAX(mem_map.at(SOFTMAX_AVG_SUM_MEM), NUM_SLEEP_STAGES); // Start a ARGMAX in the background
                 gen_reg_2b = 1;
             } else if ((compute_in_progress == false) && (gen_reg_2b == 1)) {
                 current_inf_step = RETIRE_SOFTMAX_STEP;
@@ -506,9 +509,9 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
         case RETIRE_SOFTMAX_STEP:
             if ((gen_cnt_7b.get_cnt() < NUM_SLEEP_STAGES) && (gen_cnt_7b_2.get_cnt() < (NUM_SAMPLES_OUT_AVG-2))) {
-                intermediate_res[/*2*/mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + gen_cnt_7b.get_cnt() + NUM_SLEEP_STAGES*(gen_cnt_7b_2.get_cnt()+1)] = intermediate_res[/*1*/mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + gen_cnt_7b.get_cnt() + NUM_SLEEP_STAGES*gen_cnt_7b_2.get_cnt()];
+                intermediate_res[mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + gen_cnt_7b.get_cnt() + NUM_SLEEP_STAGES*(gen_cnt_7b_2.get_cnt()+1)] = intermediate_res[mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + gen_cnt_7b.get_cnt() + NUM_SLEEP_STAGES*gen_cnt_7b_2.get_cnt()];
 
-                if (gen_cnt_7b_2.get_cnt() == 0) {intermediate_res[/*3*/mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + gen_cnt_7b.get_cnt()] = intermediate_res[/*4*/mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + gen_cnt_7b.get_cnt()];}
+                if (gen_cnt_7b_2.get_cnt() == 0) {intermediate_res[mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + gen_cnt_7b.get_cnt()] = intermediate_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + gen_cnt_7b.get_cnt()];}
 
                 gen_cnt_7b.inc();
                 if (gen_cnt_7b.get_cnt() == NUM_SLEEP_STAGES) {
@@ -531,13 +534,13 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         break;
 
         case ENC_MHSA_SOFTMAX_STEP:
-            if (gen_cnt_7b_2.get_cnt() < NUM_HEADS && (id < NUM_PATCHES+1)) {
+            if ((gen_cnt_7b_2.get_cnt() < NUM_HEADS) && (id < NUM_PATCHES+1)) {
                 if (compute_in_progress == false && gen_reg_2b == 1) { // Done with this matrix in the Z-stack
                     gen_cnt_7b_2.inc();
                     gen_reg_2b = 0;
                 } else if (compute_in_progress == false) {
                     uint16_t MAC_storage_addr = mem_map.at(ENC_PRE_SOFTMAX_MEM) + gen_cnt_7b_2.get_cnt()*(NUM_PATCHES+1); // Storage location of MAC result
-                    SOFTMAX(/*input addr*/ MAC_storage_addr, /*len*/ NUM_PATCHES+1);
+                    SOFTMAX<fx_6_x_t>(MAC_storage_addr,  NUM_PATCHES+1); //TODO: Choose fixed-point format carefully here... maybe it even makes sense to get a 64-word long memory of some storage between fx_6_x_t and comp_fx_t to avoid overflow of exp(x)...
                     gen_reg_2b = 1; // Just a signal to avoid coming here every time FSM runs
                 }
             } else { is_ready = true; }
@@ -554,7 +557,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case ENC_MHSA_MULT_V_STEP:
             if (word_rec_cnt.get_cnt() >= (NUM_PATCHES+1)) { // No more data to receive for this given row
                 if (IS_MY_MATRIX(gen_cnt_7b_2.get_cnt()-1) && (compute_in_progress == false)) { // Only if matrix being broadcast corresponds to mine (-1 because gen_cnt_7b_2 is incremented when the matrix starts broadcast)
-                    MAC(mem_map.at(ENC_V_MULT_IN_MEM), /*in2 addr*/ mem_map.at(ENC_V_MEM), NUM_PATCHES+1, /*bias addr unused when NO_ACTIVATION*/ 0, INTERMEDIATE_RES, NO_ACTIVATION);
+                    MAC<fx_1_x_t,fx_3_x_t>(mem_map.at(ENC_V_MULT_IN_MEM), /*in2 addr*/ mem_map.at(ENC_V_MEM), NUM_PATCHES+1, /*bias addr unused when NO_ACTIVATION*/ 0, INTERMEDIATE_RES, NO_ACTIVATION);
                     gen_reg_2b = 1; // Just a signal to avoid coming here every time FSM runs
                     if (id >= (NUM_CIM - NUM_HEADS) && sender_id == NUM_PATCHES) { is_ready = false; } // Need to explicitly stop master else it would send pistol_start and we would miss the last row of CiM #56-#63
                 }
@@ -581,11 +584,11 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP:
             if (word_rec_cnt.get_cnt() >= EMB_DEPTH) { // No more data to receive for this broadcast, start MACs
                 if ((compute_in_progress == false) && (gen_reg_2b == 0)){ // Start computation
-                    MAC(mem_map.at(ENC_DENSE_IN_MEM), param_addr_map[ENC_COMB_HEAD_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_COMB_HEAD_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION);
+                    MAC<fx_3_x_t,fx_3_x_t>(mem_map.at(ENC_DENSE_IN_MEM), param_addr_map[ENC_COMB_HEAD_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_COMB_HEAD_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION);
                     gen_reg_2b = 1; // Just a signal to avoid coming here every time FSM runs
                 } else if ((compute_in_progress == false) && (gen_reg_2b == 1)) {
                     intermediate_res[mem_map.at(ENC_MHSA_OUT_MEM) + sender_id] = computation_result;
-                    ADD(mem_map.at(ENC_MHSA_OUT_MEM) + sender_id, sender_id, INTERMEDIATE_RES); // Sum with encoder's input as a residual connection
+                    ADD<fx_4_x_t>(mem_map.at(ENC_MHSA_OUT_MEM) + sender_id, sender_id, INTERMEDIATE_RES); // Sum with encoder's input as a residual connection
                     gen_reg_2b = 2;
                     word_rec_cnt.reset();
                 }
@@ -638,22 +641,21 @@ void CiM::update_compute_process_cnt() {
     }
 }
 
+template <typename in1_storage_fx_t, typename in2_storage_fx_t>
 void CiM::MAC(uint16_t in1_start_addr, uint16_t in2_start_addr, uint16_t len, uint16_t bias_addr, INPUT_TYPE param_type, ACTIVATION activation) {
     /* Dot-product between two vectors with selectable activation function. */
     if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start MAC!"); }
+    if (param_type != INTERMEDIATE_RES && param_type != MODEL_PARAM) { throw runtime_error("Invalid parameter type for MAC!"); }
+
     compute_in_progress = true;
 
-    compute_temp_fp = large_fp_t { 0 }; // Accumulator
-    compute_temp_fp_2 = large_fp_t { params[bias_addr] };
+    compute_temp_fp = comp_fx_t { 0 }; // Accumulator
+    compute_temp_fp_2 = comp_fx_t { static_cast<in2_storage_fx_t>(params[bias_addr]) };
 
     // MAC
     for (uint16_t i = 0; i < len; i++) {
-        if (param_type == INTERMEDIATE_RES) { compute_temp_fp += large_fp_t { intermediate_res[in2_start_addr+i] } * large_fp_t { intermediate_res[in1_start_addr+i] }; }
-        else if (param_type == MODEL_PARAM) { compute_temp_fp += large_fp_t { params[in2_start_addr+i] } * large_fp_t { intermediate_res[in1_start_addr+i] }; }
-        else {
-            cout << "Received unknown parameter type " << param_type << endl;
-            exit(-1);
-        }
+        if (param_type == INTERMEDIATE_RES) { compute_temp_fp += comp_fx_t { static_cast<in2_storage_fx_t>(intermediate_res[in2_start_addr+i]) } * comp_fx_t { static_cast<in1_storage_fx_t>(intermediate_res[in1_start_addr+i]) }; }
+        else if (param_type == MODEL_PARAM) { compute_temp_fp += comp_fx_t { static_cast<in2_storage_fx_t>(params[in2_start_addr+i]) } * comp_fx_t { static_cast<in1_storage_fx_t>(intermediate_res[in1_start_addr+i]) }; }
     }
 
     // Activation
@@ -662,18 +664,19 @@ void CiM::MAC(uint16_t in1_start_addr, uint16_t in2_start_addr, uint16_t len, ui
         compute_temp_fp += compute_temp_fp_2;
         break;
     case SWISH_ACTIVATION:
-        if ((-compute_temp_fp - compute_temp_fp_2) < large_fp_t { 0 }) { _neg_exp_cnt++; }
+        if ((-compute_temp_fp - compute_temp_fp_2) < comp_fx_t {0.0}) { _neg_exp_cnt++; }
         _total_exp_cnt++;
         if ((-compute_temp_fp - compute_temp_fp_2) < _min_exp_input_arg) { _min_exp_input_arg = -compute_temp_fp - compute_temp_fp_2; }
         if ((-compute_temp_fp - compute_temp_fp_2) > _max_exp_input_arg) { _max_exp_input_arg = -compute_temp_fp - compute_temp_fp_2; }
         compute_temp_fp = compute_temp_fp + compute_temp_fp_2;
-        compute_temp_fp = compute_temp_fp / (large_fp_t { 1 } + EXP_APPROX(-compute_temp_fp));
+        compute_temp_fp = compute_temp_fp / (comp_fx_t {1.0} + EXP_APPROX(-compute_temp_fp));
         break;
     case NO_ACTIVATION:
     default:
         break;
     }
-    computation_result = static_cast<float> (fix_pt_t { compute_temp_fp });
+
+    computation_result = static_cast<float>(compute_temp_fp);
 }
 
 void CiM::DIV(uint16_t num_addr, uint16_t in2, INPUT_TYPE in2_type) {
@@ -681,54 +684,56 @@ void CiM::DIV(uint16_t num_addr, uint16_t in2, INPUT_TYPE in2_type) {
     if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start DIV!"); }
     compute_in_progress = true;
 
-    compute_temp_fp = large_fp_t { 0 };
+    compute_temp_fp = comp_fx_t { 0 };
 
-    if (in2_type == MODEL_PARAM) { compute_temp_fp = large_fp_t { intermediate_res[num_addr] } / large_fp_t { params[in2] }; } // Second input is a model parameter
-    else if (in2_type == IMMEDIATE_VAL) { compute_temp_fp = large_fp_t { intermediate_res[num_addr] } / large_fp_t { in2 }; } // Second input is an immediate value
-    else if (in2_type == ADC_INPUT) { compute_temp_fp = large_fp_t { intermediate_res[num_addr] / in2 }; } // Second input is a ADC input (16b)
+    if (in2_type == MODEL_PARAM) { compute_temp_fp = comp_fx_t { intermediate_res[num_addr] } / comp_fx_t { params[in2] }; } // Second input is a model parameter
+    else if (in2_type == IMMEDIATE_VAL) { compute_temp_fp = comp_fx_t { intermediate_res[num_addr] } / comp_fx_t { in2 }; } // Second input is an immediate value
+    else if (in2_type == ADC_INPUT) { compute_temp_fp = comp_fx_t { intermediate_res[num_addr] / in2 }; } // Second input is a ADC input (16b)
     else {
         cout << "Received unknown parameter type " << in2_type << endl;
         exit(-1);
     }
 
-    computation_result = static_cast<float> (fix_pt_t { compute_temp_fp });
+    computation_result = static_cast<float>(compute_temp_fp);
 }
 
+template <typename storage_fx_t>
 void CiM::ADD(uint16_t in1_addr, uint16_t in2_addr, INPUT_TYPE in2_type) {
     /* Return sum of two inputs. */
     if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start ADD!"); }
     compute_in_progress = true;
 
     // Get data as would be stored in memory
-    compute_temp_fp_2 = large_fp_t { intermediate_res[in1_addr] };
+    compute_temp_fp_2 = comp_fx_t { static_cast<storage_fx_t>(intermediate_res[in1_addr]) };
 
-    if (in2_type == INTERMEDIATE_RES) { compute_temp_fp = large_fp_t { intermediate_res[in2_addr] }; }
-    else if (in2_type == MODEL_PARAM) { compute_temp_fp = large_fp_t { params[in2_addr] }; }
+    if (in2_type == INTERMEDIATE_RES) { compute_temp_fp = comp_fx_t { static_cast<storage_fx_t>(intermediate_res[in2_addr]) }; }
+    else if (in2_type == MODEL_PARAM) { compute_temp_fp = comp_fx_t { static_cast<storage_fx_t>(params[in2_addr]) }; }
     else {
         cout << "Received unknown parameter type " << in2_type << endl;
         exit(-1);
     }
     compute_temp_fp += compute_temp_fp_2;
-    computation_result = static_cast<float> (fix_pt_t { compute_temp_fp });
+    computation_result = static_cast<float>(compute_temp_fp);
 }
 
+template <typename storage_fx_t>
 void CiM::LAYERNORM_1ST_HALF(uint16_t input_addr) {
     /* 1st half of Layer normalization of input. Input is in intermediate storage location. Note: All LayerNorms are done over a row of EMB_DEPTH length. */
     if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start LAYERNORM_1ST_HALF!"); }
     compute_in_progress = true; // Using this compute_in_progress signal as it will be used in the CiM (in ASIC, this compute is multi-cycle, so leaving this here for visibility)
 
-    compute_temp_fp = large_fp_t { 0.0f }; // Mean
-    compute_temp_fp_2 = large_fp_t { 0.0f }; // Variance
-    compute_temp_fp_3 = large_fp_t { 0.0f }; // Variance
+    compute_temp_fp = comp_fx_t { 0.0f }; // Mean
+    compute_temp_fp_2 = comp_fx_t { 0.0f }; // Variance
+    compute_temp_fp_3 = comp_fx_t { 0.0f }; // Variance
 
     // Mean
-    for (uint16_t i = 0; i < EMB_DEPTH; i++) { compute_temp_fp += large_fp_t { intermediate_res[input_addr+i] }; }
+    for (uint16_t i = 0; i < EMB_DEPTH; i++) { compute_temp_fp += comp_fx_t { static_cast<storage_fx_t>(intermediate_res[input_addr+i]) }; }
     compute_temp_fp /= EMB_DEPTH;
     verify_result(MEAN, static_cast<float> (compute_temp_fp), intermediate_res, input_addr, EMB_DEPTH, id);
 
     // Variance
     for (uint16_t i = 0; i < EMB_DEPTH; i++) {
-        compute_temp_fp_3 = large_fp_t { intermediate_res[input_addr+i] } - compute_temp_fp; // Subtract
+        compute_temp_fp_3 = comp_fx_t { static_cast<storage_fx_t>(intermediate_res[input_addr+i]) } - compute_temp_fp; // Subtract
         compute_temp_fp_3 *= compute_temp_fp_3; // Square
         compute_temp_fp_2 += compute_temp_fp_3; // Sum
     }
@@ -736,50 +741,54 @@ void CiM::LAYERNORM_1ST_HALF(uint16_t input_addr) {
     compute_temp_fp_2 /= EMB_DEPTH;
     verify_result(VARIANCE, static_cast<float> (compute_temp_fp_2), intermediate_res, input_addr, EMB_DEPTH, id);
     compute_temp_fp_2 = SQRT(compute_temp_fp_2); // Standard deviation
-    if (compute_temp_fp_2 == large_fp_t { 0.0f }) { compute_temp_fp_3 = POW(large_fp_t{2}, N_COMP); } // Avoid division by zero by saturating
-    else { compute_temp_fp_3 = large_fp_t {1.0f} / compute_temp_fp_2; } // Inverse standard deviation (so we can simply multiply instead of divide in the next step)
+    if (compute_temp_fp_2 == comp_fx_t { 0.0f }) { compute_temp_fp_3 = POW(comp_fx_t{2}, N_COMP); } // Avoid division by zero by saturating
+    else { compute_temp_fp_3 = comp_fx_t {1.0f} / compute_temp_fp_2; } // Inverse standard deviation (so we can simply multiply instead of divide in the next step)
 
-    // Partial normalization (excludes gamma and beta, which are applied in LAYERNORM_FINAL_NORM() since they need to be applied column-wise)
+    // Partial normalization (excludes gamma and beta, which are applied in LAYERNORM_2ND_HALF() since they need to be applied column-wise)
     for (uint16_t i = 0; i < EMB_DEPTH; i++) {
-        intermediate_res[input_addr+i] = static_cast<float> ( fix_pt_t { (large_fp_t { intermediate_res[input_addr+i] } - compute_temp_fp) * compute_temp_fp_3 } );
+        intermediate_res[input_addr+i] = static_cast<float>((comp_fx_t { static_cast<storage_fx_t>(intermediate_res[input_addr+i]) } - compute_temp_fp) * compute_temp_fp_3);
     }
 }
 
+template <typename storage_fx_t>
 void CiM::LAYERNORM_2ND_HALF(uint16_t input_addr, uint16_t gamma_addr, uint16_t beta_addr) {
     /* 2nd half of Layer normalization of input. This applies gamma and beta on each column. */
     if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start LAYERNORM_2ND_HALF!"); }
     compute_in_progress = true;
 
-    compute_temp_fp_2 = large_fp_t { params[gamma_addr] }; // Gamma
-    compute_temp_fp_3 = large_fp_t { params[beta_addr] }; // Beta
+    compute_temp_fp_2 = comp_fx_t { params[gamma_addr] }; // Gamma
+    compute_temp_fp_3 = comp_fx_t { params[beta_addr] }; // Beta
 
     // Normalize
     for (uint16_t i = 0; i < NUM_PATCHES+1; i++) {
-        compute_temp_fp = large_fp_t { intermediate_res[input_addr+i] };
-        intermediate_res[input_addr+i] = static_cast<float> ( fix_pt_t { (compute_temp_fp_2 * compute_temp_fp + compute_temp_fp_3) } );
+        compute_temp_fp = comp_fx_t { static_cast<storage_fx_t>(intermediate_res[input_addr+i]) };
+        intermediate_res[input_addr+i] = static_cast<float>(compute_temp_fp_2 * compute_temp_fp + compute_temp_fp_3);
     }
 }
 
+template <typename storage_fx_t>
 void CiM::SOFTMAX(uint16_t input_addr, uint16_t len) {
     /* Softmax of input (performed in-place). Input is in intermediate storage location. Note: All Softmax are done over a row of len length. */
     if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start SOFTMAX!"); }
     compute_in_progress = true;
 
-    compute_temp_fp = large_fp_t { 0 };
+    compute_temp_fp = comp_fx_t { 0.0 };
+    compute_temp_fp_2 = comp_fx_t { 0.0 };
 
     // Exponentiate all elements and sum
     for (uint16_t i = 0; i < len; ++i) {
-        if (large_fp_t { intermediate_res[input_addr+i] } < large_fp_t { 0 }) { _neg_exp_cnt++; }
-        if (large_fp_t { intermediate_res[input_addr+i] } < _min_exp_input_arg) { _min_exp_input_arg = large_fp_t { intermediate_res[input_addr+i] }; }
-        if (large_fp_t { intermediate_res[input_addr+i] } > _max_exp_input_arg) { _max_exp_input_arg = large_fp_t { intermediate_res[input_addr+i] }; }
+        if (comp_fx_t { intermediate_res[input_addr+i] } < comp_fx_t { 0.0 }) { _neg_exp_cnt++; }
+        if (comp_fx_t { intermediate_res[input_addr+i] } < _min_exp_input_arg) { _min_exp_input_arg = comp_fx_t { intermediate_res[input_addr+i] }; }
+        if (comp_fx_t { intermediate_res[input_addr+i] } > _max_exp_input_arg) { _max_exp_input_arg = comp_fx_t { intermediate_res[input_addr+i] }; }
         _total_exp_cnt++;
-        intermediate_res[input_addr+i] = static_cast<float> ( fix_pt_t { EXP_APPROX(large_fp_t { intermediate_res[input_addr+i] }) });
-        compute_temp_fp += large_fp_t { intermediate_res[input_addr+i] };
+        compute_temp_fp_2 = EXP_APPROX(comp_fx_t { static_cast<storage_fx_t>(intermediate_res[input_addr+i]) });
+        intermediate_res[input_addr+i] = static_cast<float> (compute_temp_fp_2);
+        compute_temp_fp += compute_temp_fp_2;
     }
 
     // Normalize
     for (uint16_t i = 0; i < len; ++i) {
-        intermediate_res[input_addr+i] = static_cast<float> ( fix_pt_t { (large_fp_t { intermediate_res[input_addr+i] } / compute_temp_fp ) });
+        intermediate_res[input_addr+i] = static_cast<float>((comp_fx_t { static_cast<storage_fx_t>(intermediate_res[input_addr+i]) } / compute_temp_fp));
     }
 }
 
@@ -788,60 +797,60 @@ void CiM::ARGMAX(uint16_t input_addr, uint16_t len) {
     if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start MAX!"); }
     compute_in_progress = true;
 
-    compute_temp_fp_3 = large_fp_t { 0 }; // Index of maximum element
-    compute_temp_fp = large_fp_t { intermediate_res[input_addr] }; // Value of maximum element
+    compute_temp_fp_3 = comp_fx_t { 0 }; // Index of maximum element
+    compute_temp_fp = comp_fx_t { intermediate_res[input_addr] }; // Value of maximum element
 
     for (uint16_t i = 1; i < len; i++) {
-        compute_temp_fp_2 = large_fp_t { intermediate_res[input_addr+i] };
+        compute_temp_fp_2 = comp_fx_t { intermediate_res[input_addr+i] };
         if (compute_temp_fp_2 > compute_temp_fp) {
-            compute_temp_fp_3 = large_fp_t { i };
+            compute_temp_fp_3 = comp_fx_t { i };
             compute_temp_fp = compute_temp_fp_2;
         }
     }
 
-    computation_result = static_cast<float> (fix_pt_t { compute_temp_fp_3 });
+    computation_result = static_cast<float>(compute_temp_fp_3);
 }
 
-large_fp_t CiM::EXP_APPROX(large_fp_t input) {
+comp_fx_t CiM::EXP_APPROX(comp_fx_t input) {
     /* Approximation of exp(x) as used in the ASIC
        Uses the identy exp(x) = 2^(x/ln(2)), float/int exponent splitting and Taylor approximation of the fractional part (first 4 terms).
     */
-    large_fp_t ln_2 = large_fp_t{0.69314718056}; //ln(2)
-    large_fp_t input_mapped = input/ln_2;
-    large_fp_t input_mapped_fract = input/ln_2 - FLOOR(input/ln_2);
+    comp_fx_t ln_2 = comp_fx_t{0.69314718056}; //ln(2)
+    comp_fx_t input_mapped = input/ln_2;
+    comp_fx_t input_mapped_fract = input/ln_2 - FLOOR(input/ln_2);
 
     // Taylor approximation of the fractional part
-    large_fp_t exp_approx_fract = 1 + ln_2*input_mapped_fract + POW(ln_2,2)/large_fp_t{2}*POW(input_mapped_fract,2) + POW(ln_2,3)/large_fp_t{6}*POW(input_mapped_fract,3);
+    comp_fx_t exp_approx_fract = 1 + ln_2*input_mapped_fract + POW(ln_2,2)/comp_fx_t{2}*POW(input_mapped_fract,2) + POW(ln_2,3)/comp_fx_t{6}*POW(input_mapped_fract,3);
 
     // Integer part
-    large_fp_t exp_approx_int = POW(large_fp_t{2}, static_cast<int>(FLOOR(input_mapped)));
-    
+    comp_fx_t exp_approx_int = POW(comp_fx_t{2}, static_cast<int>(FLOOR(input_mapped)));
+
     return exp_approx_int * exp_approx_fract;
 }
 
-large_fp_t CiM::SQRT(large_fp_t input) {
+comp_fx_t CiM::SQRT(comp_fx_t input) {
     // Approximate sqrt. Convert to float, use standard sqrt() function and convert back to fixed-point.
-    if (input <= 0) { return large_fp_t{0}; }
+    if (input <= 0) { return comp_fx_t{0}; }
 
-    return large_fp_t { sqrt(static_cast<float>(input)) };
+    return comp_fx_t { sqrt(static_cast<float>(input)) };
 }
 
-large_fp_t CiM::POW(large_fp_t base, int exp) {
+comp_fx_t CiM::POW(comp_fx_t base, int exp) {
     // Implements base^exp, where exp is an integer.
-    if (exp == 0) { return large_fp_t{1}; }
-    
-    large_fp_t temp = base;
+    if (exp == 0) { return comp_fx_t{1}; }
+
+    comp_fx_t temp = base;
     for (int i=1; i<std::abs(exp); i++){
         temp *= base;
     }
 
     if (exp > 0) { return temp; }
-    else { return large_fp_t{1}/temp; }
+    else { return comp_fx_t{1}/temp; }
 }
 
-large_fp_t CiM::FLOOR(large_fp_t input) {
+comp_fx_t CiM::FLOOR(comp_fx_t input) {
     /* Performs floor() on fixed-point input */
-    return large_fp_t { floor(static_cast<float>(input)) };
+    return comp_fx_t { floor(static_cast<float>(input)) };
 }
 
 bool CiM::get_is_ready() {

@@ -26,8 +26,8 @@
                      "--class_weights", "1", "1", "1", "1", "1", "--historical_lookback_DNN_depth=0", "--num_runs=1", "--out_filter_type=pre_argmax", "--enable_positional_embedding", "--patch_length=64",
                      "--training_set_target_count", "4600", "4600", "4600", "4600", "--dataset_resample_algo=ADASYN", "--optimizer=Adam", "--filter_self_reset_threshold=-1", "--dropout_rate_percent=30",
                      "--input_dataset=/Users/tristan/Developer/engsci-thesis/python_prototype/data/SS3_EDF_Tensorized_both_light_deep_combine-stg_30-0s_128Hz_notch_60Hz_15b_offset_0_3Hz-100Hz_bandpass",
-                     "--k_fold_val_results_fp=${workspaceFolder}/python_prototype/results/k_fold_val_results/val_1", "--save_model", "--enable_input_rescale", "--enc_2nd_res_conn_arg=out1"]
-                    //  "--reference_night_fp=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF/01-03-0019 PSG.edf"]
+                     "--k_fold_val_results_fp=${workspaceFolder}/python_prototype/results/k_fold_val_results/val_1", "--save_model", "--enable_input_rescale", "--enc_2nd_res_conn_arg=out1",
+                     "--reference_night_fp=/Users/tristan/Developer/engsci-thesis/python_prototype/data/01-03-0019 PSG.edf"]
                      // "--enable_input_rescale"] "--output_edgetpu_data", "--save_model"
         },
         {
@@ -49,8 +49,8 @@
             "request": "launch",
             "program": "${workspaceFolder}/python_prototype/utilities.py",
             "console": "integratedTerminal",
-            "justMyCode": false,
             "python": "${workspaceFolder}/python_prototype/asic_sleep_trans/bin/python",
+            "justMyCode": true,
             "args": []
         },
         {

@@ -234,27 +234,13 @@ def log_error_and_exit(exception, manual_description:str="", additional_msg:str=
         f.write(additional_msg)
     exit()
 
-def get_weight_distribution(model:tf.keras.Model) -> None:
-    """
-    Plots the distribution of weights in a given model.
-    """
-    os.makedirs("./scratch", exist_ok=True)
-    current_dir = os.path.dirname(os.path.realpath(__file__))
-    relative_path = os.path.join(current_dir, "scratch")
-
-    for layer in model.layers:
-        # Plot distribution of weights
-        if len(layer.get_weights()) > 0:
-            weights = layer.get_weights()[0]
-            weights = weights.flatten()
-            plt.clf() # Clear the current figure
-            plt.hist(list(weights), bins=100)
-            plt.title(f"Layer {layer.name}")
-
-            image_fp = os.path.join(relative_path, f"{layer.name}.png")
-            plt.savefig(image_fp)
-        else:
-            print(f"No weights found for layer {layer.name}")
+def plot_distribution(data, title:str, output_dir:str) -> None:
+    hist, bins = np.histogram(data.flatten(), bins=1000, density=True)
+    plt.figure(figsize=(10, 6))
+    plt.bar(bins[:-1], hist, width=(bins[1]-bins[0]))
+    plt.title(title)
+    plt.grid(True)
+    plt.savefig(f"{output_dir}/{title}.png")
 
 def count_instances_per_class(input, num_classes) -> list:
     count = [0 for _ in range(num_classes)]
@@ -383,6 +369,7 @@ def edf_to_h5(edf_fp:str, h5_filename:str, sleep_map_name:str, channel:str, clip
     for i in range(len(resample)):
         resample[i] += 2**15 # Offset by 15b
 
+    if not os.path.exists(os.path.dirname(h5_filename)): os.makedirs(os.path.dirname(h5_filename))
     with h5py.File(h5_filename, 'w') as file:
         if (full_night == True):
             length = min(len(resample), len(sleep_stage)) - 1
@@ -425,6 +412,7 @@ def print_stats_from_h5(h5_fp:str) -> None:
     print(f'Total prunable params (abs. < {PRUNE_THRESHOLD}) = {global_prunable_params/global_total_params*100:.2f}%')
 
 def run_accuracy_study(model_fp:str, eeg_fp:str, results_fp:str, num_clips:int):
+    tf.config.run_functions_eagerly(True) # Allows step-by-step debugging of tf.functions
     model = tf.keras.models.load_model(model_fp, custom_objects={"CustomSchedule": CustomSchedule})
 
     data = {'signals_val': tf.Tensor(), 'sleep_stages_val': tf.Tensor()}
@@ -461,8 +449,23 @@ def run_accuracy_study(model_fp:str, eeg_fp:str, results_fp:str, num_clips:int):
     
     print("Done computing results for accuracy study.")
 
+def plot_weight_distribution(model, output_dir:str):
+    # Load saved model (if argument is string)
+    if (isinstance(model, str)):
+        model = tf.keras.models.load_model(model, custom_objects={"CustomSchedule": CustomSchedule})
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    for layer in model.layers:
+        weights = layer.get_weights()
+        for i in range(len(weights)):
+            plot_distribution(data=np.array(weights[i]), title=f"{layer.name}_{i}", output_dir=output_dir)
+
 def main():
-    run_accuracy_study(model_fp="asic/fixed_point_accuracy_study/model.tf", eeg_fp="asic/fixed_point_accuracy_study/eeg.h5", results_fp="asic/fixed_point_accuracy_study/results_test_1.csv", num_clips=2000)
+    plot_weight_distribution(model="asic/fixed_point_accuracy_study/model.tf", output_dir="python_prototype/reference_data/weights")
+    # run_accuracy_study(model_fp="asic/fixed_point_accuracy_study/model.tf", eeg_fp="asic/fixed_point_accuracy_study/eeg.h5", results_fp="asic/fixed_point_accuracy_study/accuracy_study_results.csv", num_clips=1000)
+    # edf_to_h5(edf_fp="data/PSG1.edf", h5_filename="data/PSG1.h5", sleep_map_name="no_combine", channel="EEG Cz-LER", clip_length_s=30, full_night=False, sampling_freq_hz=128)
+    pass
 
 if __name__ == "__main__":
     main()

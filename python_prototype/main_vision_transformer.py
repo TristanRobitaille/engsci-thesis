@@ -32,7 +32,7 @@ RANDOM_SEED = 42
 RESAMPLE_TRAINING_DATASET = False
 SHUFFLE_TRAINING_CLIPS = True
 NUM_CLIPS_PER_FILE_EDGETPU = 500 # 500 is only valid for 256Hz
-K_FOLD_OUTPUT_TO_FILE = True # If true, will write validation accuracy to a CSV for k-fold sweep validation
+K_FOLD_OUTPUT_TO_FILE = False # If true, will write validation accuracy to a CSV for k-fold sweep validation
 K_FOLD_SETS_MANUAL_PRUNE = [4]
 
 AVAILABLE_OPTIMIZERS = ["Adam", "AdamW"]
@@ -706,13 +706,17 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
         output = tf.matmul(weights, value) #output = (batch_size, num_heads, num_patches+1, embedding_depth/num_heads)
 
         if OUTPUT_CSV:
-            for i in range(self.num_heads):
-                np.savetxt(f"python_prototype/reference_data/enc_scaled_score_{i}.csv", scaled_score[0][i], delimiter=",")
-                np.savetxt(f"python_prototype/reference_data/enc_softmax_{i}.csv", weights[0][i], delimiter=",")
-
             output_list = tf.unstack(output[0], axis=0)
             output_stack = tf.concat(output_list, axis=1)
+            for i in range(self.num_heads):
+                np.savetxt(f"python_prototype/reference_data/enc_mhsa_QK_T_{i}.csv", score[0][i], delimiter=",")
+                np.savetxt(f"python_prototype/reference_data/enc_mhsa_scaled_score_{i}.csv", scaled_score[0][i], delimiter=",")
+                np.savetxt(f"python_prototype/reference_data/enc_mhsa_softmax_{i}.csv", weights[0][i], delimiter=",")
+                utilities.plot_distribution(data=scaled_score[0][i].numpy(), title=f"enc_mhsa_scaled_score_{i}", output_dir=f"python_prototype/reference_data")
+                utilities.plot_distribution(data=weights[0][i].numpy(), title=f"enc_mhsa_softmax_{i}", output_dir=f"python_prototype/reference_data")
+
             np.savetxt(f"python_prototype/reference_data/enc_softmax_mult_V.csv", output_stack, delimiter=",")
+            utilities.plot_distribution(data=output_stack.numpy(), title=f"enc_mhsa_softmax_mult_V", output_dir=f"python_prototype/reference_data")
 
         return output, weights
 
@@ -727,9 +731,13 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
         query = self.query_dense(inputs) #query = (batch_size, num_patches+1, embedding_depth)
         key = self.key_dense(inputs) #key = (batch_size, num_patches+1, embedding_depth)
         value = self.value_dense(inputs) #value = (batch_size, num_patches+1, embedding_depth)
-        if OUTPUT_CSV: np.savetxt("python_prototype/reference_data/enc_Q_dense.csv", query[0], delimiter=",")
-        if OUTPUT_CSV: np.savetxt("python_prototype/reference_data/enc_K_dense.csv", key[0], delimiter=",")
-        if OUTPUT_CSV: np.savetxt("python_prototype/reference_data/enc_V_dense.csv", value[0], delimiter=",")
+        if OUTPUT_CSV:
+            np.savetxt("python_prototype/reference_data/enc_Q_dense.csv", query[0], delimiter=",")
+            np.savetxt("python_prototype/reference_data/enc_K_dense.csv", key[0], delimiter=",")
+            np.savetxt("python_prototype/reference_data/enc_V_dense.csv", value[0], delimiter=",")
+            utilities.plot_distribution(data=query[0].numpy(), title=f"enc_Q_dense", output_dir=f"python_prototype/reference_data")
+            utilities.plot_distribution(data=key[0].numpy(), title=f"enc_K_dense", output_dir=f"python_prototype/reference_data")
+            utilities.plot_distribution(data=value[0].numpy(), title=f"enc_V_dense", output_dir=f"python_prototype/reference_data")
 
         query = self.separate_heads(query, batch_size) #query = (batch_size, num_heads, num_patches+1, embedding_depth/num_heads)
         key = self.separate_heads(key, batch_size) #key = (batch_size, num_heads, num_patches+1, embedding_depth/num_heads)
@@ -804,18 +812,14 @@ class Encoder(tf.keras.layers.Layer):
 
     def call(self, inputs, training):
         inputs_norm = self.layernorm1(inputs) #inputs_norm = (batch_size, num_patches+1, embedding_depth)
-        if OUTPUT_CSV: np.savetxt("python_prototype/reference_data/enc_layernorm1.csv", inputs_norm[0], delimiter=",")
         attn_output = self.mhsa(inputs_norm) #attn_output = (batch_size, num_patches+1, embedding_depth)
         attn_output = self.dropout1(attn_output, training=training) #attn_output = (batch_size, num_patches+1, embedding_depth)
 
         if (self.enc_2nd_res_conn_arg == "no_res_sum_at_all"): out1 = attn_output
         else : out1 = attn_output + inputs #out1 = (batch_size, num_patches+1, embedding_depth)
-        if OUTPUT_CSV: np.savetxt("python_prototype/reference_data/enc_res_sum_1.csv", out1[0], delimiter=",")
         out1_norm = self.layernorm2(out1) #out1_norm = (batch_size, num_patches+1, embedding_depth)
-        if OUTPUT_CSV: np.savetxt("python_prototype/reference_data/enc_layernorm2.csv", out1_norm[0], delimiter=",")
 
         mlp = self.mlp_dense1(out1_norm) #mlp = (batch_size, num_patches+1, mlp_dim)
-        if OUTPUT_CSV: np.savetxt("python_prototype/reference_data/enc_mlp_dense1.csv", mlp[0], delimiter=",")
         mlp = self.mlp_dropout1(mlp, training=training) #mlp = (batch_size, num_patches+1, mlp_dim)
         mlp_output = self.mlp_dense2(mlp) #mlp_output = (batch_size, num_patches+1, embedding_depth)
         mlp_output = self.mlp_dropout2(mlp_output, training=training) #mlp_output = (batch_size, num_patches+1, embedding_depth)
@@ -824,7 +828,23 @@ class Encoder(tf.keras.layers.Layer):
         if (self.enc_2nd_res_conn_arg == "out1"): enc_out = mlp_output + out1
         elif (self.enc_2nd_res_conn_arg == "inputs"): enc_out = mlp_output + inputs
         elif ((self.enc_2nd_res_conn_arg == "none") or (self.enc_2nd_res_conn_arg == "no_res_sum_at_all")): enc_out = mlp_output
-        if OUTPUT_CSV: np.savetxt("python_prototype/reference_data/enc_output.csv", enc_out[0], delimiter=",")
+        
+        if OUTPUT_CSV: 
+            np.savetxt("python_prototype/reference_data/enc_layernorm1.csv", inputs_norm[0], delimiter=",")
+            np.savetxt("python_prototype/reference_data/enc_res_sum_1.csv", out1[0], delimiter=",")
+            np.savetxt("python_prototype/reference_data/enc_layernorm2.csv", out1_norm[0], delimiter=",")
+            np.savetxt("python_prototype/reference_data/enc_mlp_dense1.csv", mlp[0], delimiter=",")
+            np.savetxt("python_prototype/reference_data/enc_mlp_dense2.csv", mlp_output[0], delimiter=",")
+            np.savetxt("python_prototype/reference_data/enc_output.csv", enc_out[0], delimiter=",")
+            np.savetxt("python_prototype/reference_data/enc_mhsa_output.csv", attn_output[0], delimiter=",")
+            utilities.plot_distribution(data=inputs_norm[0].numpy(), title=f"enc_layernorm1", output_dir=f"python_prototype/reference_data")
+            utilities.plot_distribution(data=out1[0].numpy(), title=f"enc_res_sum_1", output_dir=f"python_prototype/reference_data")
+            utilities.plot_distribution(data=out1_norm[0].numpy(), title=f"enc_layernorm2", output_dir=f"python_prototype/reference_data")
+            utilities.plot_distribution(data=mlp[0].numpy(), title=f"enc_mlp_dense1", output_dir=f"python_prototype/reference_data")
+            utilities.plot_distribution(data=mlp_output[0].numpy(), title=f"enc_mlp_dense2", output_dir=f"python_prototype/reference_data")
+            utilities.plot_distribution(data=enc_out[0].numpy(), title=f"enc_output", output_dir=f"python_prototype/reference_data")
+            utilities.plot_distribution(data=attn_output[0].numpy(), title=f"enc_mhsa_output", output_dir=f"python_prototype/reference_data")
+            
         return enc_out
 
     def calculate_ops(self):
@@ -926,16 +946,22 @@ class VisionTransformer(tf.keras.Model):
 
         # Linear projection
         clip = self.patch_projection(patches) #clip = (batch_size, num_patches, embedding_depth)
-        if OUTPUT_CSV: np.savetxt("python_prototype/reference_data/patch_proj.csv", clip[0], delimiter=",")
+        if OUTPUT_CSV:
+            np.savetxt("python_prototype/reference_data/patch_proj.csv", clip[0], delimiter=",")
+            utilities.plot_distribution(data=clip[0].numpy(), title=f"patch_proj", output_dir=f"python_prototype/reference_data")
 
         # Classification token
         if self.use_class_embedding:
             class_embedding = tf.broadcast_to(self.class_embedding, [batch_size, 1, self.embedding_depth]) #class_embedding = (batch_size, 1, embedding_depth)
             clip = tf.concat([class_embedding, clip], axis=1) #clip = (batch_size, num_patches+1, embedding_depth)
-        if OUTPUT_CSV: np.savetxt("python_prototype/reference_data/class_emb.csv", clip[0], delimiter=",")
+        if OUTPUT_CSV:
+            np.savetxt("python_prototype/reference_data/class_emb.csv", clip[0], delimiter=",")
+            utilities.plot_distribution(data=clip[0].numpy(), title=f"class_emb", output_dir=f"python_prototype/reference_data")
 
         if self.enable_positional_embedding: clip = clip + self.positional_embedding #clip = (batch_size, num_patches+1, embedding_depth)
-        if OUTPUT_CSV: np.savetxt("python_prototype/reference_data/pos_emb.csv", clip[0], delimiter=",")
+        if OUTPUT_CSV:
+            np.savetxt("python_prototype/reference_data/pos_emb.csv", clip[0], delimiter=",")
+            utilities.plot_distribution(data=clip[0].numpy(), title=f"pos_emb", output_dir=f"python_prototype/reference_data")
 
         # Go through encoder
         for layer in self.encoder_layers:
@@ -943,11 +969,16 @@ class VisionTransformer(tf.keras.Model):
 
         # Classify with first token
         mlp_head_layernorm = self.mlp_head_layernorm(clip[:, 0]) #mlp_head_layernorm = (batch_size, embedding_depth)
-        if OUTPUT_CSV: np.savetxt("python_prototype/reference_data/mlp_head_layernorm.csv", mlp_head_layernorm[0], delimiter=",")
         mlp_head = self.mlp_head(mlp_head_layernorm) # Select the first row of each batch's encoder output. prediction = (batch_size, sleep_map.get_num_stages()+1)
-        if OUTPUT_CSV: np.savetxt("python_prototype/reference_data/mlp_head_out.csv", mlp_head[0], delimiter=",")
         prediction = self.mlp_head_softmax(mlp_head) #prediction = (batch_size, sleep_map.get_num_stages()+1)
-        if OUTPUT_CSV: np.savetxt("python_prototype/reference_data/mlp_head_softmax.csv", prediction[0], delimiter=",")
+        
+        if OUTPUT_CSV:
+            np.savetxt("python_prototype/reference_data/mlp_head_layernorm.csv", mlp_head_layernorm[0], delimiter=",")
+            np.savetxt("python_prototype/reference_data/mlp_head_out.csv", mlp_head[0], delimiter=",")
+            np.savetxt("python_prototype/reference_data/mlp_head_softmax.csv", prediction[0], delimiter=",")
+            utilities.plot_distribution(data=mlp_head_layernorm[0].numpy(), title=f"mlp_head_layernorm", output_dir=f"python_prototype/reference_data")
+            utilities.plot_distribution(data=mlp_head[0].numpy(), title=f"mlp_head_out", output_dir=f"python_prototype/reference_data")
+            utilities.plot_distribution(data=prediction[0].numpy(), title=f"mlp_head_softmax", output_dir=f"python_prototype/reference_data")
 
         if self.historical_lookback_DNN:
             historical_lookback = tf.cast(historical_lookback, tf.uint8)
@@ -1119,7 +1150,9 @@ def main():
         OUTPUT_CSV = True
         tf.config.run_functions_eagerly(True) # Allows step-by-step debugging of tf.functions
         ref_data = utilities.edf_to_h5(edf_fp=args.reference_night_fp, channel="EEG Cz-LER", sleep_map_name="both_light_deep_combine", clip_length_s=30, sampling_freq_hz=128, full_night=True, h5_filename="python_prototype/reference_data/eeg.h5")
+        all_models["tf"].load_weights("asic/fixed_point_accuracy_study/model_weights.h5")  # Load the weights from the trained, golden model
         all_models["tf"](ref_data[0], training=False) # Run with the first clip
+
         shutil.copy2(base_out_fp+"/run_1/models/model.tflite", "python_prototype/reference_data/model.tflite")
         shutil.copy2(base_out_fp+"/run_1/models/model_quant.tflite", "python_prototype/reference_data/model_quant.tflite")
         shutil.copy2(base_out_fp+"/run_1/models/model_weights.h5", "python_prototype/reference_data/model_weights.h5")

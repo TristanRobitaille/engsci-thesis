@@ -157,9 +157,9 @@ class CiM {
         uint16_t data_len_reg; // General-purpose register used to record len of data sent/received on the bus
         uint16_t _compute_process_cnt; // [Not in ASIC] Counter used to track the progress of the current computation (used to simulate the delay in the computation to match the real hardware)
         uint16_t _num_compute_done; // [Not in ASIC] Counter used to track the number of computations done in a given inference step
-        large_fp_t compute_temp_fp; // Used to store intermediate results of the computation
-        large_fp_t compute_temp_fp_2; // Used to store intermediate results of the computation
-        large_fp_t compute_temp_fp_3; // Used to store intermediate results of the computation
+        comp_fx_t compute_temp_fp; // Used to store intermediate results of the computation
+        comp_fx_t compute_temp_fp_2; // Used to store intermediate results of the computation
+        comp_fx_t compute_temp_fp_3; // Used to store intermediate results of the computation
         float computation_result; // Used to store the result of the computation
         float params[CIM_PARAMS_STORAGE_SIZE_NUM_ELEM];
         float intermediate_res[CIM_INT_RES_SIZE_NUM_ELEM];
@@ -169,29 +169,35 @@ class CiM {
         Counter gen_cnt_7b;
         Counter gen_cnt_7b_2;
         Counter word_rec_cnt; // Tracks the # of words received from the bus that are relevant to me
-        Counter word_snt_cnt; // Tracks the # of s sent to the bus
+        Counter word_snt_cnt; // Tracks the # of words sent to the bus
 
         // Metrics
         uint32_t _neg_exp_cnt; // [Not in ASIC] Track # of exponentials that have a negative argument
         uint32_t _total_exp_cnt; // [Not in ASIC] Track the # of exponentials performed
-        large_fp_t _max_exp_input_arg; // [Not in ASIC] Track the maximum input argument to the exponential
-        large_fp_t _min_exp_input_arg; // [Not in ASIC] Track the minimum input argument to the exponential
+        comp_fx_t _max_exp_input_arg; // [Not in ASIC] Track the maximum input argument to the exponential
+        comp_fx_t _min_exp_input_arg; // [Not in ASIC] Track the minimum input argument to the exponential
 
         void update_compute_process_cnt();
-        void ADD(uint16_t in1_addr, uint16_t in2_addr, INPUT_TYPE in2_type);
         void DIV(uint16_t num_addr, uint16_t in2, INPUT_TYPE in2_type);
-        void LAYERNORM_1ST_HALF(uint16_t input_addr);
-        void LAYERNORM_2ND_HALF(uint16_t input_addr, uint16_t gamma_addr, uint16_t beta_addr);
-        void MAC(uint16_t in1_start_addr, uint16_t in2_start_addr, uint16_t len, uint16_t bias_addr, INPUT_TYPE param_type, ACTIVATION activation);
-        void SOFTMAX(uint16_t input_addr, uint16_t len);
         void ARGMAX(uint16_t input_addr, uint16_t len);
-        large_fp_t EXP_APPROX(large_fp_t input);
-        large_fp_t SQRT(large_fp_t input);
-        large_fp_t FLOOR(large_fp_t input);
-        large_fp_t POW(large_fp_t base, int exp);
+        comp_fx_t EXP_APPROX(comp_fx_t input);
+        comp_fx_t SQRT(comp_fx_t input);
+        comp_fx_t FLOOR(comp_fx_t input);
+        comp_fx_t POW(comp_fx_t base, int exp);
         void update_state(STATE new_state);
         void load_previous_softmax();
         void overflow_check();
+
+        template <typename storage_fx_t>
+        void SOFTMAX(uint16_t input_addr, uint16_t len);
+        template <typename storage_fx_t>
+        void ADD(uint16_t in1_addr, uint16_t in2_addr, INPUT_TYPE in2_type);
+        template <typename storage_fx_t>
+        void LAYERNORM_1ST_HALF(uint16_t input_addr);
+        template <typename in1_storage_fx_t, typename in2_storage_fx_t>
+        void MAC(uint16_t in1_start_addr, uint16_t in2_start_addr, uint16_t len, uint16_t bias_addr, INPUT_TYPE param_type, ACTIVATION activation);
+        template <typename storage_fx_t>
+        void LAYERNORM_2ND_HALF(uint16_t input_addr, uint16_t gamma_addr, uint16_t beta_addr);
 
     public:
         CiM() : id(-1), gen_cnt_7b(7), gen_cnt_7b_2(7), word_rec_cnt(7), word_snt_cnt(7) {}
