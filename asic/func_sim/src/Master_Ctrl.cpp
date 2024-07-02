@@ -22,7 +22,7 @@ int Master_Ctrl::reset(uint32_t clip_index){
     gen_cnt_7b_3.reset();
     gen_bit = false;
     all_cims_ready = true;
-    inferred_sleep_stage = 0;
+    softmax_max_index = 0;
     high_level_inf_step = PRE_LAYERNORM_1_TRANS_STEP;
     eeg = eeg_ds[clip_index].begin(); // Update current clip
     state = IDLE;
@@ -101,7 +101,7 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
         case SOFTMAX_AVERAGING:
             if (bus->get_inst().op == INFERENCE_RESULT_OP && all_cims_ready == true) {
                 sys_state = EVERYTHING_FINISHED;
-                inferred_sleep_stage = static_cast<uint32_t>(bus->get_inst().data[0]);
+                softmax_max_index = cims[0].get_softmax_max_index();
                 cout << ">----- MASTER CTRL STATS -----<" << endl;
                 cout << "Min. model parameter: " << _min_param_val << endl;
                 cout << "Max. model parameter: " << _max_param_val << endl;
@@ -408,8 +408,8 @@ int Master_Ctrl::prepare_for_broadcast(broadcast_op_info op_info, Bus* bus) {
     return 0;
 }
 
-uint32_t Master_Ctrl::get_inferred_sleep_stage() {
-    return inferred_sleep_stage;
+uint32_t Master_Ctrl::get_softmax_max_index() {
+    return softmax_max_index;
 }
 
 bool Master_Ctrl::get_are_params_loaded() {

@@ -48,7 +48,7 @@ void verify_computation(COMPUTE_VERIFICATION_STEP cim_state, uint8_t id, float* 
     } else if (cim_state == POST_SOFTMAX_AVG_VERIF) {
         std::vector<float> ref_accumulator;
         for (int i = 0; i < NUM_SLEEP_STAGES; i++) { // Softmax for current epoch
-            ref_accumulator.push_back(data[MLP_DIM+i]); // Softmax for current epoch
+            ref_accumulator.push_back(data[MLP_DIM+i]);
         }
         for (int i = 0; i < (NUM_SAMPLES_OUT_AVG-1); i++) { // Softmax for previous dummy epochs
             std::string filename = step_verif_info[cim_state].csv_fp + std::to_string(i) + ".csv";
@@ -75,6 +75,8 @@ void verify_computation(COMPUTE_VERIFICATION_STEP cim_state, uint8_t id, float* 
 }
 
 void print_softmax_error(float* data, uint16_t starting_addr) {
+    if (ENABLE_COMPUTATION_VERIFICATION == false) { return; }
+
     rapidcsv::Document csv(step_verif_info[MLP_HEAD_SOFTMAX_VERIF].csv_fp, rapidcsv::LabelParams(-1, -1));
     std::vector<float> ref_softmax = csv.GetColumn<float>(0);
     std::vector<float> softmax_err_rel, softmax_err_abs;

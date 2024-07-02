@@ -10,7 +10,6 @@ import git
 import sys
 import json
 import socket
-import shutil
 import datetime
 import imblearn
 import utilities
@@ -34,6 +33,7 @@ SHUFFLE_TRAINING_CLIPS = True
 NUM_CLIPS_PER_FILE_EDGETPU = 500 # 500 is only valid for 256Hz
 K_FOLD_OUTPUT_TO_FILE = False # If true, will write validation accuracy to a CSV for k-fold sweep validation
 K_FOLD_SETS_MANUAL_PRUNE = [4]
+REF_DATA_DIR = "asic/fixed_point_accuracy_study/reference_data"
 
 AVAILABLE_OPTIMIZERS = ["Adam", "AdamW"]
 AVAILABLE_RESAMPLERS = ['RandomOverSampler', 'SMOTE', 'ADASYN', 'BorderlineSMOTE', 'SMOTENC', 'SMOTEN', 'KMeansSMOTE', 'SVMSMOTE', 'ClusterCentroids', 'RandomUnderSampler', 'TomekLinks', 'SMOTEENN', 'SMOTETomek'] # https://imbalanced-learn.org/stable/introduction.html
@@ -317,6 +317,9 @@ def export_summary(out_fp, parser, model, fit_history, acc:dict, original_sleep_
         log += f"MHA number of heads: {parser.num_heads}\n"
         log += f"Number of layers: {parser.num_layers}\n"
         log += f"MLP dimension: {parser.mlp_dim}\n"
+        log += f"Use centering (beta) and scaling (gamma) in LayerNorm: {not parser.disable_ln_gamma_beta}"
+        if parser.disable_ln_gamma_beta: log += " (and thus cannot save quantized 16x8-bit model)\n"
+        else: log += "\n"
         log += f"Number of dense (+ dropout) layers in MLP head before softmax: {parser.mlp_head_num_dense}\n"
         log += f"Dropout rate: {parser.dropout_rate_percent:.3f}\n"
         log += f"Input argument of encoder's 2nd residual sum connection: {parser.enc_2nd_res_conn_arg}\n"
@@ -380,6 +383,7 @@ def parse_arguments():
     parser.add_argument('--num_runs', help="Number of training runs to perform. Defaults to 1.", default=1, type=int)
     parser.add_argument('--optimizer', help=f"Optimizer to use. May be one of {AVAILABLE_OPTIMIZERS}. Defaults to Adam.", choices=AVAILABLE_OPTIMIZERS, default="Adam", type=str)
     parser.add_argument('--reference_night_fp', help="Filepath of the reference night used for validation.", default="", type=str)
+    parser.add_argument('--disable_ln_gamma_beta', help="Disables the centering (beta) and scaling (gamma) in all LayerNorm layers.", action='store_true')
 
     # Parse arguments
     try:
@@ -624,7 +628,7 @@ def export_k_fold_results(args, acc:dict):
         writer.writerow(avg_row)
         writer.writerow(med_row)
 
-def save_models(model, all_models:dict, out_fp:str):
+def save_models(model, args, all_models:dict, out_fp:str):
     model.save(f"{out_fp}/models/model.tf", save_format="tf")
     model.save_weights(filepath=f"{out_fp}/models/model_weights.h5")
     print(f"[{(time.time()-start_time):.2f}s] Saved model to {out_fp}/models/model.tf")
@@ -660,6 +664,10 @@ def save_models(model, all_models:dict, out_fp:str):
         f.write(tflite_full_quant_model)
     print(f"[{(time.time()-start_time):.2f}s] Saved fully quantized TensorFlow Lite model to {out_fp}/models/model_full_quant.tflite.")
 
+    if (args.disable_ln_gamma_beta == True):
+        print("WARNING: Cannot quantize to 16x8-bit if centering and scaling in LayerNormalization is turned off.")
+        return
+    
     # Convert to full quantized Tensorflow Lite model with 16b activations and 8b weights and save
     converter.inference_input_type = tf.float32
     converter.inference_output_type = tf.float32
@@ -709,14 +717,14 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
             output_list = tf.unstack(output[0], axis=0)
             output_stack = tf.concat(output_list, axis=1)
             for i in range(self.num_heads):
-                np.savetxt(f"python_prototype/reference_data/enc_mhsa_QK_T_{i}.csv", score[0][i], delimiter=",")
-                np.savetxt(f"python_prototype/reference_data/enc_mhsa_scaled_score_{i}.csv", scaled_score[0][i], delimiter=",")
-                np.savetxt(f"python_prototype/reference_data/enc_mhsa_softmax_{i}.csv", weights[0][i], delimiter=",")
-                utilities.plot_distribution(data=scaled_score[0][i].numpy(), title=f"enc_mhsa_scaled_score_{i}", output_dir=f"python_prototype/reference_data")
-                utilities.plot_distribution(data=weights[0][i].numpy(), title=f"enc_mhsa_softmax_{i}", output_dir=f"python_prototype/reference_data")
+                np.savetxt(f"{REF_DATA_DIR}/enc_mhsa_QK_T_{i}.csv", score[0][i], delimiter=",")
+                np.savetxt(f"{REF_DATA_DIR}/enc_mhsa_scaled_score_{i}.csv", scaled_score[0][i], delimiter=",")
+                np.savetxt(f"{REF_DATA_DIR}/enc_mhsa_softmax_{i}.csv", weights[0][i], delimiter=",")
+                utilities.plot_distribution(data=scaled_score[0][i].numpy(), title=f"enc_mhsa_scaled_score_{i}", output_dir=REF_DATA_DIR)
+                utilities.plot_distribution(data=weights[0][i].numpy(), title=f"enc_mhsa_softmax_{i}", output_dir=REF_DATA_DIR)
 
-            np.savetxt(f"python_prototype/reference_data/enc_softmax_mult_V.csv", output_stack, delimiter=",")
-            utilities.plot_distribution(data=output_stack.numpy(), title=f"enc_mhsa_softmax_mult_V", output_dir=f"python_prototype/reference_data")
+            np.savetxt(f"{REF_DATA_DIR}/enc_mhsa_softmax_mult_V.csv", output_stack, delimiter=",")
+            utilities.plot_distribution(data=output_stack.numpy(), title=f"enc_mhsa_softmax_mult_V", output_dir=REF_DATA_DIR)
 
         return output, weights
 
@@ -732,12 +740,12 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
         key = self.key_dense(inputs) #key = (batch_size, num_patches+1, embedding_depth)
         value = self.value_dense(inputs) #value = (batch_size, num_patches+1, embedding_depth)
         if OUTPUT_CSV:
-            np.savetxt("python_prototype/reference_data/enc_Q_dense.csv", query[0], delimiter=",")
-            np.savetxt("python_prototype/reference_data/enc_K_dense.csv", key[0], delimiter=",")
-            np.savetxt("python_prototype/reference_data/enc_V_dense.csv", value[0], delimiter=",")
-            utilities.plot_distribution(data=query[0].numpy(), title=f"enc_Q_dense", output_dir=f"python_prototype/reference_data")
-            utilities.plot_distribution(data=key[0].numpy(), title=f"enc_K_dense", output_dir=f"python_prototype/reference_data")
-            utilities.plot_distribution(data=value[0].numpy(), title=f"enc_V_dense", output_dir=f"python_prototype/reference_data")
+            np.savetxt(f"{REF_DATA_DIR}/enc_Q_dense.csv", query[0], delimiter=",")
+            np.savetxt(f"{REF_DATA_DIR}/enc_K_dense.csv", key[0], delimiter=",")
+            np.savetxt(f"{REF_DATA_DIR}/enc_V_dense.csv", value[0], delimiter=",")
+            utilities.plot_distribution(data=query[0].numpy(), title=f"enc_Q_dense", output_dir=REF_DATA_DIR)
+            utilities.plot_distribution(data=key[0].numpy(), title=f"enc_K_dense", output_dir=REF_DATA_DIR)
+            utilities.plot_distribution(data=value[0].numpy(), title=f"enc_V_dense", output_dir=REF_DATA_DIR)
 
         query = self.separate_heads(query, batch_size) #query = (batch_size, num_heads, num_patches+1, embedding_depth/num_heads)
         key = self.separate_heads(key, batch_size) #key = (batch_size, num_heads, num_patches+1, embedding_depth/num_heads)
@@ -797,12 +805,14 @@ class Encoder(tf.keras.layers.Layer):
         self.num_patches = int(self.clip_length_num_samples / self.patch_length)
         self.use_class_embedding = args.use_class_embedding
         self.enc_2nd_res_conn_arg = args.enc_2nd_res_conn_arg
+        self.enable_ln_centering = not args.disable_ln_gamma_beta
+        self.enable_ln_scaling = not args.disable_ln_gamma_beta
 
         # Layers
-        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layerNorm1_encoder")
+        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layerNorm1_encoder", center=self.enable_ln_centering, scale=self.enable_ln_scaling)
         self.mhsa = MultiHeadSelfAttention(self.args, self.embedding_depth, self.num_heads)
         self.dropout1 = tf.keras.layers.Dropout(self.dropout_rate_percent, seed=RANDOM_SEED, name="dropout1_encoder")
-        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layerNorm2_encoder")
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layerNorm2_encoder", center=self.enable_ln_centering, scale=self.enable_ln_scaling)
 
         self.mlp_dense1 = tf.keras.layers.Dense(self.mlp_dim, activation=self.mlp_dense_activation, name="mlp_dense1_encoder")
         self.mlp_dropout1 = tf.keras.layers.Dropout(self.dropout_rate_percent, seed=RANDOM_SEED, name="mlp_dropout1_encoder")
@@ -830,20 +840,20 @@ class Encoder(tf.keras.layers.Layer):
         elif ((self.enc_2nd_res_conn_arg == "none") or (self.enc_2nd_res_conn_arg == "no_res_sum_at_all")): enc_out = mlp_output
         
         if OUTPUT_CSV: 
-            np.savetxt("python_prototype/reference_data/enc_layernorm1.csv", inputs_norm[0], delimiter=",")
-            np.savetxt("python_prototype/reference_data/enc_res_sum_1.csv", out1[0], delimiter=",")
-            np.savetxt("python_prototype/reference_data/enc_layernorm2.csv", out1_norm[0], delimiter=",")
-            np.savetxt("python_prototype/reference_data/enc_mlp_dense1.csv", mlp[0], delimiter=",")
-            np.savetxt("python_prototype/reference_data/enc_mlp_dense2.csv", mlp_output[0], delimiter=",")
-            np.savetxt("python_prototype/reference_data/enc_output.csv", enc_out[0], delimiter=",")
-            np.savetxt("python_prototype/reference_data/enc_mhsa_output.csv", attn_output[0], delimiter=",")
-            utilities.plot_distribution(data=inputs_norm[0].numpy(), title=f"enc_layernorm1", output_dir=f"python_prototype/reference_data")
-            utilities.plot_distribution(data=out1[0].numpy(), title=f"enc_res_sum_1", output_dir=f"python_prototype/reference_data")
-            utilities.plot_distribution(data=out1_norm[0].numpy(), title=f"enc_layernorm2", output_dir=f"python_prototype/reference_data")
-            utilities.plot_distribution(data=mlp[0].numpy(), title=f"enc_mlp_dense1", output_dir=f"python_prototype/reference_data")
-            utilities.plot_distribution(data=mlp_output[0].numpy(), title=f"enc_mlp_dense2", output_dir=f"python_prototype/reference_data")
-            utilities.plot_distribution(data=enc_out[0].numpy(), title=f"enc_output", output_dir=f"python_prototype/reference_data")
-            utilities.plot_distribution(data=attn_output[0].numpy(), title=f"enc_mhsa_output", output_dir=f"python_prototype/reference_data")
+            np.savetxt(f"{REF_DATA_DIR}/enc_layernorm1.csv", inputs_norm[0], delimiter=",")
+            np.savetxt(f"{REF_DATA_DIR}/enc_res_sum_1.csv", out1[0], delimiter=",")
+            np.savetxt(f"{REF_DATA_DIR}/enc_layernorm2.csv", out1_norm[0], delimiter=",")
+            np.savetxt(f"{REF_DATA_DIR}/enc_mlp_dense1.csv", mlp[0], delimiter=",")
+            np.savetxt(f"{REF_DATA_DIR}/enc_mlp_dense2.csv", mlp_output[0], delimiter=",")
+            np.savetxt(f"{REF_DATA_DIR}/enc_output.csv", enc_out[0], delimiter=",")
+            np.savetxt(f"{REF_DATA_DIR}/enc_mhsa_output.csv", attn_output[0], delimiter=",")
+            utilities.plot_distribution(data=inputs_norm[0].numpy(),    title=f"enc_layernorm1",    output_dir=REF_DATA_DIR)
+            utilities.plot_distribution(data=out1[0].numpy(),           title=f"enc_res_sum_1",     output_dir=REF_DATA_DIR)
+            utilities.plot_distribution(data=out1_norm[0].numpy(),      title=f"enc_layernorm2",    output_dir=REF_DATA_DIR)
+            utilities.plot_distribution(data=mlp[0].numpy(),            title=f"enc_mlp_dense1",    output_dir=REF_DATA_DIR)
+            utilities.plot_distribution(data=mlp_output[0].numpy(),     title=f"enc_mlp_dense2",    output_dir=REF_DATA_DIR)
+            utilities.plot_distribution(data=enc_out[0].numpy(),        title=f"enc_output",        output_dir=REF_DATA_DIR)
+            utilities.plot_distribution(data=attn_output[0].numpy(),    title=f"enc_mhsa_output",   output_dir=REF_DATA_DIR)
             
         return enc_out
 
@@ -903,6 +913,8 @@ class VisionTransformer(tf.keras.Model):
         self.mlp_dense_activation = mlp_dense_activation
         self.mlp_head_num_dense = args.mlp_head_num_dense
         self.num_out_filter = args.num_out_filter
+        self.enable_ln_centering = not args.disable_ln_gamma_beta
+        self.enable_ln_scaling = not args.disable_ln_gamma_beta
 
         # Layers
         self.patch_projection = tf.keras.layers.Dense(self.embedding_depth, name="patch_projection_dense")
@@ -910,7 +922,7 @@ class VisionTransformer(tf.keras.Model):
         if self.use_class_embedding: self.class_embedding = self.add_weight("class_emb", shape=(1, 1, self.embedding_depth))
         if self.enable_positional_embedding: self.positional_embedding = self.add_weight("pos_emb", shape=(1, self.num_patches+self.use_class_embedding+(self.history_length > 0), self.embedding_depth)) #+1 for the trainable classification token, +1 for historical lookback
         self.encoder_layers = [Encoder(args, mlp_dense_activation=self.mlp_dense_activation, name=f"Encoder_{i+1}") for i in range(self.num_encoder_layers)]
-        self.mlp_head_layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="mlp_head_layerNorm")
+        self.mlp_head_layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="mlp_head_layerNorm", center=self.enable_ln_centering, scale=self.enable_ln_scaling)
         self.mlp_head = []
         for i in range(self.mlp_head_num_dense):
             self.mlp_head.append(tf.keras.layers.Dense(self.mlp_dim, activation=self.mlp_dense_activation, name=f"mlp_head_dense{i+1}"))
@@ -947,21 +959,21 @@ class VisionTransformer(tf.keras.Model):
         # Linear projection
         clip = self.patch_projection(patches) #clip = (batch_size, num_patches, embedding_depth)
         if OUTPUT_CSV:
-            np.savetxt("python_prototype/reference_data/patch_proj.csv", clip[0], delimiter=",")
-            utilities.plot_distribution(data=clip[0].numpy(), title=f"patch_proj", output_dir=f"python_prototype/reference_data")
+            np.savetxt(f"{REF_DATA_DIR}/patch_proj.csv", clip[0], delimiter=",")
+            utilities.plot_distribution(data=clip[0].numpy(), title=f"patch_proj", output_dir=REF_DATA_DIR)
 
         # Classification token
         if self.use_class_embedding:
             class_embedding = tf.broadcast_to(self.class_embedding, [batch_size, 1, self.embedding_depth]) #class_embedding = (batch_size, 1, embedding_depth)
             clip = tf.concat([class_embedding, clip], axis=1) #clip = (batch_size, num_patches+1, embedding_depth)
         if OUTPUT_CSV:
-            np.savetxt("python_prototype/reference_data/class_emb.csv", clip[0], delimiter=",")
-            utilities.plot_distribution(data=clip[0].numpy(), title=f"class_emb", output_dir=f"python_prototype/reference_data")
+            np.savetxt(f"{REF_DATA_DIR}/class_emb.csv", clip[0], delimiter=",")
+            utilities.plot_distribution(data=clip[0].numpy(), title=f"class_emb", output_dir=REF_DATA_DIR)
 
         if self.enable_positional_embedding: clip = clip + self.positional_embedding #clip = (batch_size, num_patches+1, embedding_depth)
         if OUTPUT_CSV:
-            np.savetxt("python_prototype/reference_data/pos_emb.csv", clip[0], delimiter=",")
-            utilities.plot_distribution(data=clip[0].numpy(), title=f"pos_emb", output_dir=f"python_prototype/reference_data")
+            np.savetxt(f"{REF_DATA_DIR}/pos_emb.csv", clip[0], delimiter=",")
+            utilities.plot_distribution(data=clip[0].numpy(), title=f"pos_emb", output_dir=REF_DATA_DIR)
 
         # Go through encoder
         for layer in self.encoder_layers:
@@ -973,12 +985,12 @@ class VisionTransformer(tf.keras.Model):
         prediction = self.mlp_head_softmax(mlp_head) #prediction = (batch_size, sleep_map.get_num_stages()+1)
         
         if OUTPUT_CSV:
-            np.savetxt("python_prototype/reference_data/mlp_head_layernorm.csv", mlp_head_layernorm[0], delimiter=",")
-            np.savetxt("python_prototype/reference_data/mlp_head_out.csv", mlp_head[0], delimiter=",")
-            np.savetxt("python_prototype/reference_data/mlp_head_softmax.csv", prediction[0], delimiter=",")
-            utilities.plot_distribution(data=mlp_head_layernorm[0].numpy(), title=f"mlp_head_layernorm", output_dir=f"python_prototype/reference_data")
-            utilities.plot_distribution(data=mlp_head[0].numpy(), title=f"mlp_head_out", output_dir=f"python_prototype/reference_data")
-            utilities.plot_distribution(data=prediction[0].numpy(), title=f"mlp_head_softmax", output_dir=f"python_prototype/reference_data")
+            np.savetxt(f"{REF_DATA_DIR}/mlp_head_layernorm.csv", mlp_head_layernorm[0], delimiter=",")
+            np.savetxt(f"{REF_DATA_DIR}/mlp_head_out.csv", mlp_head[0], delimiter=",")
+            np.savetxt(f"{REF_DATA_DIR}/mlp_head_softmax.csv", prediction[0], delimiter=",")
+            utilities.plot_distribution(data=mlp_head_layernorm[0].numpy(), title=f"mlp_head_layernorm",    output_dir=REF_DATA_DIR)
+            utilities.plot_distribution(data=mlp_head[0].numpy(),           title=f"mlp_head_out",          output_dir=REF_DATA_DIR)
+            utilities.plot_distribution(data=prediction[0].numpy(),         title=f"mlp_head_softmax",      output_dir=REF_DATA_DIR)
 
         if self.historical_lookback_DNN:
             historical_lookback = tf.cast(historical_lookback, tf.uint8)
@@ -992,7 +1004,7 @@ class VisionTransformer(tf.keras.Model):
         if OUTPUT_CSV:
             for i in range(self.num_out_filter):
                 dummy_softmax = np.random.rand(1,sleep_map.get_num_stages()+1)
-                np.savetxt(f"python_prototype/reference_data/dummy_softmax_{i}.csv", dummy_softmax, delimiter=",")
+                np.savetxt(f"{REF_DATA_DIR}/dummy_softmax_{i}.csv", dummy_softmax, delimiter=",")
         return prediction
 
     def build_graph(self):
@@ -1115,7 +1127,7 @@ def main():
 
         # Save models to disk
         all_models = {"tf":model, "tflite":-1, "tflite (quant)":-1, "tflite (full quant)":-1, "tflite (16bx8b full quant)":-1}
-        if args.save_model: save_models(model=model, all_models=all_models, out_fp=run_out_fp)
+        if args.save_model: save_models(model=model, args=args, all_models=all_models, out_fp=run_out_fp)
 
         # Manual validation
         for model_type, model in all_models.items():
@@ -1149,15 +1161,12 @@ def main():
         DEBUG = True
         OUTPUT_CSV = True
         tf.config.run_functions_eagerly(True) # Allows step-by-step debugging of tf.functions
-        ref_data = utilities.edf_to_h5(edf_fp=args.reference_night_fp, channel="EEG Cz-LER", sleep_map_name="both_light_deep_combine", clip_length_s=30, sampling_freq_hz=128, full_night=True, h5_filename="python_prototype/reference_data/eeg.h5")
-        all_models["tf"].load_weights("asic/fixed_point_accuracy_study/model_weights.h5")  # Load the weights from the trained, golden model
-        all_models["tf"](ref_data[0], training=False) # Run with the first clip
-
-        shutil.copy2(base_out_fp+"/run_1/models/model.tflite", "python_prototype/reference_data/model.tflite")
-        shutil.copy2(base_out_fp+"/run_1/models/model_quant.tflite", "python_prototype/reference_data/model_quant.tflite")
-        shutil.copy2(base_out_fp+"/run_1/models/model_weights.h5", "python_prototype/reference_data/model_weights.h5")
-        shutil.rmtree("python_prototype/reference_data/model.tf", ignore_errors=True)
-        shutil.copytree(base_out_fp+"/run_1/models/model.tf", "python_prototype/reference_data/model.tf")
+        ref_data = utilities.edf_to_h5(edf_fp=args.reference_night_fp, channel="EEG Cz-LER", sleep_map_name="both_light_deep_combine", clip_length_s=30, 
+                                       sampling_freq_hz=128, full_night=True, h5_filename=f"{REF_DATA_DIR}/eeg.h5")
+        ref_data = ref_data[0][0]
+        ref_data = tf.expand_dims(ref_data, axis=0)
+        all_models["tf"].load_weights(f"{REF_DATA_DIR}/model_weights.h5")  # Load the weights from the trained, golden model
+        all_models["tf"](ref_data, training=False) # Run with the first clip
 
     print(f"[{(time.time()-start_time):.2f}s] Done. Good bye.")
 

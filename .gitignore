@@ -104,11 +104,11 @@ asic/func_sim/*/*.cmake
 asic/func_sim/*/Makefile
 asic/func_sim/CMakeCache.txt
 asic/func_sim/Func_Sim
+asic/func_sim/build
 asic/func_sim/CMakeFiles/*
 asic/func_sim/include/CMakeFiles/
 asic/func_sim/include/doc/
 asic/func_sim/include/src/
-asic/func_sim/Makefile
 asic/mem/
 
 ### ASIC RTL
