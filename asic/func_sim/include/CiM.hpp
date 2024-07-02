@@ -12,6 +12,7 @@
 #define CIM_PARAMS_STORAGE_SIZE_NUM_ELEM 528
 #define CIM_INT_RES_SIZE_NUM_ELEM 848 // We need 835, but it needs to be divisible by 16. We can choose size of 848 and the additional sleep stages in here
 #define COMPUTE_CNT_THRESHOLD 5 // Used to simulate the delay in the computation to match the real hardware
+#define NUM_TERMS_EXP_TAYLOR_APPROX 5
 
 #define HAS_MY_DATA(x) ((id >= (x)) && (id < (x+3))) // Determines whether the current broadcast transaction contains data I need
 #define IS_MY_MATRIX(x) ((id >= (x)*NUM_HEADS) && (id < (x+1)*NUM_HEADS)) // Returns whether a given count corresponds to my matrix (for the *V matmul in encoder's MHSA)
@@ -163,6 +164,7 @@ class CiM {
         float computation_result; // Used to store the result of the computation
         float params[CIM_PARAMS_STORAGE_SIZE_NUM_ELEM];
         float intermediate_res[CIM_INT_RES_SIZE_NUM_ELEM];
+        uint32_t softmax_max_index;
 
         STATE cim_state;
         INFERENCE_STEP current_inf_step = CLASS_TOKEN_CONCAT_STEP;
@@ -202,9 +204,10 @@ class CiM {
     public:
         CiM() : id(-1), gen_cnt_7b(7), gen_cnt_7b_2(7), word_rec_cnt(7), word_snt_cnt(7) {}
         CiM(const int16_t cim_id);
-        bool get_is_ready();
         int reset();
         int run(struct ext_signals* ext_sigs, Bus* bus);
+        bool get_is_ready();
+        uint32_t get_softmax_max_index();
 };
 
 #endif //CIM_H

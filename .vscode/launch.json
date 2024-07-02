@@ -57,7 +57,7 @@
             "name": "C++ Functional Simulation",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/asic/func_sim/func_sim",
+            "program": "${workspaceFolder}/asic/func_sim/build/Func_Sim",
             "args": ["--start_index", "0", "--end_index", "0", "--results_csv_fp", ""],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/asic/func_sim/",

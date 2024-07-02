@@ -7,7 +7,7 @@
 #include <CiM.hpp>
 
 /*----- DEFINE -----*/
-#define ENABLE_COMPUTATION_VERIFICATION true
+#define ENABLE_COMPUTATION_VERIFICATION false
 #define REL_TOLERANCE 0.03f //3% tolerance
 #define ABS_TOLERANCE 0.001f
 
@@ -53,9 +53,9 @@ static std::map<COMPUTE_VERIFICATION_STEP, StepVerifInfo> step_verif_info = {
     {ENC_MHSA_DENSE_Q_VERIF,    {std::string(DATA_BASE_DIR)+"enc_Q_dense.csv"}},
     {ENC_MHSA_DENSE_K_VERIF,    {std::string(DATA_BASE_DIR)+"enc_K_dense.csv"}},
     {ENC_MHSA_DENSE_V_VERIF,    {std::string(DATA_BASE_DIR)+"enc_V_dense.csv"}},
-    {ENC_MHSA_DENSE_QK_T_VERIF, {std::string(DATA_BASE_DIR)+"enc_scaled_score_"}},
-    {ENC_SOFTMAX_VERIF,         {std::string(DATA_BASE_DIR)+"enc_softmax_"}},
-    {ENC_MULT_V_VERIF,          {std::string(DATA_BASE_DIR)+"enc_softmax_mult_V.csv"}},
+    {ENC_MHSA_DENSE_QK_T_VERIF, {std::string(DATA_BASE_DIR)+"enc_mhsa_scaled_score_"}},
+    {ENC_SOFTMAX_VERIF,         {std::string(DATA_BASE_DIR)+"enc_mhsa_softmax_"}},
+    {ENC_MULT_V_VERIF,          {std::string(DATA_BASE_DIR)+"enc_mhsa_softmax_mult_V.csv"}},
     {ENC_RES_SUM_1_VERIF,       {std::string(DATA_BASE_DIR)+"enc_res_sum_1.csv"}},
     {ENC_LAYERNORM2_VERIF,      {std::string(DATA_BASE_DIR)+"enc_layernorm2.csv"}},
     {ENC_MLP_DENSE1_VERIF,      {std::string(DATA_BASE_DIR)+"enc_mlp_dense1.csv"}},

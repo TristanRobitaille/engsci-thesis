@@ -14,6 +14,9 @@
 
 typedef void (*FcnPtr)(struct ext_signals*);
 
+/*----- DEFINES -----*/
+#define FIXED_POINT_ACCURACY_STUDY_START_N_STO 8
+
 /*----- FUNCTION -----*/
 void master_nrst(struct ext_signals* ext_sig) { ext_sig->master_nrst = false; }
 void master_nrst_reset(struct ext_signals* ext_sig) { ext_sig->master_nrst = true; }

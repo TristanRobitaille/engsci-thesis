@@ -443,8 +443,19 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 gen_reg_2b = 1; // Just a signal to avoid coming here every time FSM runs
             } else if (compute_in_progress == false) {
                 if (id == 0) {
-                    cout << "CiM: Finished MLP head's Softmax" << endl;
+                    cout << "CiM #0: Finished MLP head's Softmax" << endl;
                     verify_computation(MLP_HEAD_SOFTMAX_VERIF, id, intermediate_res, mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM));
+                    // Find the argmax of the softmax for fixed-point accuracy study as it doesn't use the post-averaging softmax
+                    float softmax_max = 0;
+                    cout << "Softmax: ";
+                    for (uint32_t i=0; i<NUM_SLEEP_STAGES; i++) {
+                        cout << intermediate_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM)+i] << " ";
+                        if (intermediate_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM)+i] > softmax_max) { 
+                            softmax_max = intermediate_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM)+i];
+                            softmax_max_index = i;
+                        }
+                    }
+                    cout << "--> Argmax: " << softmax_max_index << endl;
                     print_softmax_error(intermediate_res, mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM));
                 }
                 is_ready = false;
@@ -462,7 +473,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 intermediate_res[mem_map.at(SOFTMAX_AVG_SUM_MEM)+gen_cnt_7b.get_cnt()] = computation_result; // Copy there for averaging sum step
                 gen_cnt_7b.inc();
             } else if ((gen_cnt_7b.get_cnt() == NUM_SLEEP_STAGES) && (compute_in_progress == false)) {
-                cout << "CiM: Finished MLP head's Softmax averaging divide" << endl;
+                cout << "CiM #0: Finished MLP head's Softmax averaging divide" << endl;
                 verify_computation(MLP_HEAD_SOFTMAX_DIV_VERIF, id, intermediate_res, mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM));
                 current_inf_step = POST_SOFTMAX_AVERAGING_STEP;
                 gen_cnt_7b.reset();
@@ -502,7 +513,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 gen_reg_2b = 1;
             } else if ((compute_in_progress == false) && (gen_reg_2b == 1)) {
                 current_inf_step = RETIRE_SOFTMAX_STEP;
-                cout << "CiM: Finished averaging softmax with previous epochs." << endl;
+                cout << "CiM #0: Finished averaging softmax with previous epochs." << endl;
                 verify_computation(POST_SOFTMAX_AVG_VERIF, id, intermediate_res, mem_map.at(SOFTMAX_AVG_SUM_MEM));
             }
             break;
@@ -815,12 +826,18 @@ comp_fx_t CiM::EXP_APPROX(comp_fx_t input) {
     /* Approximation of exp(x) as used in the ASIC
        Uses the identy exp(x) = 2^(x/ln(2)), float/int exponent splitting and Taylor approximation of the fractional part (first 4 terms).
     */
+
     comp_fx_t ln_2 = comp_fx_t{0.69314718056}; //ln(2)
     comp_fx_t input_mapped = input/ln_2;
     comp_fx_t input_mapped_fract = input/ln_2 - FLOOR(input/ln_2);
 
     // Taylor approximation of the fractional part
-    comp_fx_t exp_approx_fract = 1 + ln_2*input_mapped_fract + POW(ln_2,2)/comp_fx_t{2}*POW(input_mapped_fract,2) + POW(ln_2,3)/comp_fx_t{6}*POW(input_mapped_fract,3);
+    comp_fx_t exp_approx_fract = 1;
+    for (int i=0; i<NUM_TERMS_EXP_TAYLOR_APPROX-1; i++) {
+        comp_fx_t factorial = 1;
+        for (int j=1; j<=i+1; j++) { factorial *= j; }
+        exp_approx_fract += POW(ln_2,i+1) / factorial * POW(input_mapped_fract,i+1);
+    }
 
     // Integer part
     comp_fx_t exp_approx_int = POW(comp_fx_t{2}, static_cast<int>(FLOOR(input_mapped)));
@@ -864,4 +881,8 @@ void CiM::update_state(STATE new_state) {
 
 void CiM::overflow_check() {
     if (gen_reg_2b > 3) { throw std::overflow_error("CiM: Overflow on gen_reg_2b!"); }
+}
+
+uint32_t CiM::get_softmax_max_index() {
+    return softmax_max_index;
 }

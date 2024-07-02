@@ -28,7 +28,7 @@ python3 /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_proto
 --historical_lookback_DNN_depth=32 \
 --dropout_rate_percent=30 \
 --class_weights 1 1 1 1 1 \
---input_dataset="/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/data/SS3_EDF_Tensorized_both_light_deep_combine-stg_30-0s_128Hz_15b_offset" \
+--input_dataset="/home/tristanr/projects/def-xilinliu/data/tristan_weihang/SS3_EDF_Tensorized_both_light_deep_combine-stg_30-0s_128Hz_15b_offset" \
 --dataset_resample_algo="ADASYN" \
 --training_set_target_count 4600 4600 4600 4600 4600 \
 --save_model \
@@ -36,13 +36,14 @@ python3 /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_proto
 --use_class_embedding \
 --enable_positional_embedding \
 --enable_input_rescale \
---enc_2nd_res_conn_arg="$1" \
+--enc_2nd_res_conn_arg="inputs" \
 --k_fold_val_set=$SLURM_ARRAY_TASK_ID \
 --num_out_filter=3 \
 --out_filter_type="pre_argmax" \
 --filter_self_reset_threshold=-1 \
---k_fold_val_results_fp="/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/results/k_fold_val_results/val_$2" \
+--k_fold_val_results_fp="/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/results/k_fold_val_results/center_scale_ln_disabled" \
 --num_runs=5 \
---note="k-fold sweep"
+--note="" \
+# --disable_ln_gamma_beta \
 # --output_edgetpu_data \
 # --export_plot \
