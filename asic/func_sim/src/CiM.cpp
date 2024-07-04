@@ -203,6 +203,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 is_ready = false;
                 update_state(INFERENCE_RUNNING_CIM);
                 gen_cnt_7b_2.reset();
+                if (id == 0) { cout << "CiM: Finished patch load Dense" << endl; }
                 verify_computation(PATCH_PROJECTION_VERIF, id, intermediate_res, mem_map.at(PATCH_MEM));
             }
         }
@@ -213,6 +214,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case CLASS_TOKEN_CONCAT_STEP:
             intermediate_res[mem_map.at(CLASS_TOKEN_MEM)] = params[param_addr_map[SINGLE_PARAMS].addr+CLASS_TOKEN_OFF]; // Move classification token from parameters memory to intermediate storage
             current_inf_step = POS_EMB_STEP;
+            if (id == 0) { cout << "CiM: Finished classification token concatenation" << endl; }
             verify_computation(CLASS_TOKEN_VERIF, id, intermediate_res, mem_map.at(CLASS_TOKEN_MEM));
             break;
 
@@ -241,7 +243,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case ENC_LAYERNORM_2_1ST_HALF_STEP:
         case ENC_LAYERNORM_3_1ST_HALF_STEP:
             if (word_rec_cnt.get_cnt() == EMB_DEPTH && compute_in_progress == false) { // No more data to receive, start LayerNorm
-                if (current_inf_step == ENC_LAYERNORM_1_1ST_HALF_STEP) { LAYERNORM_1ST_HALF<fx_2_x_t>(mem_map.at(ENC_LN1_1ST_HALF_MEM)); }
+                if (current_inf_step == ENC_LAYERNORM_1_1ST_HALF_STEP) { LAYERNORM_1ST_HALF<fx_4_x_t>(mem_map.at(ENC_LN1_1ST_HALF_MEM)); }
                 else if (current_inf_step == ENC_LAYERNORM_2_1ST_HALF_STEP) { LAYERNORM_1ST_HALF<fx_4_x_t>(mem_map.at(ENC_LN2_1ST_HALF_MEM)); }
                 else if (current_inf_step == ENC_LAYERNORM_3_1ST_HALF_STEP) { LAYERNORM_1ST_HALF<fx_5_x_t>(mem_map.at(MLP_HEAD_LN_1ST_HALF_MEM)); }
                 word_rec_cnt.reset();
@@ -259,7 +261,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             if (((word_rec_cnt.get_cnt() == 1) && (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP)) || (word_rec_cnt.get_cnt() == NUM_PATCHES+1)) { // No more data to receive, start LayerNorm
                 if (compute_in_progress == false) {
                     if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) {
-                        LAYERNORM_2ND_HALF<fx_3_x_t>(mem_map.at(ENC_LN1_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_BETA_OFF);
+                        LAYERNORM_2ND_HALF<fx_4_x_t>(mem_map.at(ENC_LN1_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_BETA_OFF);
                     } else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) {
                         LAYERNORM_2ND_HALF<fx_4_x_t>(mem_map.at(ENC_LN2_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_BETA_OFF);
                     } else if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) {
@@ -270,6 +272,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             }
 
             if (inst.op == PISTOL_START_OP) {
+                if (id == 0) { cout << "CiM: Finished LayerNorm (2nd half)" << endl; }
                 if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) {
                     current_inf_step = POST_LAYERNORM_TRANSPOSE_STEP;
                     verify_computation(ENC_LAYERNORM1_VERIF, id, intermediate_res, mem_map.at(ENC_LN1_2ND_HALF_MEM));
@@ -281,7 +284,6 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     verify_computation(MLP_HEAD_LAYERNORM_VERIF, id, intermediate_res, mem_map.at(MLP_HEAD_LN_2ND_HALF_MEM));
                 }
                 gen_reg_2b = 0;
-                if (id == 0) { cout << "CiM: Finished LayerNorm (2nd half)" << endl; }
             }
             break;
 
@@ -294,15 +296,15 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 if ((compute_in_progress == false) && (current_inf_step == ENC_MHSA_DENSE_STEP)) {
                     if (gen_reg_2b == 0) {
                         is_ready = false;
-                        MAC<fx_3_x_t,fx_3_x_t>(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_Q_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_Q_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION); // Q
+                        MAC<fx_4_x_t,fx_3_x_t>(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_Q_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_Q_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION); // Q
                         gen_reg_2b = 1;
                     } else if (gen_reg_2b == 1) {
                         intermediate_res[mem_map.at(ENC_Q_MEM)+sender_id] = computation_result; // Q
-                        MAC<fx_3_x_t,fx_3_x_t>(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_K_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_K_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION); // K
+                        MAC<fx_4_x_t,fx_3_x_t>(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_K_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_K_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION); // K
                         gen_reg_2b = 2;
                     } else if (gen_reg_2b == 2) {
                         intermediate_res[mem_map.at(ENC_K_MEM)+sender_id] = computation_result; // K
-                        MAC<fx_3_x_t,fx_3_x_t>(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_V_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_V_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION); // V
+                        MAC<fx_4_x_t,fx_3_x_t>(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_V_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_V_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION); // V
                         gen_reg_2b = 3;
                         word_rec_cnt.reset();
                     }
@@ -336,7 +338,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             } else if ((compute_in_progress == false) && (gen_reg_2b == 3)){ // Done
                 gen_cnt_7b_2.inc();
                 if (current_inf_step == ENC_MHSA_DENSE_STEP) { // Encoder's MHSA Q/K/V Dense
-                    if ((id == 0) && (gen_cnt_7b_2.get_cnt() == EMB_DEPTH)) { cout << "CiM: Finished encoder's MHSA Q/K/V Dense" << endl; }
+                    if ((id == 0) && (gen_cnt_7b_2.get_cnt() >= EMB_DEPTH)) { cout << "CiM: Finished encoder's MHSA Q/K/V Dense" << endl; }
                     intermediate_res[mem_map.at(ENC_V_MEM)+sender_id] = computation_result; // V
                 } else if (current_inf_step == MLP_DENSE_1_STEP) { // MLP Dense 1
                     if ((id == 0) && (gen_cnt_7b_2.get_cnt() == MLP_DIM)) { cout << "CiM: Finished MLP Dense 1" << endl; }
@@ -415,7 +417,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     uint16_t K_T_addr = mem_map.at(ENC_K_T_MEM) + gen_cnt_7b_2.get_cnt()*NUM_HEADS;
                     uint16_t Q_addr = mem_map.at(ENC_QK_T_IN_MEM); // Temporary storage location for Q's dense broadcast, so it remains the same for all heads
                     gen_reg_2b = 1;
-                    MAC<fx_4_x_t,fx_4_x_t>(Q_addr, K_T_addr, NUM_HEADS, /*bias addr unused when NO_ACTIVATION*/ 0, INTERMEDIATE_RES, NO_ACTIVATION);
+                    /*TODO: Why does this one always result in -5.65685?*/ MAC<comp_fx_t,comp_fx_t>(Q_addr, K_T_addr, NUM_HEADS, 0, INTERMEDIATE_RES, NO_ACTIVATION);
                     word_rec_cnt.reset();
                 }
             } else if (compute_in_progress == false && gen_reg_2b == 1) { // Done with this MAC
@@ -585,8 +587,8 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 current_inf_step = ENC_POST_MHSA_TRANSPOSE_STEP;
                 is_ready = true;
                 gen_reg_2b = 0;
-                verify_computation(ENC_MULT_V_VERIF, id, intermediate_res, mem_map.at(ENC_V_MULT_MEM));
                 if (id == 0) { cout << "CiM: Finished encoder's V matmul" << endl; }
+                verify_computation(ENC_MULT_V_VERIF, id, intermediate_res, mem_map.at(ENC_V_MULT_MEM));
                 word_rec_cnt.reset();
                 gen_cnt_7b_2.reset();
             }
@@ -610,8 +612,8 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             }
 
             if (inst.op == PISTOL_START_OP) {
-                verify_computation(ENC_RES_SUM_1_VERIF, id, intermediate_res, mem_map.at(ENC_MHSA_OUT_MEM));
                 if (id == 0) { cout << "CiM: Finished encoder's post-MHSA Dense" << endl; }
+                verify_computation(ENC_RES_SUM_1_VERIF, id, intermediate_res, mem_map.at(ENC_MHSA_OUT_MEM));
                 current_inf_step = ENC_LAYERNORM_2_1ST_HALF_STEP; // Start another round of LayerNorm
                 gen_reg_2b = 0;
             }

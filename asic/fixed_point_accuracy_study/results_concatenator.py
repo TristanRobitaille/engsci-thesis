@@ -11,7 +11,7 @@ START_COLUMN_OFFSET = 3 - 8
 
 def main():
     # Make a copy of the template file
-    new_fp = f"results_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+    new_fp = f"./results/results_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
     shutil.copy(RESULTS_TEMPLATE_FP, new_fp)
 
     # Read the template file

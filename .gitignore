@@ -109,6 +109,7 @@ asic/func_sim/CMakeFiles/*
 asic/func_sim/include/CMakeFiles/
 asic/func_sim/include/doc/
 asic/func_sim/include/src/
+asic/func_sim/CMakeDoxyfile.in
 asic/mem/
 
 ### ASIC RTL
@@ -142,6 +143,7 @@ asic/rtl/master/master.saif
 ### ASIC functional simulation
 asic/fixed_point_accuracy_study/results_test.csv
 asic/fixed_point_accuracy_study/ref_data.npy
+asic/fixed_point_accuracy_study/results/results_202*
 
 ### Documentation
 doc/CMC_VLSI_User_Manual_2023.pdf

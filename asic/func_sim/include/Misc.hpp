@@ -1,6 +1,7 @@
 #ifndef MISC_H
 #define MISC_H
 
+#include <array>
 #include <queue>
 #include <ap_fixed.h>
 
@@ -24,12 +25,12 @@
 // Xilinx AP_FIXED format: ap_fixed<width, integer, quantization_mode, overflow_mode, num. sat. bit> (https://docs.amd.com/r/en-US/ug1399-vitis-hls/Arbitrary-Precision-Fixed-Point-Data-Types)
 // TODO: Evaluate best quantization and overflow modes
 using comp_fx_t = ap_fixed<N_COMP, N_COMP-Q_COMP, AP_RND_CONV, AP_SAT_SYM>;
-using fx_1_x_t  = ap_fixed<N_STORAGE, 32, AP_RND_CONV, AP_SAT_SYM>; // ]-1, 1[
-using fx_2_x_t  = ap_fixed<N_STORAGE, 32, AP_RND_CONV, AP_SAT_SYM>; // ]-2, 2[
-using fx_3_x_t  = ap_fixed<N_STORAGE, 32, AP_RND_CONV, AP_SAT_SYM>; // ]-4, 4[
-using fx_4_x_t  = ap_fixed<N_STORAGE, 32, AP_RND_CONV, AP_SAT_SYM>; // ]-8, 8[
-using fx_5_x_t  = ap_fixed<N_STORAGE, 32, AP_RND_CONV, AP_SAT_SYM>; // ]-16, 16[
-using fx_6_x_t  = ap_fixed<N_STORAGE, 32, AP_RND_CONV, AP_SAT_SYM>; // ]-32, 32[
+using fx_1_x_t  = ap_fixed<N_STORAGE, 1, AP_RND_CONV, AP_SAT_SYM>; // ]-1, 1[
+using fx_2_x_t  = ap_fixed<N_STORAGE, 2, AP_RND_CONV, AP_SAT_SYM>; // ]-2, 2[
+using fx_3_x_t  = ap_fixed<N_STORAGE, 3, AP_RND_CONV, AP_SAT_SYM>; // ]-4, 4[
+using fx_4_x_t  = ap_fixed<N_STORAGE, 4, AP_RND_CONV, AP_SAT_SYM>; // ]-8, 8[
+using fx_5_x_t  = ap_fixed<N_STORAGE, 5, AP_RND_CONV, AP_SAT_SYM>; // ]-16, 16[
+using fx_6_x_t  = ap_fixed<N_STORAGE, 6, AP_RND_CONV, AP_SAT_SYM>; // ]-32, 32[
 
 /*----- MACROS -----*/
 #define NUM_TRANS(x) ceil((x)/3.0f) // Returns the number of transactions each CiM will send (3 elements per transaction)

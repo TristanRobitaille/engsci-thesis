@@ -1,0 +1,2 @@
+ASIC Fixed-Point Accuracy Study Results Note
+'results_2024-07-02_07-38-25.csv' --> Sanity check with N_COMP = 64, Q_COMP = 32, N_STORAGE = 32 (N_STO being unused). Results for all N_STO values should equal the TensorFlow column.
