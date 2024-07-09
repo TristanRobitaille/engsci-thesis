@@ -9,8 +9,8 @@ cd ../func_sim
 for i in $(seq $starting_num_bits $((starting_num_bits + num_bit_studies - 1)))
 do
     # Generate new binary
-    export N_STO=${i}
-    echo $N_STO
+    export N_STO_INT_RES=${i}
+    echo $N_STO_INT_RES
     make clean
     make configureNoBoost
     make build
@@ -26,6 +26,6 @@ do
 done
 
 cd ../fixed_point_accuracy_study # Go back
-export N_STO=20 # Reset back to default
+export N_STO_INT_RES=20 # Reset back to default
 
 python3 results_concatenator.py

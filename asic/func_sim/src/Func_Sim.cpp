@@ -14,7 +14,8 @@ vector<CiM> cims;
 Master_Ctrl ctrl((string(DATA_BASE_DIR)+"eeg.h5"), (string(DATA_BASE_DIR)+"model_weights.h5"));
 
 int init(){
-    cout << "N_STO: " << N_STO << endl;
+    cout << "N_STO_INT_RES: " << N_STO_INT_RES << endl;
+    cout << "N_STO_PARAMS: " << N_STO_PARAMS << endl;
     ext_sigs.master_nrst = false;
     ext_sigs.new_sleep_epoch = false;
 
@@ -53,18 +54,18 @@ void copy_file(const char *src, const char *dst) {
 void update_results_csv(uint32_t starting_clip_num, uint32_t num_clips, string template_csv_fp) {
     /*
     Exports a copy of the given template CSV file with the softmax argmaxes for the given clips.
-    Filename: <template_csv_fp>_<N_STO>_<starting_clip_index>_<end_clip_index>.csv
+    Filename: <template_csv_fp>_<N_STO_PARAMS>_<N_STO_INT_RES>_<starting_clip_index>_<end_clip_index>.csv
     */
     
     // Create a copy of template
     string results_csv_fp = template_csv_fp.substr(0, template_csv_fp.size()-4); // Remove .csv from fp
-    results_csv_fp = results_csv_fp + "_" + to_string(N_STO) + "_" + to_string(starting_clip_num) + "_" + to_string(starting_clip_num+num_clips-1) + ".csv";
+    results_csv_fp = results_csv_fp + "_" + to_string(N_STO_PARAMS) + "_" + to_string(N_STO_INT_RES) + "_" + to_string(starting_clip_num) + "_" + to_string(starting_clip_num+num_clips-1) + ".csv";
     copy_file(template_csv_fp.c_str(), results_csv_fp.c_str());
 
     // Update the CSV
     try {
         rapidcsv::Document results_csv(results_csv_fp, rapidcsv::LabelParams(-1, -1));
-        int column = N_STO - FIXED_POINT_ACCURACY_STUDY_START_N_STO + 3;
+        int column = N_STO_INT_RES - FIXED_POINT_ACCURACY_STUDY_START_N_STO_INT_RES + 3;
         int starting_row = starting_clip_num + 2;
         for (int i=0; i<num_clips; i++) { results_csv.SetCell<int>(column, starting_row+i, softmax_max_indices[i]); }
         results_csv.Save(results_csv_fp);
@@ -98,6 +99,7 @@ int main(int argc, char *argv[]){
     uint32_t end_index;
     string results_csv_fp;
 
+    // Parse arguments
     if (argc == 1) { // No arguments provided, run on first clip and don't write to CSV
         start_index = 0;
         end_index = 0;
@@ -115,7 +117,19 @@ int main(int argc, char *argv[]){
     } else {
         throw invalid_argument("Please provide all or none of the arguments! Use --help for more information.");
     }
+    
+    // Check N_STO_x
+    const char* env_vars[2] = {"N_STO_PARAMS", "N_STO_INT_RES"};
+    bool missing_env_var = false;
+    for (int i=0; i<2; i++){
+        if (getenv(env_vars[i]) == NULL) {
+            cout << "Could not find environment variable " << env_vars[i] << "! Did you forget to define it?" << endl;
+            missing_env_var = true;
+        }
+    }
+    if (missing_env_var) { return 1; }
 
+    // Run functional simulation
     init();
     if (start_index > end_index) { throw invalid_argument("Start index must be less than or equal to end index!"); }
     for (uint32_t i = 0; i < ((end_index + 1) - start_index); i++) {

@@ -11,8 +11,8 @@
 /*----- DEFINE -----*/
 #define CIM_PARAMS_STORAGE_SIZE_NUM_ELEM 528
 #define CIM_INT_RES_SIZE_NUM_ELEM 848 // We need 835, but it needs to be divisible by 16. We can choose size of 848 and the additional sleep stages in here
-#define COMPUTE_CNT_THRESHOLD 5 // Used to simulate the delay in the computation to match the real hardware
-#define NUM_TERMS_EXP_TAYLOR_APPROX 5
+#define COMPUTE_CNT_THRESHOLD 3 // Used to simulate the delay in the computation to match the real hardware
+#define NUM_TERMS_EXP_TAYLOR_APPROX 6
 
 #define HAS_MY_DATA(x) ((id >= (x)) && (id < (x+3))) // Determines whether the current broadcast transaction contains data I need
 #define IS_MY_MATRIX(x) ((id >= (x)*NUM_HEADS) && (id < (x+1)*NUM_HEADS)) // Returns whether a given count corresponds to my matrix (for the *V matmul in encoder's MHSA)
@@ -20,6 +20,11 @@
 /*----- CLASS -----*/
 class CiM {
     private:
+        enum DATA_WIDTH {
+            SINGLE_WIDTH,
+            DOUBLE_WIDTH
+        };
+        
         enum ACTIVATION {
             NO_ACTIVATION, // Used for simple matrix multiplies (no bias)
             LINEAR_ACTIVATION,
@@ -164,6 +169,7 @@ class CiM {
         float computation_result; // Used to store the result of the computation
         float params[CIM_PARAMS_STORAGE_SIZE_NUM_ELEM];
         float intermediate_res[CIM_INT_RES_SIZE_NUM_ELEM];
+        float softmax_exp_int_res[PATCH_LEN];
         uint32_t softmax_max_index;
 
         STATE cim_state;
@@ -189,10 +195,11 @@ class CiM {
         void update_state(STATE new_state);
         void load_previous_softmax();
         void overflow_check();
+        void int_res_write(float data, uint16_t index, DATA_WIDTH data_width);
 
         template <typename storage_fx_t>
         void SOFTMAX(uint16_t input_addr, uint16_t len);
-        template <typename storage_fx_t>
+        template <typename in1_storage_fx_t, typename in2_storage_fx_t>
         void ADD(uint16_t in1_addr, uint16_t in2_addr, INPUT_TYPE in2_type);
         template <typename storage_fx_t>
         void LAYERNORM_1ST_HALF(uint16_t input_addr);

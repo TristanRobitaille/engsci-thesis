@@ -1,6 +1,7 @@
 
 BOOSTSRC := lib/boost_1_84_0
-N_STO ?= 20
+N_STO_INT_RES ?= 20
+N_STO_PARAMS ?= 20
 
 default: build
 
@@ -15,11 +16,11 @@ buildBoost:
 
 .PHONY: configure
 configure:
-	@cmake -S . -B build -DBOOSTINSTALLED=$(CURDIR)/../boost -DN_STO=${N_STO}
+	@cmake -S . -B build -DBOOSTINSTALLED=$(CURDIR)/../boost -DN_STO_INT_RES=${N_STO_INT_RES} -DN_STO_PARAMS=${N_STO_PARAMS}
 
 .PHONY: configureNoBoost
 configureNoBoost:
-	@cmake -S . -B build -DN_STO=${N_STO}
+	@cmake -S . -B build -DN_STO_INT_RES=${N_STO_INT_RES} -DN_STO_PARAMS=${N_STO_PARAMS}
 
 .PHONY: build
 build:
