@@ -144,6 +144,8 @@ asic/rtl/master/master.saif
 asic/fixed_point_accuracy_study/results_test.csv
 asic/fixed_point_accuracy_study/ref_data.npy
 asic/fixed_point_accuracy_study/results/results_202*
+asic/fixed_point_accuracy_study/results/results_template_w_python_*
+asic/fixed_point_accuracy_study/results/results_params*
 
 ### Documentation
 doc/CMC_VLSI_User_Manual_2023.pdf
