@@ -3,7 +3,7 @@
 /*----- NAMESPACE -----*/
 using namespace std;
 
-/*----- DECLARATION -----*/
+/*----- DEFINITION -----*/
 Master_Ctrl::Master_Ctrl(const string eeg_filepath, const string params_filepath) : gen_cnt_7b(7), gen_cnt_7b_2(7), gen_cnt_7b_3(7) {
     state = RESET;
 
