@@ -62,7 +62,7 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
         if (all_cims_ready == true) {
             if ((eeg != eeg_ds[clip_index].end()) && (all_cims_ready == true)) {
                 float data = *eeg;
-                struct instruction inst = {/*op*/ PATCH_LOAD_BROADCAST_OP, /*target_or_sender*/ 0, /*data*/ {static_cast<float>(fx_1_x_t{data/EEG_SCALE_FACTOR}),0,0}};
+                struct instruction inst = {PATCH_LOAD_BROADCAST_OP, 0, {static_cast<float>(fx_1_x_t{data/EEG_SCALE_FACTOR}),0,0}, SINGLE_WIDTH};
                 bus->push_inst(inst); // Broadcast on bus
                 ++eeg;
             } else if ((eeg == eeg_ds[clip_index].end()) && (all_cims_ready == true)) {
@@ -133,7 +133,7 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
 
             if (gen_cnt_7b.get_cnt() == broadcast_ops.at(high_level_inf_step).num_cims) { // All CiMs sent all data and finished using it, can go back to running inference
                 if ((high_level_inf_step != ENC_MHSA_QK_T_STEP && high_level_inf_step != ENC_MHSA_V_MULT_STEP && high_level_inf_step != ENC_MHSA_PRE_SOFTMAX_TRANS_STEP) || (gen_cnt_7b_3.get_cnt() == (NUM_HEADS-1))) { // These three steps require going through the Z-stack of the Q and K matrices so only increment the step counter when we're done with the Z-stack
-                    struct instruction inst = {/*op*/ PISTOL_START_OP, /*target_or_sender*/ 0, /*data*/ {0,0,0}}; // Tell CiMs that they can go to the next step
+                    struct instruction inst = {PISTOL_START_OP, 0, {0,0,0}, SINGLE_WIDTH}; // Tell CiMs that they can go to the next step
                     bus->push_inst(inst);
                     high_level_inf_step = static_cast<HIGH_LEVEL_INFERENCE_STEP> (high_level_inf_step+1);
                     gen_cnt_7b_3.reset();
@@ -172,7 +172,7 @@ int Master_Ctrl::start_signal_load(Bus* bus){
 
 struct instruction Master_Ctrl::param_to_send(){
     /* Parses the parameter file and returns the instruction that master needs to send to CiM */
-    struct instruction inst = {NOP, 0, {0,0,0}};
+    struct instruction inst = {NOP, 0, {0,0,0}, SINGLE_WIDTH};
 
     /* 
     * Note: gen_bit holds whether we've sent the first CiM of a layer
@@ -390,7 +390,7 @@ void Master_Ctrl::update_inst_with_params(PARAM_NAME param_name, struct instruct
 
 int Master_Ctrl::prepare_for_broadcast(broadcast_op_info op_info, Bus* bus) {
     /* Prepares the master controller for a broadcast operation */
-    struct instruction inst = {op_info.op, /*target_or_sender*/ gen_cnt_7b.get_cnt(), {op_info.tx_addr, op_info.len, op_info.rx_addr}};
+    struct instruction inst = {op_info.op, gen_cnt_7b.get_cnt(), {op_info.tx_addr, op_info.len, op_info.rx_addr}, op_info.data_width};
     state = BROADCAST_MANAGEMENT;
     
     if (high_level_inf_step == ENC_MHSA_QK_T_STEP) { // Need to modify instruction based on where we are in the Z-stack of the Q and K matrices

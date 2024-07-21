@@ -19,7 +19,7 @@ int init(){
     ext_sigs.master_nrst = false;
     ext_sigs.new_sleep_epoch = false;
 
-    // Define schedule for external events (triggered by he RISC-V processor)
+    // Define schedule for external events (triggered by the RISC-V processor)
     event_schedule[0] = master_nrst;
     event_schedule[2] = master_nrst_reset;
     event_schedule[4] = master_param_load;

@@ -64,12 +64,23 @@ enum SYSTEM_STATE {
     EVERYTHING_FINISHED
 };
 
+enum DATA_WIDTH {
+    SINGLE_WIDTH = 1,
+    DOUBLE_WIDTH = 2
+};
+
+enum DIRECTION {
+    VERTICAL,
+    HORIZONTAL
+};
+
 /*----- STRUCT -----*/
 struct instruction {
     /* Instructions between master controller and CiM */
     OP op;
     int target_or_sender; // Should be 6 bits (represents target CiM for all ops except TRANSPOSE_BROADCAST_DATA_OP)
     std::array<float, 3> data; // 3 words in ASIC
+    DATA_WIDTH data_width;
 };
 
 struct ext_signals {

@@ -7,7 +7,7 @@
 #include <CiM.hpp>
 
 /*----- DEFINE -----*/
-#define ENABLE_COMPUTATION_VERIFICATION false
+#define ENABLE_COMPUTATION_VERIFICATION true
 #define REL_TOLERANCE 0.01f //3% tolerance
 #define ABS_TOLERANCE 0.001f
 
@@ -69,9 +69,9 @@ static std::map<COMPUTE_VERIFICATION_STEP, StepVerifInfo> step_verif_info = {
 
 /*----- FUNCTION -----*/
 bool are_equal(float a, float b, uint16_t index, uint8_t id);
-void verify_computation(COMPUTE_VERIFICATION_STEP cim_state, uint8_t id, float* data, uint16_t starting_addr);
-void verify_result(RESULT_TYPE type, float result, float* input_data, uint16_t starting_addr, uint16_t len, uint8_t id);
-void print_softmax_error(float* data, uint16_t starting_addr);
+void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_state, uint8_t id, float* data, uint16_t starting_addr, DATA_WIDTH data_width);
+void verify_result(RESULT_TYPE type, float result, float* input_data, uint16_t starting_addr, uint16_t len, uint8_t id, DATA_WIDTH data_width);
+void print_softmax_error(float* data, uint16_t starting_addr, DATA_WIDTH data_width);
 void verify_softmax_storage(float* intermediate_res, uint16_t prev_softmax_base_addr);
 void print_intermediate_value_stats();
 void reset_stats();
