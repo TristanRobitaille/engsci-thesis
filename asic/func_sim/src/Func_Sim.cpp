@@ -13,6 +13,7 @@ Bus bus;
 vector<CiM> cims;
 Master_Ctrl ctrl((string(DATA_BASE_DIR)+"eeg.h5"), (string(DATA_BASE_DIR)+"model_weights.h5"));
 
+/*----- DEFINITION -----*/
 int init(){
     cout << "N_STO_INT_RES: " << N_STO_INT_RES << endl;
     cout << "N_STO_PARAMS: " << N_STO_PARAMS << endl;
@@ -34,7 +35,6 @@ int init(){
     return 0;
 }
 
-/*----- FUNCTIONS -----*/
 void copy_file(const char *src, const char *dst) {
     ifstream src_file(src, ios::binary);
     if (!src_file) {

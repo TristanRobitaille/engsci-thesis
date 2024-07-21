@@ -4,7 +4,8 @@
 #include <map>
 #include <armadillo>
 #include <../rapidcsv/src/rapidcsv.h>
-#include <CiM.hpp>
+
+#include <Misc.hpp>
 
 /*----- DEFINE -----*/
 #define ENABLE_COMPUTATION_VERIFICATION true

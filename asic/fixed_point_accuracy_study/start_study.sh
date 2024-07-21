@@ -14,7 +14,7 @@ do
     echo $N_STO_INT_RES
     make clean
     make configureNoBoost
-    make build
+    make build -j12
     mv build/Func_Sim build/Func_Sim_${i}b
     
     for j in $(seq 0 $((num_process-1)))

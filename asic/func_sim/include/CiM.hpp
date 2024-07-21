@@ -1,37 +1,21 @@
 #ifndef CIM_H
 #define CIM_H
 
-#include <iostream>
-
+#include <CiM_Compute.hpp>
 #include <Misc.hpp>
 #include <Param_Layer_Mapping.hpp>
 #include <Compute_Verification.hpp>
 
 /*----- DEFINE -----*/
-#define CIM_PARAMS_STORAGE_SIZE_NUM_ELEM 528
-#define CIM_INT_RES_SIZE_NUM_ELEM 886
 #define COMPUTE_CNT_THRESHOLD 3 // Used to simulate the delay in the computation to match the real hardware
-#define NUM_TERMS_EXP_TAYLOR_APPROX 6
 
 #define HAS_MY_DATA(x) ((id >= (x)) && (id < (x+3))) // Determines whether the current broadcast transaction contains data I need
 #define IS_MY_MATRIX(x) ((id >= (x)*NUM_HEADS) && (id < (x+1)*NUM_HEADS)) // Returns whether a given count corresponds to my matrix (for the *V matmul in encoder's MHSA)
 
 /*----- CLASS -----*/
-class CiM {
+class CiM : public CiM_Compute {
     private:
-        enum ACTIVATION {
-            NO_ACTIVATION, // Used for simple matrix multiplies (no bias)
-            LINEAR_ACTIVATION,
-            SWISH_ACTIVATION
-        };
-
-        enum INPUT_TYPE { // Type of input for a given computation
-            MODEL_PARAM,
-            INTERMEDIATE_RES,
-            IMMEDIATE_VAL,
-            ADC_INPUT
-        };
-
+        /*----- ENUM -----*/
         enum STATE {
             IDLE_CIM,
             RESET_CIM,
@@ -148,7 +132,6 @@ class CiM {
             {SOFTMAX_AVG_SUM_MEM,       DOUBLE_WIDTH*(2*EMB_DEPTH)}
         };
 
-        bool compute_in_progress = false; // Used by compute element to notify CiM controller when is in progress
         bool is_ready = true; // Signal that CiM can use to override the compute_in_progress signal and force the master to wait before sending the next instruction
         uint16_t id; // ID of the CiM
         uint16_t gen_reg_2b; // General-purpose register
@@ -158,13 +141,6 @@ class CiM {
         uint16_t data_len_reg; // General-purpose register used to record len of data sent/received on the bus
         uint16_t _compute_process_cnt; // [Not in ASIC] Counter used to track the progress of the current computation (used to simulate the delay in the computation to match the real hardware)
         uint16_t _num_compute_done; // [Not in ASIC] Counter used to track the number of computations done in a given inference step
-        comp_fx_t compute_temp_fp; // Used to store intermediate results of the computation
-        comp_fx_t compute_temp_fp_2; // Used to store intermediate results of the computation
-        comp_fx_t compute_temp_fp_3; // Used to store intermediate results of the computation
-        float computation_result; // Used to store the result of the computation
-        float params[CIM_PARAMS_STORAGE_SIZE_NUM_ELEM];
-        float intermediate_res[CIM_INT_RES_SIZE_NUM_ELEM];
-        float softmax_exp_int_res[PATCH_LEN];
         uint32_t softmax_max_index;
         DATA_WIDTH data_width;
 
@@ -175,34 +151,10 @@ class CiM {
         Counter word_rec_cnt; // Tracks the # of words received from the bus that are relevant to me
         Counter word_snt_cnt; // Tracks the # of words sent to the bus
 
-        // Metrics
-        uint32_t _neg_exp_cnt; // [Not in ASIC] Track # of exponentials that have a negative argument
-        uint32_t _total_exp_cnt; // [Not in ASIC] Track the # of exponentials performed
-        comp_fx_t _max_exp_input_arg; // [Not in ASIC] Track the maximum input argument to the exponential
-        comp_fx_t _min_exp_input_arg; // [Not in ASIC] Track the minimum input argument to the exponential
-
         void update_compute_process_cnt();
-        void DIV(uint16_t num_addr, uint16_t in2, INPUT_TYPE in2_type);
-        void ARGMAX(uint16_t input_addr, uint16_t len, DATA_WIDTH data_width);
-        comp_fx_t EXP_APPROX(comp_fx_t input);
-        comp_fx_t SQRT(comp_fx_t input);
-        comp_fx_t FLOOR(comp_fx_t input);
-        comp_fx_t POW(comp_fx_t base, int exp);
         void update_state(STATE new_state);
         void load_previous_softmax();
         void overflow_check();
-        void int_res_write(float data, uint16_t index, DATA_WIDTH data_width);
-
-        template <typename storage_fx_t>
-        void SOFTMAX(uint16_t input_addr, uint16_t len, DATA_WIDTH data_width);
-        template <typename in1_storage_fx_t, typename in2_storage_fx_t>
-        void ADD(uint16_t in1_addr, uint16_t in2_addr, INPUT_TYPE in2_type);
-        template <typename storage_fx_t>
-        void LAYERNORM_1ST_HALF(uint16_t input_addr, DATA_WIDTH data_width);
-        template <typename in1_storage_fx_t, typename in2_storage_fx_t>
-        void MAC(uint16_t in1_start_addr, uint16_t in2_start_addr, uint16_t len, uint16_t bias_addr, INPUT_TYPE param_type, ACTIVATION activation, DATA_WIDTH data_width);
-        template <typename storage_fx_t>
-        void LAYERNORM_2ND_HALF(uint16_t input_addr, uint16_t gamma_addr, uint16_t beta_addr, DATA_WIDTH data_width);
 
     public:
         CiM() : id(-1), gen_cnt_7b(7), gen_cnt_7b_2(7), word_rec_cnt(7), word_snt_cnt(7) {}
