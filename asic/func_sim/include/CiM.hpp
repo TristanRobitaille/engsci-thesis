@@ -9,7 +9,7 @@
 
 /*----- DEFINE -----*/
 #define CIM_PARAMS_STORAGE_SIZE_NUM_ELEM 528
-#define CIM_INT_RES_SIZE_NUM_ELEM 2000 //TODO: CHANGE BACK! 848 // We need 835, but it needs to be divisible by 16. We can choose size of 848 and the additional sleep stages in here
+#define CIM_INT_RES_SIZE_NUM_ELEM 886
 #define COMPUTE_CNT_THRESHOLD 3 // Used to simulate the delay in the computation to match the real hardware
 #define NUM_TERMS_EXP_TAYLOR_APPROX 6
 
@@ -122,13 +122,13 @@ class CiM {
             {ENC_QVK_IN_MEM,            DOUBLE_WIDTH*(2*(NUM_PATCHES+1)+2*EMB_DEPTH)},
             {ENC_Q_MEM,                 DOUBLE_WIDTH*(2*(NUM_PATCHES+1)+3*EMB_DEPTH)},
             {ENC_K_MEM,                 DOUBLE_WIDTH*(3*(NUM_PATCHES+1)+3*EMB_DEPTH)},
-            {ENC_V_MEM,                 DOUBLE_WIDTH*(NUM_PATCHES+1)},
-            {ENC_K_T_MEM,               DOUBLE_WIDTH*(NUM_PATCHES+1+EMB_DEPTH)+EMB_DEPTH},
-            {ENC_QK_T_IN_MEM,           DOUBLE_WIDTH*(NUM_PATCHES+1+EMB_DEPTH)+2*EMB_DEPTH},
-            {ENC_QK_T_MEM,              DOUBLE_WIDTH*(NUM_PATCHES+1+EMB_DEPTH)+2*EMB_DEPTH+NUM_PATCHES+1}, // This address + NUM_HEADS*(NUM_PATCHES+1) is the determining factor in the total memory requirement
-            {ENC_PRE_SOFTMAX_MEM,       DOUBLE_WIDTH*(NUM_PATCHES+1+EMB_DEPTH)},
-            {ENC_V_MULT_IN_MEM,         DOUBLE_WIDTH*(NUM_PATCHES+1+EMB_DEPTH)+8*EMB_DEPTH},
-            {ENC_V_MULT_MEM,            DOUBLE_WIDTH*(NUM_PATCHES+1+EMB_DEPTH)+9*EMB_DEPTH},
+            {ENC_V_MEM,                 NUM_PATCHES+1},
+            {ENC_K_T_MEM,               DOUBLE_WIDTH*(EMB_DEPTH)+EMB_DEPTH+NUM_PATCHES+1},
+            {ENC_QK_T_IN_MEM,           DOUBLE_WIDTH*(EMB_DEPTH)+2*EMB_DEPTH+NUM_PATCHES+1},
+            {ENC_QK_T_MEM,              DOUBLE_WIDTH*(EMB_DEPTH)+2*EMB_DEPTH+2*(NUM_PATCHES+1)}, // This address + NUM_HEADS*(NUM_PATCHES+1) is the determining factor in the total memory requirement
+            {ENC_PRE_SOFTMAX_MEM,       DOUBLE_WIDTH*(EMB_DEPTH)+NUM_PATCHES+1},
+            {ENC_V_MULT_IN_MEM,         DOUBLE_WIDTH*(EMB_DEPTH)+8*EMB_DEPTH+NUM_PATCHES+1},
+            {ENC_V_MULT_MEM,            DOUBLE_WIDTH*(EMB_DEPTH)+9*EMB_DEPTH+NUM_PATCHES+1},
             {ENC_DENSE_IN_MEM,          DOUBLE_WIDTH*(NUM_PATCHES+1+EMB_DEPTH)},
             {ENC_MHSA_OUT_MEM,          DOUBLE_WIDTH*(2*EMB_DEPTH+NUM_PATCHES+1)},
             {ENC_LN2_1ST_HALF_MEM,      DOUBLE_WIDTH*(NUM_PATCHES+1)},
@@ -144,7 +144,7 @@ class CiM {
             {MLP_HEAD_DENSE_2_IN_MEM,   DOUBLE_WIDTH*(EMB_DEPTH)},
             {MLP_HEAD_DENSE_2_OUT_MEM,  DOUBLE_WIDTH*(2*EMB_DEPTH)},
             {MLP_HEAD_SOFTMAX_IN_MEM,   DOUBLE_WIDTH*(MLP_DIM)},
-            {PREV_SOFTMAX_OUTPUT_MEM,   DOUBLE_WIDTH*(836)}, // Only relevant for CiM #0 //FIXME
+            {PREV_SOFTMAX_OUTPUT_MEM,   866}, // Only relevant for CiM #0 //FIXME
             {SOFTMAX_AVG_SUM_MEM,       DOUBLE_WIDTH*(2*EMB_DEPTH)}
         };
 

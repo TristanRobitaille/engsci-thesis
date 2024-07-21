@@ -121,12 +121,12 @@ int main(int argc, char *argv[]){
     // Check N_STO_x
     const char* env_vars[2] = {"N_STO_PARAMS", "N_STO_INT_RES"};
     bool missing_env_var = false;
-    for (int i=0; i<2; i++){
-        if (getenv(env_vars[i]) == NULL) {
-            cout << "Could not find environment variable " << env_vars[i] << "! Did you forget to define it?" << endl;
-            missing_env_var = true;
-        }
-    }
+    // for (int i=0; i<2; i++){
+    //     if (getenv(env_vars[i]) == NULL) {
+    //         cout << "Could not find environment variable " << env_vars[i] << "! Did you forget to define it?" << endl;
+    //         missing_env_var = true;
+    //     }
+    // }
     if (missing_env_var) { return 1; }
 
     // Run functional simulation

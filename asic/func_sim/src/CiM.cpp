@@ -261,6 +261,9 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 if (compute_in_progress == false) {
                     if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) {
                         LAYERNORM_2ND_HALF<dw_fx_x_t>(mem_map.at(ENC_LN1_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_BETA_OFF, DOUBLE_WIDTH);
+                        for (int i=0; i<NUM_PATCHES+1; i++){ // Compress the positional embedding to single width to save on storage
+                            int_res_write(intermediate_res[mem_map.at(POS_EMB_MEM)+DOUBLE_WIDTH*i], mem_map.at(POS_EMB_MEM)+SINGLE_WIDTH*i, SINGLE_WIDTH);
+                        }
                     } else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) {
                         LAYERNORM_2ND_HALF<dw_fx_x_t>(mem_map.at(ENC_LN2_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_BETA_OFF, DOUBLE_WIDTH);
                     } else if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) {
@@ -604,7 +607,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     gen_reg_2b = 1; // Just a signal to avoid coming here every time FSM runs
                 } else if ((compute_in_progress == false) && (gen_reg_2b == 1)) {
                     int_res_write(computation_result, mem_map.at(ENC_MHSA_OUT_MEM) + DOUBLE_WIDTH*sender_id, DOUBLE_WIDTH);
-                    ADD<dw_fx_x_t,sw_fx_6_x_t>(mem_map.at(ENC_MHSA_OUT_MEM) + DOUBLE_WIDTH*sender_id, DOUBLE_WIDTH*sender_id, INTERMEDIATE_RES); // Sum with encoder's input as a residual connection
+                    ADD<dw_fx_x_t,sw_fx_6_x_t>(mem_map.at(ENC_MHSA_OUT_MEM) + DOUBLE_WIDTH*sender_id, mem_map.at(POS_EMB_MEM)+SINGLE_WIDTH*sender_id, INTERMEDIATE_RES); // Sum with encoder's input as a residual connection
                     gen_reg_2b = 2;
                     word_rec_cnt.reset();
                 }
