@@ -18,19 +18,28 @@
 #define DATA_BASE_DIR       "../fixed_point_accuracy_study/reference_data/"
 #define N_COMP              64
 #define Q_COMP              32
-#define N_STORAGE           64
 
-/*----- TYPEDEF -----*/
+/*----- TYPEDEFS -----*/
 // All fixed-point types are signed and all except for comp_fx_t have the same number of bits. We adjust the fix point format on each layer.
 // Xilinx AP_FIXED format: ap_fixed<width, integer, quantization_mode, overflow_mode, num. sat. bit> (https://docs.amd.com/r/en-US/ug1399-vitis-hls/Arbitrary-Precision-Fixed-Point-Data-Types)
 // TODO: Evaluate best quantization and overflow modes
 using comp_fx_t = ap_fixed<N_COMP, N_COMP-Q_COMP, AP_RND_CONV, AP_SAT_SYM>;
-using fx_1_x_t  = ap_fixed<N_STORAGE, 1, AP_RND_CONV, AP_SAT_SYM>; // ]-1, 1[
-using fx_2_x_t  = ap_fixed<N_STORAGE, 2, AP_RND_CONV, AP_SAT_SYM>; // ]-2, 2[
-using fx_3_x_t  = ap_fixed<N_STORAGE, 3, AP_RND_CONV, AP_SAT_SYM>; // ]-4, 4[
-using fx_4_x_t  = ap_fixed<N_STORAGE, 4, AP_RND_CONV, AP_SAT_SYM>; // ]-8, 8[
-using fx_5_x_t  = ap_fixed<N_STORAGE, 5, AP_RND_CONV, AP_SAT_SYM>; // ]-16, 16[
-using fx_6_x_t  = ap_fixed<N_STORAGE, 6, AP_RND_CONV, AP_SAT_SYM>; // ]-32, 32[
+using fx_1_x_t  = ap_fixed<N_STO_INT_RES, 1, AP_RND_CONV, AP_SAT_SYM>; // ]-1, 1[
+using fx_2_x_t  = ap_fixed<N_STO_INT_RES, 2, AP_RND_CONV, AP_SAT_SYM>; // ]-2, 2[
+using fx_3_x_t  = ap_fixed<N_STO_INT_RES, 3, AP_RND_CONV, AP_SAT_SYM>; // ]-4, 4[
+using fx_4_x_t  = ap_fixed<N_STO_INT_RES, 4, AP_RND_CONV, AP_SAT_SYM>; // ]-8, 8[
+using fx_5_x_t  = ap_fixed<N_STO_INT_RES, 5, AP_RND_CONV, AP_SAT_SYM>; // ]-16, 16[
+using fx_6_x_t  = ap_fixed<N_STO_INT_RES, 6, AP_RND_CONV, AP_SAT_SYM>; // ]-32, 32[
+
+using sw_fx_1_x_t   = ap_fixed<N_STO_INT_RES, 1, AP_RND_CONV, AP_SAT_SYM>;
+using sw_fx_2_x_t   = ap_fixed<N_STO_INT_RES, 2, AP_RND_CONV, AP_SAT_SYM>;
+using sw_fx_3_x_t   = ap_fixed<N_STO_INT_RES, 3, AP_RND_CONV, AP_SAT_SYM>;
+using sw_fx_4_x_t   = ap_fixed<N_STO_INT_RES, 4, AP_RND_CONV, AP_SAT_SYM>;
+using sw_fx_5_x_t   = ap_fixed<N_STO_INT_RES, 5, AP_RND_CONV, AP_SAT_SYM>;
+using sw_fx_6_x_t   = ap_fixed<N_STO_INT_RES, 6, AP_RND_CONV, AP_SAT_SYM>;
+using dw_fx_x_t     = ap_fixed<2*N_STO_INT_RES, 8, AP_RND_CONV, AP_SAT_SYM>; // TODO: Reduce num integer bits
+
+using softmax_exp_fx_t = ap_fixed<100, 50, AP_RND_CONV, AP_SAT_SYM>;
 
 /*----- MACROS -----*/
 #define NUM_TRANS(x) ceil((x)/3.0f) // Returns the number of transactions each CiM will send (3 elements per transaction)
@@ -55,12 +64,23 @@ enum SYSTEM_STATE {
     EVERYTHING_FINISHED
 };
 
+enum DATA_WIDTH {
+    SINGLE_WIDTH = 1,
+    DOUBLE_WIDTH = 2
+};
+
+enum DIRECTION {
+    VERTICAL,
+    HORIZONTAL
+};
+
 /*----- STRUCT -----*/
 struct instruction {
     /* Instructions between master controller and CiM */
     OP op;
     int target_or_sender; // Should be 6 bits (represents target CiM for all ops except TRANSPOSE_BROADCAST_DATA_OP)
     std::array<float, 3> data; // 3 words in ASIC
+    DATA_WIDTH data_width;
 };
 
 struct ext_signals {

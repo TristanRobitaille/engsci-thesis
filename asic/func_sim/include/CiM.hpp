@@ -2,7 +2,6 @@
 #define CIM_H
 
 #include <iostream>
-#include <map>
 
 #include <Misc.hpp>
 #include <Param_Layer_Mapping.hpp>
@@ -10,9 +9,9 @@
 
 /*----- DEFINE -----*/
 #define CIM_PARAMS_STORAGE_SIZE_NUM_ELEM 528
-#define CIM_INT_RES_SIZE_NUM_ELEM 848 // We need 835, but it needs to be divisible by 16. We can choose size of 848 and the additional sleep stages in here
-#define COMPUTE_CNT_THRESHOLD 5 // Used to simulate the delay in the computation to match the real hardware
-#define NUM_TERMS_EXP_TAYLOR_APPROX 5
+#define CIM_INT_RES_SIZE_NUM_ELEM 886
+#define COMPUTE_CNT_THRESHOLD 3 // Used to simulate the delay in the computation to match the real hardware
+#define NUM_TERMS_EXP_TAYLOR_APPROX 6
 
 #define HAS_MY_DATA(x) ((id >= (x)) && (id < (x+3))) // Determines whether the current broadcast transaction contains data I need
 #define IS_MY_MATRIX(x) ((id >= (x)*NUM_HEADS) && (id < (x+1)*NUM_HEADS)) // Returns whether a given count corresponds to my matrix (for the *V matmul in encoder's MHSA)
@@ -113,39 +112,40 @@ class CiM {
             PREV_SOFTMAX_OUTPUT_MEM
         };
 
+        /*----- MAP -----*/
         const std::map<DATA, uint16_t> mem_map = {
-            {PATCH_MEM,                 PATCH_LEN+1},
+            {PATCH_MEM,                 PATCH_LEN+DOUBLE_WIDTH},
             {CLASS_TOKEN_MEM,           PATCH_LEN},
             {POS_EMB_MEM,               0},
-            {ENC_LN1_1ST_HALF_MEM,      NUM_PATCHES+1},
-            {ENC_LN1_2ND_HALF_MEM,      NUM_PATCHES+1+EMB_DEPTH},
-            {ENC_QVK_IN_MEM,            NUM_PATCHES+1+EMB_DEPTH},
-            {ENC_Q_MEM,                 2*EMB_DEPTH+NUM_PATCHES+1},
-            {ENC_K_MEM,                 2*(EMB_DEPTH+NUM_PATCHES+1)},
+            {ENC_LN1_1ST_HALF_MEM,      DOUBLE_WIDTH*(NUM_PATCHES+1)},
+            {ENC_LN1_2ND_HALF_MEM,      DOUBLE_WIDTH*(NUM_PATCHES+1+EMB_DEPTH)},
+            {ENC_QVK_IN_MEM,            DOUBLE_WIDTH*(2*(NUM_PATCHES+1)+2*EMB_DEPTH)},
+            {ENC_Q_MEM,                 DOUBLE_WIDTH*(2*(NUM_PATCHES+1)+3*EMB_DEPTH)},
+            {ENC_K_MEM,                 DOUBLE_WIDTH*(3*(NUM_PATCHES+1)+3*EMB_DEPTH)},
             {ENC_V_MEM,                 NUM_PATCHES+1},
-            {ENC_K_T_MEM,               2*EMB_DEPTH+NUM_PATCHES+1},
-            {ENC_QK_T_IN_MEM,           3*EMB_DEPTH+NUM_PATCHES+1},
-            {ENC_QK_T_MEM,              3*EMB_DEPTH+2*(NUM_PATCHES+1)},
-            {ENC_PRE_SOFTMAX_MEM,       2*(EMB_DEPTH+NUM_PATCHES+1)},
-            {ENC_V_MULT_IN_MEM,         NUM_PATCHES+1+EMB_DEPTH},
-            {ENC_V_MULT_MEM,            2*EMB_DEPTH+NUM_PATCHES+1},
-            {ENC_DENSE_IN_MEM,          NUM_PATCHES+1+EMB_DEPTH},
-            {ENC_MHSA_OUT_MEM,          2*EMB_DEPTH+NUM_PATCHES+1},
-            {ENC_LN2_1ST_HALF_MEM,      NUM_PATCHES+1},
-            {ENC_LN2_2ND_HALF_MEM,      NUM_PATCHES+1+EMB_DEPTH},
-            {ENC_MLP_IN_MEM,            NUM_PATCHES+1},
-            {ENC_MLP_DENSE1_MEM,        NUM_PATCHES+1+EMB_DEPTH},
-            {ENC_MLP_DENSE2_IN_MEM,     NUM_PATCHES+1},
-            {ENC_MLP_OUT_MEM,           3*EMB_DEPTH+NUM_PATCHES+2},
-            {MLP_HEAD_LN_1ST_HALF_MEM,  0},
-            {MLP_HEAD_LN_2ND_HALF_MEM,  EMB_DEPTH},
-            {MLP_HEAD_DENSE_1_IN_MEM,   EMB_DEPTH},
-            {MLP_HEAD_DENSE_1_OUT_MEM,  2*EMB_DEPTH},
-            {MLP_HEAD_DENSE_2_IN_MEM,   EMB_DEPTH},
-            {MLP_HEAD_DENSE_2_OUT_MEM,  2*EMB_DEPTH},
-            {MLP_HEAD_SOFTMAX_IN_MEM,   MLP_DIM},
-            {PREV_SOFTMAX_OUTPUT_MEM,   836}, // Only relevant for CiM #0
-            {SOFTMAX_AVG_SUM_MEM,       2*EMB_DEPTH}
+            {ENC_K_T_MEM,               DOUBLE_WIDTH*(EMB_DEPTH)+EMB_DEPTH+NUM_PATCHES+1},
+            {ENC_QK_T_IN_MEM,           DOUBLE_WIDTH*(EMB_DEPTH)+2*EMB_DEPTH+NUM_PATCHES+1},
+            {ENC_QK_T_MEM,              DOUBLE_WIDTH*(EMB_DEPTH)+2*EMB_DEPTH+2*(NUM_PATCHES+1)}, // This address + NUM_HEADS*(NUM_PATCHES+1) is the determining factor in the total memory requirement
+            {ENC_PRE_SOFTMAX_MEM,       DOUBLE_WIDTH*(EMB_DEPTH)+NUM_PATCHES+1},
+            {ENC_V_MULT_IN_MEM,         DOUBLE_WIDTH*(EMB_DEPTH)+8*EMB_DEPTH+NUM_PATCHES+1},
+            {ENC_V_MULT_MEM,            DOUBLE_WIDTH*(EMB_DEPTH)+9*EMB_DEPTH+NUM_PATCHES+1},
+            {ENC_DENSE_IN_MEM,          DOUBLE_WIDTH*(NUM_PATCHES+1+EMB_DEPTH)},
+            {ENC_MHSA_OUT_MEM,          DOUBLE_WIDTH*(2*EMB_DEPTH+NUM_PATCHES+1)},
+            {ENC_LN2_1ST_HALF_MEM,      DOUBLE_WIDTH*(NUM_PATCHES+1)},
+            {ENC_LN2_2ND_HALF_MEM,      DOUBLE_WIDTH*(NUM_PATCHES+1+EMB_DEPTH)},
+            {ENC_MLP_IN_MEM,            DOUBLE_WIDTH*(NUM_PATCHES+1)},
+            {ENC_MLP_DENSE1_MEM,        DOUBLE_WIDTH*(NUM_PATCHES+1+EMB_DEPTH)},
+            {ENC_MLP_DENSE2_IN_MEM,     DOUBLE_WIDTH*(NUM_PATCHES+1)},
+            {ENC_MLP_OUT_MEM,           DOUBLE_WIDTH*(3*EMB_DEPTH+NUM_PATCHES+2)},
+            {MLP_HEAD_LN_1ST_HALF_MEM,  DOUBLE_WIDTH*(0)},
+            {MLP_HEAD_LN_2ND_HALF_MEM,  DOUBLE_WIDTH*(EMB_DEPTH)},
+            {MLP_HEAD_DENSE_1_IN_MEM,   DOUBLE_WIDTH*(EMB_DEPTH)},
+            {MLP_HEAD_DENSE_1_OUT_MEM,  DOUBLE_WIDTH*(2*EMB_DEPTH)},
+            {MLP_HEAD_DENSE_2_IN_MEM,   DOUBLE_WIDTH*(EMB_DEPTH)},
+            {MLP_HEAD_DENSE_2_OUT_MEM,  DOUBLE_WIDTH*(2*EMB_DEPTH)},
+            {MLP_HEAD_SOFTMAX_IN_MEM,   DOUBLE_WIDTH*(MLP_DIM)},
+            {PREV_SOFTMAX_OUTPUT_MEM,   866}, // Only relevant for CiM #0 //FIXME
+            {SOFTMAX_AVG_SUM_MEM,       DOUBLE_WIDTH*(2*EMB_DEPTH)}
         };
 
         bool compute_in_progress = false; // Used by compute element to notify CiM controller when is in progress
@@ -164,7 +164,9 @@ class CiM {
         float computation_result; // Used to store the result of the computation
         float params[CIM_PARAMS_STORAGE_SIZE_NUM_ELEM];
         float intermediate_res[CIM_INT_RES_SIZE_NUM_ELEM];
+        float softmax_exp_int_res[PATCH_LEN];
         uint32_t softmax_max_index;
+        DATA_WIDTH data_width;
 
         STATE cim_state;
         INFERENCE_STEP current_inf_step = CLASS_TOKEN_CONCAT_STEP;
@@ -181,7 +183,7 @@ class CiM {
 
         void update_compute_process_cnt();
         void DIV(uint16_t num_addr, uint16_t in2, INPUT_TYPE in2_type);
-        void ARGMAX(uint16_t input_addr, uint16_t len);
+        void ARGMAX(uint16_t input_addr, uint16_t len, DATA_WIDTH data_width);
         comp_fx_t EXP_APPROX(comp_fx_t input);
         comp_fx_t SQRT(comp_fx_t input);
         comp_fx_t FLOOR(comp_fx_t input);
@@ -189,17 +191,18 @@ class CiM {
         void update_state(STATE new_state);
         void load_previous_softmax();
         void overflow_check();
+        void int_res_write(float data, uint16_t index, DATA_WIDTH data_width);
 
         template <typename storage_fx_t>
-        void SOFTMAX(uint16_t input_addr, uint16_t len);
-        template <typename storage_fx_t>
+        void SOFTMAX(uint16_t input_addr, uint16_t len, DATA_WIDTH data_width);
+        template <typename in1_storage_fx_t, typename in2_storage_fx_t>
         void ADD(uint16_t in1_addr, uint16_t in2_addr, INPUT_TYPE in2_type);
         template <typename storage_fx_t>
-        void LAYERNORM_1ST_HALF(uint16_t input_addr);
+        void LAYERNORM_1ST_HALF(uint16_t input_addr, DATA_WIDTH data_width);
         template <typename in1_storage_fx_t, typename in2_storage_fx_t>
-        void MAC(uint16_t in1_start_addr, uint16_t in2_start_addr, uint16_t len, uint16_t bias_addr, INPUT_TYPE param_type, ACTIVATION activation);
+        void MAC(uint16_t in1_start_addr, uint16_t in2_start_addr, uint16_t len, uint16_t bias_addr, INPUT_TYPE param_type, ACTIVATION activation, DATA_WIDTH data_width);
         template <typename storage_fx_t>
-        void LAYERNORM_2ND_HALF(uint16_t input_addr, uint16_t gamma_addr, uint16_t beta_addr);
+        void LAYERNORM_2ND_HALF(uint16_t input_addr, uint16_t gamma_addr, uint16_t beta_addr, DATA_WIDTH data_width);
 
     public:
         CiM() : id(-1), gen_cnt_7b(7), gen_cnt_7b_2(7), word_rec_cnt(7), word_snt_cnt(7) {}

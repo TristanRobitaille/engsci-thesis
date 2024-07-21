@@ -33,49 +33,51 @@ bool are_equal(float a, float b, uint16_t index, uint8_t id) {
     return true;
 }
 
-void verify_computation(COMPUTE_VERIFICATION_STEP cim_state, uint8_t id, float* data, uint16_t starting_addr) {
+void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, uint8_t id, float* data, uint16_t starting_addr, DATA_WIDTH data_width) {
     if (ENABLE_COMPUTATION_VERIFICATION == false) { return; }
 
-    if ((cim_state == ENC_MHSA_DENSE_QK_T_VERIF) || (cim_state == ENC_SOFTMAX_VERIF)) {
+    uint16_t stride = (data_width == SINGLE_WIDTH) ? 1 : 2;
+    std::vector<float> ref_data;
+
+    if ((cim_step == ENC_MHSA_DENSE_QK_T_VERIF) || (cim_step == ENC_SOFTMAX_VERIF)) {
         for (int head = 0; head < NUM_HEADS; head++) {
-            std::string filename = step_verif_info[cim_state].csv_fp + std::to_string(head) + ".csv";
+            std::string filename = step_verif_info[cim_step].csv_fp + std::to_string(head) + ".csv";
             rapidcsv::Document csv(filename, rapidcsv::LabelParams(-1, -1));
-            std::vector<float> ref_data;
-            if (cim_state == ENC_MHSA_DENSE_QK_T_VERIF) { ref_data = csv.GetColumn<float>(id); }
-            else if (cim_state == ENC_SOFTMAX_VERIF) { ref_data = csv.GetRow<float>(id); }
-            for (int i = 0; i < ref_data.size(); i++) { are_equal(ref_data[i], data[i+starting_addr+head*(NUM_PATCHES+1)], i, id); }
+            if (cim_step == ENC_MHSA_DENSE_QK_T_VERIF) { ref_data = csv.GetColumn<float>(id); }
+            else if (cim_step == ENC_SOFTMAX_VERIF) { ref_data = csv.GetRow<float>(id); }
+            for (int i = 0; i < ref_data.size(); i++) { are_equal(ref_data[i], data[stride*i + starting_addr + head*(NUM_PATCHES+1)], stride*i + starting_addr + head*(NUM_PATCHES+1), id); }
         }
-    } else if (cim_state == POST_SOFTMAX_AVG_VERIF) {
-        std::vector<float> ref_accumulator;
-        for (int i = 0; i < NUM_SLEEP_STAGES; i++) { // Softmax for current epoch
-            ref_accumulator.push_back(data[MLP_DIM+i]);
-        }
+    } else if (cim_step == POST_SOFTMAX_AVG_VERIF) {
+        rapidcsv::Document csv(step_verif_info[MLP_HEAD_SOFTMAX_DIV_VERIF].csv_fp, rapidcsv::LabelParams(-1, -1));
+        ref_data = csv.GetColumn<float>(0);
+        for (int i = 0; i < ref_data.size(); i++) { ref_data[i] = ref_data[i] / NUM_SAMPLES_OUT_AVG; } // Divide this epoch's reference softmax
+
         for (int i = 0; i < (NUM_SAMPLES_OUT_AVG-1); i++) { // Softmax for previous dummy epochs
-            std::string filename = step_verif_info[cim_state].csv_fp + std::to_string(i) + ".csv";
+            std::string filename = step_verif_info[cim_step].csv_fp + std::to_string(i) + ".csv";
             rapidcsv::Document csv(filename, rapidcsv::LabelParams(-1, -1));
-            std::vector<float> dummy_softmax = csv.GetRow<float>(id);
-            for (int j = 0; j < NUM_SLEEP_STAGES; j++) { ref_accumulator[j] += dummy_softmax[j] / NUM_SAMPLES_OUT_AVG; }
+            std::vector<float> dummy_softmax = csv.GetRow<float>(0);
+            for (int j = 0; j < NUM_SLEEP_STAGES; j++) { ref_data[j] += dummy_softmax[j] / NUM_SAMPLES_OUT_AVG; }
         }
-        for (int i = 0; i < NUM_SLEEP_STAGES; i++) { are_equal(ref_accumulator[i], data[starting_addr+i], i, id); }
+        for (int i = 0; i < NUM_SLEEP_STAGES; i++) { are_equal(ref_data[i], data[starting_addr + stride*i], starting_addr + stride*i, id); }
     } else {
-        rapidcsv::Document csv(step_verif_info[cim_state].csv_fp, rapidcsv::LabelParams(-1, -1));
-        if (cim_state == ENC_OUT_VERIF) { 
+        rapidcsv::Document csv(step_verif_info[cim_step].csv_fp, rapidcsv::LabelParams(-1, -1));
+        if (cim_step == ENC_OUT_VERIF) { 
             std::vector<float> col = csv.GetColumn<float>(id);
-            are_equal(col[0], data[starting_addr], 0, id); // Only check the first row since we are not computing the rest
+            are_equal(col[0], data[starting_addr], starting_addr, id); // Only check the first row since we are not computing the rest
         } else {
-            std::vector<float> ref_data;
-            if (cim_state == MLP_HEAD_LAYERNORM_VERIF || cim_state == MLP_HEAD_DENSE_1_VERIF) { ref_data = csv.GetRow<float>(id); }
+            if (cim_step == MLP_HEAD_LAYERNORM_VERIF || cim_step == MLP_HEAD_DENSE_1_VERIF) { ref_data = csv.GetRow<float>(id); }
             else { ref_data = csv.GetColumn<float>(id); }
             for (int i = 0; i < ref_data.size(); i++) { 
-                if (cim_state == MLP_HEAD_SOFTMAX_DIV_VERIF) { are_equal(ref_data[i]/NUM_SAMPLES_OUT_AVG, data[i+starting_addr], i, id); }
-                else { are_equal(ref_data[i], data[i+starting_addr], i, id); }
+                if (cim_step == MLP_HEAD_SOFTMAX_DIV_VERIF) { are_equal(ref_data[i]/NUM_SAMPLES_OUT_AVG, data[stride*i + starting_addr], stride*i + starting_addr, id); }
+                else { are_equal(ref_data[i], data[stride*i + starting_addr], stride*i + starting_addr, id); }
             }
         }
     }
 }
 
-void print_softmax_error(float* data, uint16_t starting_addr) {
+void print_softmax_error(float* data, uint16_t starting_addr, DATA_WIDTH data_width) {
     if (ENABLE_COMPUTATION_VERIFICATION == false) { return; }
+    uint16_t stride = (data_width == SINGLE_WIDTH) ? 1 : 2;
 
     rapidcsv::Document csv(step_verif_info[MLP_HEAD_SOFTMAX_VERIF].csv_fp, rapidcsv::LabelParams(-1, -1));
     std::vector<float> ref_softmax = csv.GetColumn<float>(0);
@@ -83,19 +85,20 @@ void print_softmax_error(float* data, uint16_t starting_addr) {
 
     cout << "Error on final softmax: ";
     for (int i = 0; i < NUM_SLEEP_STAGES; i++) { 
-        softmax_err_rel.push_back(100*(ref_softmax[i] - data[starting_addr+i]) / ref_softmax[i]);
+        softmax_err_rel.push_back(100*(ref_softmax[i] - data[starting_addr+stride*i]) / ref_softmax[i]);
         softmax_err_abs.push_back(ref_softmax[i] - data[starting_addr+i]);
         cout << softmax_err_abs[i] << " (" << softmax_err_rel[i] << "%) ";
     }
     cout << endl;
 }
 
-void verify_result(RESULT_TYPE type, float result, float* input_data, uint16_t starting_addr, uint16_t len, uint8_t id) {
+void verify_result(RESULT_TYPE type, float result, float* input_data, uint16_t starting_addr, uint16_t len, uint8_t id, DATA_WIDTH data_width) {
     if (ENABLE_COMPUTATION_VERIFICATION == false) { return; }
 
     float data[len];
     float reference_result = 0.0f;
-    for (int i = 0; i < len; i++) { data[i] = input_data[i+starting_addr]; }
+    uint16_t stride = (data_width == SINGLE_WIDTH) ? 1 : 2;
+    for (int i = 0; i < len; i++) { data[i] = input_data[starting_addr+stride*i]; }
     arma::fvec arma_data(data, len);
 
     if (type == MEAN) { reference_result = arma::mean(arma_data); }
@@ -113,12 +116,14 @@ void verify_softmax_storage(float* intermediate_res, uint16_t prev_softmax_base_
             std::string filename = step_verif_info[POST_SOFTMAX_AVG_VERIF].csv_fp + std::to_string(i) + ".csv";
             rapidcsv::Document csv(filename, rapidcsv::LabelParams(-1, -1));
             std::vector<float> dummy_softmax = csv.GetRow<float>(0);
-            are_equal(dummy_softmax[j] / NUM_SAMPLES_OUT_AVG, intermediate_res[prev_softmax_base_addr + j+(i+1)*NUM_SLEEP_STAGES], j, 0);
+            uint16_t addr = prev_softmax_base_addr + DOUBLE_WIDTH*(j +(i+1)*NUM_SLEEP_STAGES);
+            are_equal(dummy_softmax[j]/NUM_SAMPLES_OUT_AVG, intermediate_res[addr], addr, 0);
             
             // Check that the current sleep epoch's softmax got moved to the previous sleep epochs softmax storage
             rapidcsv::Document csv_current(step_verif_info[MLP_HEAD_SOFTMAX_VERIF].csv_fp, rapidcsv::LabelParams(-1, -1));
             std::vector<float> ref_softmax = csv_current.GetColumn<float>(0);
-            are_equal(ref_softmax[j] / NUM_SAMPLES_OUT_AVG, intermediate_res[prev_softmax_base_addr + j], j, 0);
+            addr = prev_softmax_base_addr + DOUBLE_WIDTH*j;
+            are_equal(ref_softmax[j]/NUM_SAMPLES_OUT_AVG, intermediate_res[addr], addr, 0);
         }
     }
 }
