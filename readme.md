@@ -6,7 +6,7 @@ Project description: https://tristan.cbcr.me/?type=a#edge_AI
 ## Dependencies
 #### Docker
 You can now run everything inside a Docker container. Ensure you have the Docker app running.
-Build it with `docker build -t engsci-thesis .`.
+Build it with `docker build -t engsci-thesis .`. Be prepared to wait around 10 minutes for the build process to complete.
 Run it with ``docker run -i -t -v `pwd`:/tmp engsci-thesis``.
 
 #### Tensorflow
@@ -28,7 +28,7 @@ Install Python dependencies for IP verification with `pip3 install -r asic/ip_ve
 #### LaTeX
 To compile LaTeX documents, install `latexml`, `texlive` and `biber`: `brew install latexml texlive biber`.\
 You'll also need the Python package `SciencePlots` to export plots used in the thesis. Install it with: `python -m pip install git+https://github.com/garrettj403/SciencePlots.git`\
-I recommend using the `LaTeX Workshop` extension in VSCode.
+I recommend using the `LaTeX Workshop` extension in VSCode. You can also compile the PDF from the Terminal: `latexmk <filepath>.tex`.
 
 ## Map
 In this repository, you will find most files for this thesis.\
