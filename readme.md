@@ -4,6 +4,11 @@ Part of my Engineering Science (ECE option) degree at the University of Toronto.
 Project description: https://tristan.cbcr.me/?type=a#edge_AI
 
 ## Dependencies
+#### Docker
+You can now run everything inside a Docker container. Ensure you have the Docker app running.
+Build it with `docker build -t engsci-thesis .`.
+Run it with ``docker run -i -t -v `pwd`:/tmp engsci-thesis``.
+
 #### Tensorflow
 Create a virtualenv named `asic_sleep_trans` by running `python -m venv asic_sleep_trans` inside the `python_prototype/` directory
 Activate the venv and install Python dependencies with: `source asic_sleep_trans/bin/activate && pip3 install -r requirements.txt`.\
