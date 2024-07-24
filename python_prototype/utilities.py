@@ -412,7 +412,7 @@ def print_stats_from_h5(h5_fp:str) -> None:
     print(f'Global Min = {global_min:.5f}, Global Max = {global_max:.5f}, Closest to zero (abs.) = {global_closest_to_zero:.8f}')
     print(f'Total prunable params (abs. < {PRUNE_THRESHOLD}) = {global_prunable_params/global_total_params*100:.2f}%')
 
-def run_accuracy_study(model_fp:str, eeg_fp:str, results_fp:str, num_clips:int, start_n_sto_int_res:int=7, max_n_sto_int_res:int=20):
+def run_accuracy_study(model_fp:str, eeg_fp:str, results_fp:str, num_clips:int, start_n_sto_int_res:int=2, max_n_sto_int_res:int=20):
     tf.config.run_functions_eagerly(True) # Allows step-by-step debugging of tf.functions
     model = tf.keras.models.load_model(model_fp, custom_objects={"CustomSchedule": CustomSchedule})
 

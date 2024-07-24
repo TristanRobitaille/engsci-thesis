@@ -1,2 +1,2 @@
-﻿Fixed-point accuracy study,,,,,,,,,,,,,,,,
-Clip #,Ground truth,TensorFlow,N_STO = 7,N_STO = 8,N_STO = 9,N_STO = 10,N_STO = 11,N_STO = 12,N_STO = 13,N_STO = 14,N_STO = 15,N_STO = 16,N_STO = 17,N_STO = 18,N_STO = 19,N_STO = 20
+﻿Fixed-point accuracy study,,,,,,,,,,,,,,,,,,,,,
+Clip #,Ground truth,TensorFlow,N_STO = 2,N_STO = 3,N_STO = 4,N_STO = 5,N_STO = 6,N_STO = 7,N_STO = 8,N_STO = 9,N_STO = 10,N_STO = 11,N_STO = 12,N_STO = 13,N_STO = 14,N_STO = 15,N_STO = 16,N_STO = 17,N_STO = 18,N_STO = 19,N_STO = 20

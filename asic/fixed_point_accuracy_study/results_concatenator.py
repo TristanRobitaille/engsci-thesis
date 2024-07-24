@@ -7,7 +7,7 @@ import datetime
 #----- CONSTANTS -----#
 RESULTS_TEMPLATE_FP = "./results/results_template_w_python.csv"
 START_ROW_OFFSET = 2
-START_COLUMN_OFFSET = 3 - 7
+START_COLUMN_OFFSET = 3 - 2
 
 def main():
     # Parse arguments
@@ -75,6 +75,31 @@ def main():
     elif args.type == "complete":
         if args.bit_type == "int_res":  new_fp = f"./results/results_params-{num_bits_fixed}_int-res-variable_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
         elif args.bit_type == "params": new_fp = f"./results/results_params-variable_int-res-{num_bits_fixed}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+
+    # Compute accuracies if concatenating the final files
+    if args.type == "complete":
+        accuracies = len(template_data[-1])*["0"]
+        accuracies[0] = "Accuracy"
+        accuracies[1] = "."
+        total_clips_ran = 0
+        for row in template_data:
+            at_least_one_n_sto_inferred = False
+            if row[0].isdigit(): # If this row is an actual clip
+                ground_truth = int(row[1])
+                for i in range(3,len(row)): # Only Python and N_STOs
+                    if row[i] == ".": continue
+                    if row[1] == "0": break # If ground truth is undefined
+                    at_least_one_n_sto_inferred = True # If clip is inference from functional simulation
+                    if int(row[i]) == ground_truth:
+                        accuracies[i] = str(int(accuracies[i])+1)
+            
+                if at_least_one_n_sto_inferred: # Can now consider Tensorflow reference
+                    total_clips_ran += 1
+                    if (int(row[2])) == ground_truth: accuracies[2] = str(int(accuracies[2])+1)
+
+        for i in range(2, len(accuracies)):
+            accuracies[i] = str(round(int(accuracies[i])/total_clips_ran, 4))
+        template_data.append(accuracies)
 
     with open(new_fp, 'w', newline='') as f:
         print(f"new_fp: {new_fp}")
