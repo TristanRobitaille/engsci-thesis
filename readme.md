@@ -7,7 +7,7 @@ Project description: https://tristan.cbcr.me/?type=a#edge_AI
 #### Docker
 You can now run everything inside a Docker container. Ensure you have the Docker app running.
 Build it with `docker build -t engsci-thesis .`. Be prepared to wait around 10 minutes for the build process to complete.
-Run it with ``docker run -i -t -v `pwd`:/tmp engsci-thesis``.
+Run it with ``docker run -it -v `pwd`:/tmp engsci-thesis``.
 
 #### Tensorflow
 Create a virtualenv named `asic_sleep_trans` by running `python -m venv asic_sleep_trans` inside the `python_prototype/` directory

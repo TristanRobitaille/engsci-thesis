@@ -508,9 +508,7 @@ def main():
         if os.path.exists(path=ds_filepath): 
             shutil.rmtree(path=ds_filepath) # Delete file if it exists
         
-        if "cedar.computecanada.ca" in socket.gethostname(): # Compute Canada Cedar (aka running on GPU needs Tensorflow 2.8.0) needs a Tensorflow downgrade (or gets a compilation error)
-            tf.data.experimental.save(ds, compression=None, path=ds_filepath)
-        else: tf.data.Dataset.save(ds, compression=None, path=ds_filepath)
+        tf.data.Dataset.save(ds, compression=None, path=ds_filepath)
 
         # Save metadata JSON
         stages_cnt = utilities.count_instances_per_class(output['sleep_stage'], sleep_map.get_num_stages()+1) # +1 is to account for unknown sleep stage

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.22)
 message ("Inside top cmake file, ${CMAKE_CURRENT_BINARY_DIR}")
 
 project(Func_Sim)
@@ -6,12 +6,13 @@ project(Func_Sim)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ./build)
+set(BOOST_ROOT /usr/local)
+set(BOOST_INCLUDEDIR /usr/local/include/boost)
 
 add_definitions(-DN_STO_INT_RES=$ENV{N_STO_INT_RES})
 add_definitions(-DN_STO_PARAMS=$ENV{N_STO_PARAMS})
 
 file(GLOB FILES "src/*.cpp")
-
 add_executable(Func_Sim ${FILES})
 
 set(HIGHFIVE_FIND_HDF5 Off)
