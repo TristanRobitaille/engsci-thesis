@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     software-properties-common \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # Install boost manually since the required version is not available on Ubuntu 23.10
@@ -49,8 +50,8 @@ RUN apt-get update && apt-get install -y \
 
 # #----- ASIC RTL dependencies -----#
 RUN apt-get update && apt-get install -y \
-    verilator \
-    && rm -rf /var/lib/apt/lists/*
+    verilator && \
+    rm -rf /var/lib/apt/lists/*
 COPY asic/rtl/requirements.txt .
 RUN pip3 install --upgrade -r requirements.txt
 

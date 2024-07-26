@@ -16,8 +16,8 @@
 #define NUM_SAMPLES_OUT_AVG 3     // Number of samples in output averaging filter
 #define EEG_SCALE_FACTOR    65535 // Normalize from 16b
 #define DATA_BASE_DIR       "../fixed_point_accuracy_study/reference_data/"
-#define N_COMP 		    36             
-#define Q_COMP              20 
+#define N_COMP 		        38             
+#define Q_COMP              21
 #define PRINT_INF_PROGRESS  false
 
 /*----- TYPEDEFS -----*/
