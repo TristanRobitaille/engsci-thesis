@@ -466,9 +466,9 @@ def plot_weight_distribution(model, output_dir:str):
 
 def main():
     # plot_weight_distribution(model="asic/fixed_point_accuracy_study/model.tf", output_dir="python_prototype/reference_data/weights")
-    run_accuracy_study( model_fp="../asic/fixed_point_accuracy_study/reference_data/model.tf",
-                        eeg_fp="../asic/fixed_point_accuracy_study/reference_data/eeg.h5",
-                        results_fp="../asic/fixed_point_accuracy_study/results/results_template_w_python.csv", num_clips=1000)
+    run_accuracy_study( model_fp="asic/fixed_point_accuracy_study/reference_data/model.tf",
+                        eeg_fp="asic/fixed_point_accuracy_study/reference_data/eeg.h5",
+                        results_fp="asic/fixed_point_accuracy_study/results/results_template_w_python.csv", num_clips=1000)
     # edf_to_h5(edf_fp="data/PSG1.edf", h5_filename="data/PSG1.h5", sleep_map_name="no_combine", channel="EEG Cz-LER", clip_length_s=30, full_night=False, sampling_freq_hz=128)
     pass
 

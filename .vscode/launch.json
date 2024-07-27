@@ -20,7 +20,7 @@
             "program": "${workspaceFolder}/python_prototype/main_vision_transformer.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "python": "${workspaceFolder}/python_prototype/asic_sleep_trans/bin/python",
+            "python": "${workspaceFolder}/../../opt/venv/bin/python",
             "args": ["--enable_dataset_resample_replacement", "--batch_size=16", "--learning_rate=1e-3", "--num_epochs=2", "--k_fold_val_set=0", "--num_out_filter=2", "--mlp_head_num_dense=1",
                      "--input_channel=EEG Cz-LER", "--num_clips=8000", "--embedding_depth=64", "--num_layers=1", "--num_heads=8", "--mlp_dim=32", "--use_class_embedding",
                      "--class_weights", "1", "1", "1", "1", "1", "--historical_lookback_DNN_depth=0", "--num_runs=1", "--out_filter_type=pre_argmax", "--enable_positional_embedding", "--patch_length=64",
@@ -37,7 +37,7 @@
             "program": "${workspaceFolder}/python_prototype/edf_extract.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "python": "${workspaceFolder}/python_prototype/asic_sleep_trans/bin/python",
+            "python": "${workspaceFolder}/../../opt/venv/bin/python",
             "args": ["--type=EDF", "--clip_length_s=30", "--num_files=100", "--directory_psg=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF",
                      "--directory_labels=/mnt/data/tristan/engsci_thesis_python_prototype_data/SS3_EDF", "--export_directory=/mnt/data/tristan/engsci_thesis_python_prototype_data",
                      "--sampling_freq_hz=256", "--sleep_map_name=both_light_deep_combine",
@@ -49,21 +49,22 @@
             "request": "launch",
             "program": "${workspaceFolder}/python_prototype/utilities.py",
             "console": "integratedTerminal",
-            "python": "${workspaceFolder}/python_prototype/asic_sleep_trans/bin/python",
+            "python": "${workspaceFolder}/../../opt/venv/bin/python",
             "justMyCode": true,
             "args": []
         },
         {
             "name": "C++ Functional Simulation",
-            "type": "cppdbg",
+            "type": "lldb",
             "request": "launch",
             "program": "${workspaceFolder}/asic/func_sim/build/Func_Sim",
-            "args": ["--start_index", "0", "--end_index", "0", "--results_csv_fp", ""],
+            "args": ["--start_index", "0", "--end_index", "0", "--results_csv_fp", "", "--study_bit_type", "INT_RES"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/asic/func_sim/",
             "environment": [],
             "externalConsole": false,
-            "MIMode": "lldb"
+            "MIMode": "gdb",
+            "miDebuggerPath": "${workspaceFolder}../../../../usr/bin/gdb"
         }
     ]
 }
