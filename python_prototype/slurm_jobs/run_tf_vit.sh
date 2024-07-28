@@ -7,12 +7,10 @@
 #SBATCH --mail-user=tristan.robitaille@mail.utoronto.ca
 #SBATCH --mail-type=ALL
 
-module load cuda cudnn 
-module load python/3
-source ~/tensorflow/bin/activate
 # tensorboard --logdir=/home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/logs/fit --host 0.0.0.0 --load_fast false &
+module load apptainer/1.2.4
 
-python3 /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/main_vision_transformer.py \
+apptainer run engsci-thesis.sif python python_prototype/main_vision_transformer.py \
 --batch_size=16 \
 --learning_rate=1e-3 \
 --patch_length=64 \

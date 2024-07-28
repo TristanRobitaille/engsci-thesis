@@ -5,7 +5,7 @@
 logs/*
 WORK/*
 build/*
-venv
+*.sif
 
 ### Latex
 # Thesis

@@ -5,13 +5,9 @@
 #SBATCH --output=%N-%j_sampling_freq.out  # %N for node name, %j for jobID
 #SBATCH --mail-user=tristan.robitaille@mail.utoronto.ca
 #SBATCH --mail-type=ALL
-#!/bin/bash
 
-module load cuda cudnn
-module load python/3
-source ~/tensorflow/bin/activate
-
-python3 /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/python_prototype/edf_extract.py \
+module load apptainer/1.2.4
+apptainer run engsci-thesis.sif python python_prototype/main_vision_transformer.py \
 --type=EDF \
 --clip_length_s=30 \
 --num_files=100 \

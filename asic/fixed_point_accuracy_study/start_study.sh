@@ -1,10 +1,12 @@
+#!/bin/bash
+
 # Spawn processes of the program to run the fixed point accuracy study
 num_total_clips=960
 num_process=192
 starting_num_bits=2
 num_bit_studies=15
 
-cd ../func_sim
+cd asic/func_sim
 export N_STO_PARAMS=9
 
 for i in $(seq $starting_num_bits $((starting_num_bits + num_bit_studies - 1)))
