@@ -1,10 +1,12 @@
 FROM ubuntu:23.10
 LABEL description="EngSci Thesis Docker Image"
 
-# Set environment variables to avoid prompts during installation
+# Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+ENV CC=/usr/bin/gcc
+ENV CXX=/usr/bin/g++
 
 #----- General dependencies -----#
 RUN apt-get update && apt-get install -y \
@@ -13,6 +15,7 @@ RUN apt-get update && apt-get install -y \
     software-properties-common \
     pkg-config \
     gdb \
+    git \
     locales \
     && rm -rf /var/lib/apt/lists/*
 

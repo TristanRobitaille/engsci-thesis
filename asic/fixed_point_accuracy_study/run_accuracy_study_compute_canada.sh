@@ -8,8 +8,5 @@
 #SBATCH --mail-type=ALL
 #SBATCH --constraint=[skylake|cascade]
 
-module load hdf5
-module load boost
-module load armadillo
-
-source /home/tristanr/projects/def-xilinliu/tristanr/engsci-thesis/asic/fixed_point_accuracy_study/start_study.sh
+module load apptainer/1.2.4
+apptainer run engsci-thesis.sif asic/fixed_point_accuracy_study/start_study.sh
