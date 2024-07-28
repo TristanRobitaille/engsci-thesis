@@ -412,7 +412,7 @@ def print_stats_from_h5(h5_fp:str) -> None:
     print(f'Global Min = {global_min:.5f}, Global Max = {global_max:.5f}, Closest to zero (abs.) = {global_closest_to_zero:.8f}')
     print(f'Total prunable params (abs. < {PRUNE_THRESHOLD}) = {global_prunable_params/global_total_params*100:.2f}%')
 
-def run_accuracy_study(model_fp:str, eeg_fp:str, results_fp:str, num_clips:int, start_n_sto_int_res:int=7, max_n_sto_int_res:int=20):
+def run_accuracy_study(model_fp:str, eeg_fp:str, results_fp:str, num_clips:int, start_n_sto_int_res:int=2, max_n_sto_int_res:int=20):
     tf.config.run_functions_eagerly(True) # Allows step-by-step debugging of tf.functions
     model = tf.keras.models.load_model(model_fp, custom_objects={"CustomSchedule": CustomSchedule})
 
@@ -466,9 +466,9 @@ def plot_weight_distribution(model, output_dir:str):
 
 def main():
     # plot_weight_distribution(model="asic/fixed_point_accuracy_study/model.tf", output_dir="python_prototype/reference_data/weights")
-    run_accuracy_study( model_fp="../asic/fixed_point_accuracy_study/reference_data/model.tf",
-                        eeg_fp="../asic/fixed_point_accuracy_study/reference_data/eeg.h5",
-                        results_fp="../asic/fixed_point_accuracy_study/results/results_template_w_python.csv", num_clips=1000)
+    run_accuracy_study( model_fp="asic/fixed_point_accuracy_study/reference_data/model.tf",
+                        eeg_fp="asic/fixed_point_accuracy_study/reference_data/eeg.h5",
+                        results_fp="asic/fixed_point_accuracy_study/results/results_template_w_python.csv", num_clips=1000)
     # edf_to_h5(edf_fp="data/PSG1.edf", h5_filename="data/PSG1.h5", sleep_map_name="no_combine", channel="EEG Cz-LER", clip_length_s=30, full_night=False, sampling_freq_hz=128)
     pass
 

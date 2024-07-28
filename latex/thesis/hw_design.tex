@@ -133,9 +133,9 @@ metrics of the compute modules. The working principles of each modules is descri
         Divider                 & 1719.9\si{\square\micro\meter}    & 35        & 23.44\si{\pico\joule}     & 34.56\si{\micro\watt} & 1.11\si{\giga\hertz} \\
         Exponential             & 2442.2\si{\square\micro\meter}    & 24        & 62.73\si{\pico\joule}     & 47.10\si{\micro\watt} & 7.14\si{\giga\hertz} \\
         Square Root             & 1325.2\si{\square\micro\meter}    & 21        & 18.32\si{\pico\joule}     & 26.30\si{\micro\watt} & 0.758\si{\giga\hertz} \\
-        \ac{mac}\footnote[1]    & |                                 & 386       & 820.20\si{\pico\joule}    & |                     & | \\
-        \ac{mac}\footnote[2]    & 3129.8\si{\square\micro\meter}    & 391       & 839.32\si{\pico\joule}    & 69.40\si{\pico\joule} & 2.17\si{\giga\hertz} \\
-        \ac{mac}\footnote[3]    & |                                 & 456       & 941.68\si{\pico\joule}    & |                     & | \\
+        MAC\footnotemark[1]     &                                   & 386       & 820.20\si{\pico\joule}    &                       &   \\
+        MAC\footnotemark[2]     & 3129.8\si{\square\micro\meter}    & 391       & 839.32\si{\pico\joule}    & 69.40\si{\pico\joule} & 2.17\si{\giga\hertz} \\
+        MAC\footnotemark[3]     &                                   & 456       & 941.68\si{\pico\joule}    &                       &   \\
         Softmax                 & 2341.1\si{\square\micro\meter}    & 2024      & 1972.5\si{\pico\joule}    & 51.47\si{\micro\watt} & 1.20\si{\giga\hertz} \\
         LayerNorm               & 3836.89\si{\square\micro\meter}   & 1469+494  & 1705.7\si{\pico\joule}    & 78.39\si{\micro\watt} & 0.877\si{\giga\hertz} \\
         \bottomrule
@@ -143,7 +143,6 @@ metrics of the compute modules. The working principles of each modules is descri
         \hline
     \end{tabular}
     \begin{minipage}{\textwidth}
-        \footnotesize
         \noindent\hspace*{1cm}\textsuperscript{1} No activation function applied\\
         \noindent\hspace*{1cm}\textsuperscript{2} Linear activation function applied\\
         \noindent\hspace*{1cm}\textsuperscript{3} Swish activation function applied

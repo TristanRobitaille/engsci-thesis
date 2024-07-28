@@ -5,26 +5,26 @@
 logs/*
 WORK/*
 build/*
+*.sif
 
 ### Latex
 # Thesis
 latex/thesis/thesis.aux
 latex/thesis/flyleaf.aux
 latex/thesis/acknowledgements.aux
-latex/thesis/data.aux
-latex/thesis/title.aux
-latex/thesis/thesis.bbl
-latex/thesis/thesis.bcf
-latex/thesis/thesis.blg
-latex/thesis/thesis.fdb_latexmk
-latex/thesis/thesis.fls
-latex/thesis/thesis.log
-latex/thesis/thesis.run.xml
-latex/thesis/thesis.synctex.gz
-latex/thesis/thesis.toc
-latex/thesis/thesis.lof
-latex/thesis/thesis.lot
-latex/thesis/thesis.out
+latex/thesis/*.aux
+latex/thesis/*.bbl
+latex/thesis/*.bcf
+latex/thesis/*.blg
+latex/thesis/*.fdb_latexmk
+latex/thesis/*.fls
+latex/thesis/*.log
+latex/thesis/*.run.xml
+latex/thesis/*.synctex.gz
+latex/thesis/*.toc
+latex/thesis/*.lof
+latex/thesis/*.lot
+latex/thesis/*.out
 latex/thesis/front_cover.aux
 latex/thesis/ESC499_Thesis_Final_Document_Rubric_and_Rough_Guide.pdf
 latex/thesis/Thesis_Format_Reqs_2023-24.pdf
@@ -101,6 +101,7 @@ asic/TSMC65_Digital_Flow_data_collection/
 asic/~$*
 asic/func_sim/*.cmake
 asic/func_sim/*/*.cmake
+asic/func_sim/Makefile
 asic/func_sim/*/Makefile
 asic/func_sim/CMakeCache.txt
 asic/func_sim/Func_Sim

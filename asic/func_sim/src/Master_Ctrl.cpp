@@ -48,7 +48,7 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
         if (ext_sigs->start_param_load == true) {
             assert(ext_sigs->new_sleep_epoch == false && "ERROR: Both 'start_param_load' and 'new_sleep_epoch' are set simultaneously!");
             state = PARAM_LOAD;
-            cout << "Starting parameters load" << endl;
+            if (PRINT_INF_PROGRESS) { cout << "Starting parameters load" << endl; }
         } else if (ext_sigs->new_sleep_epoch == true) { start_signal_load(bus); }
         break;
 
@@ -62,12 +62,12 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
         if (all_cims_ready == true) {
             if ((eeg != eeg_ds[clip_index].end()) && (all_cims_ready == true)) {
                 float data = *eeg;
-                struct instruction inst = {PATCH_LOAD_BROADCAST_OP, 0, {static_cast<float>(fx_1_x_t{data/EEG_SCALE_FACTOR}),0,0}, SINGLE_WIDTH};
+                struct instruction inst = {PATCH_LOAD_BROADCAST_OP, 0, {static_cast<float>(sw_fx_1_x_t{data/EEG_SCALE_FACTOR}),0,0}, SINGLE_WIDTH};
                 bus->push_inst(inst); // Broadcast on bus
                 ++eeg;
             } else if ((eeg == eeg_ds[clip_index].end()) && (all_cims_ready == true)) {
                 state = INFERENCE_RUNNING;
-                cout << "Reached end of signal file" << endl;
+                if (PRINT_INF_PROGRESS) { cout << "Reached end of signal file" << endl; }
             }
         }
         break;
@@ -102,15 +102,17 @@ SYSTEM_STATE Master_Ctrl::run(struct ext_signals* ext_sigs, Bus* bus, std::vecto
             if (bus->get_inst().op == INFERENCE_RESULT_OP && all_cims_ready == true) {
                 sys_state = EVERYTHING_FINISHED;
                 softmax_max_index = cims[0].get_softmax_max_index();
-                cout << ">----- MASTER CTRL STATS -----<" << endl;
-                cout << "Min. model parameter: " << _min_param_val << endl;
-                cout << "Max. model parameter: " << _max_param_val << endl;
+                if (PRINT_INF_PROGRESS) {
+                    cout << ">----- MASTER CTRL STATS -----<" << endl;
+                    cout << "Min. model parameter: " << _min_param_val << endl;
+                    cout << "Max. model parameter: " << _max_param_val << endl;
+                }
                 break;
             } else if (high_level_inf_step != SOFTMAX_AVERAGING) {
-                if (high_level_inf_step == ENC_MHSA_QK_T_STEP) { cout << "Master: Performing encoder's MHSA QK_T. Starting matrix #" << gen_cnt_7b_3.get_cnt() << " in the Z-stack (out of " << NUM_HEADS << ")" << endl; }
-                else if (high_level_inf_step == ENC_MHSA_PRE_SOFTMAX_TRANS_STEP) { cout << "Master: Performing encoder's MHSA pre-softmax tranpose. Starting matrix #" << gen_cnt_7b_3.get_cnt() << " in the Z-stack (out of " << NUM_HEADS << ")" << endl; }
-                else if (high_level_inf_step == ENC_MHSA_V_MULT_STEP) { cout << "Master: Performing encoder's MHSA V_MULT. Starting matrix #" << gen_cnt_7b_3.get_cnt() << " in the Z-stack (out of " << NUM_HEADS << ")" << endl; }
-                else { cout << "Master: Starting high-level step #" << high_level_inf_step << endl; }
+                if (high_level_inf_step == ENC_MHSA_QK_T_STEP && PRINT_INF_PROGRESS) { cout << "Master: Performing encoder's MHSA QK_T. Starting matrix #" << gen_cnt_7b_3.get_cnt() << " in the Z-stack (out of " << NUM_HEADS << ")" << endl; }
+                else if (high_level_inf_step == ENC_MHSA_PRE_SOFTMAX_TRANS_STEP && PRINT_INF_PROGRESS) { cout << "Master: Performing encoder's MHSA pre-softmax tranpose. Starting matrix #" << gen_cnt_7b_3.get_cnt() << " in the Z-stack (out of " << NUM_HEADS << ")" << endl; }
+                else if (high_level_inf_step == ENC_MHSA_V_MULT_STEP && PRINT_INF_PROGRESS) { cout << "Master: Performing encoder's MHSA V_MULT. Starting matrix #" << gen_cnt_7b_3.get_cnt() << " in the Z-stack (out of " << NUM_HEADS << ")" << endl; }
+                else if (PRINT_INF_PROGRESS) { cout << "Master: Starting high-level step #" << high_level_inf_step << endl; }
                 gen_cnt_7b.reset();
                 prepare_for_broadcast(broadcast_ops.at(high_level_inf_step), bus);
             }
@@ -164,8 +166,8 @@ int Master_Ctrl::start_signal_load(Bus* bus){
     state = SIGNAL_LOAD;
     gen_cnt_7b.reset();
     gen_cnt_7b_2.reset();
-    cout << "Starting signal load" << endl;
-    instruction inst = {PATCH_LOAD_BROADCAST_START_OP, /*target_or_sender*/ 0, /*data*/ {0,0,0}};
+    if (PRINT_INF_PROGRESS) { cout << "Starting signal load" << endl; }
+    instruction inst = {PATCH_LOAD_BROADCAST_START_OP, 0, {0,0,0}};
     bus->push_inst(inst);
     return 0;
 }

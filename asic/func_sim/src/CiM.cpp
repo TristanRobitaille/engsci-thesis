@@ -191,7 +191,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
     case PATCH_LOAD_CIM:
         if ((compute_in_progress == false) && (word_rec_cnt.get_cnt() == PATCH_LEN) && (gen_reg_2b == 0)) { // Received my complete patch, perform part of Dense layer
-            MAC<dw_fx_x_t,fx_2_x_t>(0, 0, PATCH_LEN, param_addr_map[SINGLE_PARAMS].addr+PATCH_PROJ_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION, SINGLE_WIDTH);
+            MAC<dw_fx_x_t,params_fx_2_x_t>(0, 0, PATCH_LEN, param_addr_map[SINGLE_PARAMS].addr+PATCH_PROJ_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION, SINGLE_WIDTH);
             gen_reg_2b = 1;
             word_rec_cnt.reset();
         } else if ((compute_in_progress == false) && (gen_reg_2b == 1)) { // Done computation
@@ -203,7 +203,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 is_ready = false;
                 update_state(INFERENCE_RUNNING_CIM);
                 gen_cnt_7b_2.reset();
-                if (id == 0) { cout << "CiM: Finished patch load Dense" << endl; }
+                if (id == 0 && PRINT_INF_PROGRESS) { cout << "CiM: Finished patch load Dense" << endl; }
                 verify_layer_out(PATCH_PROJECTION_VERIF, id, int_res, mem_map.at(PATCH_MEM), DOUBLE_WIDTH);
             }
         }
@@ -214,7 +214,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case CLASS_TOKEN_CONCAT_STEP:
             int_res_write(params[param_addr_map[SINGLE_PARAMS].addr+CLASS_TOKEN_OFF], mem_map.at(CLASS_TOKEN_MEM), DOUBLE_WIDTH); // Move classification token from parameters memory to intermediate storage
             current_inf_step = POS_EMB_STEP;
-            if (id == 0) { cout << "CiM: Finished classification token concatenation" << endl; }
+            if (id == 0 && PRINT_INF_PROGRESS) { cout << "CiM: Finished classification token concatenation" << endl; }
             verify_layer_out(CLASS_TOKEN_VERIF, id, int_res, mem_map.at(CLASS_TOKEN_MEM), DOUBLE_WIDTH);
             break;
 
@@ -224,16 +224,16 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     int_res_write(computation_result , DOUBLE_WIDTH*gen_cnt_7b.get_cnt() + mem_map.at(POS_EMB_MEM), DOUBLE_WIDTH);
                     gen_cnt_7b.inc();
                 }
-                ADD<dw_fx_x_t,fx_2_x_t>(mem_map.at(CLASS_TOKEN_MEM)+DOUBLE_WIDTH*gen_cnt_7b.get_cnt(), param_addr_map[POS_EMB_PARAMS].addr+gen_cnt_7b.get_cnt(), MODEL_PARAM);
+                ADD<dw_fx_x_t,params_fx_2_x_t>(mem_map.at(CLASS_TOKEN_MEM)+DOUBLE_WIDTH*gen_cnt_7b.get_cnt(), param_addr_map[POS_EMB_PARAMS].addr+gen_cnt_7b.get_cnt(), MODEL_PARAM);
                 gen_reg_2b = 1;
             } else if ((compute_in_progress == false) && (gen_cnt_7b.get_cnt() == NUM_PATCHES+1)) { // Done with positional embedding
                 int_res_write(computation_result , DOUBLE_WIDTH*gen_cnt_7b.get_cnt()+mem_map.at(POS_EMB_MEM), DOUBLE_WIDTH);
                 current_inf_step = ENC_LAYERNORM_1_1ST_HALF_STEP;
-                if (id == 0) { cout << "CiM: Finished positional embedding" << endl; }
+                if (id == 0 && PRINT_INF_PROGRESS) { cout << "CiM: Finished positional embedding" << endl; }
                 gen_cnt_7b.reset();
                 verify_layer_out(POS_EMB_VERIF, id, int_res, mem_map.at(POS_EMB_MEM), DOUBLE_WIDTH);
                 is_ready = true;
-                if (id == 60) { cout << "CiM: Ready for inference" << endl; }
+                if (id == 60 && PRINT_INF_PROGRESS) { cout << "CiM: Ready for inference" << endl; }
             }
             break;
 
@@ -248,7 +248,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             }
 
             if (inst.op == PISTOL_START_OP) {
-                if (id == 0) { cout << "CiM: Finished LayerNorm (1st half)" << endl; }
+                if (id == 0 && PRINT_INF_PROGRESS) { cout << "CiM: Finished LayerNorm (1st half)" << endl; }
                 current_inf_step = static_cast<INFERENCE_STEP> (static_cast<int> (current_inf_step) + 1);
             }
             break;
@@ -259,21 +259,21 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             if (((word_rec_cnt.get_cnt() == 1) && (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP)) || (word_rec_cnt.get_cnt() == NUM_PATCHES+1)) { // No more data to receive, start LayerNorm
                 if (compute_in_progress == false) {
                     if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) {
-                        LAYERNORM_2ND_HALF<dw_fx_x_t>(mem_map.at(ENC_LN1_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_BETA_OFF, DOUBLE_WIDTH);
+                        LAYERNORM_2ND_HALF<dw_fx_x_t, params_fx_3_x_t>(mem_map.at(ENC_LN1_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_BETA_OFF, DOUBLE_WIDTH);
                         for (int i=0; i<NUM_PATCHES+1; i++){ // Compress the positional embedding to single width to save on storage
                             int_res_write(int_res[mem_map.at(POS_EMB_MEM)+DOUBLE_WIDTH*i], mem_map.at(POS_EMB_MEM)+SINGLE_WIDTH*i, SINGLE_WIDTH);
                         }
                     } else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) {
-                        LAYERNORM_2ND_HALF<dw_fx_x_t>(mem_map.at(ENC_LN2_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_BETA_OFF, DOUBLE_WIDTH);
+                        LAYERNORM_2ND_HALF<dw_fx_x_t, params_fx_3_x_t>(mem_map.at(ENC_LN2_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_BETA_OFF, DOUBLE_WIDTH);
                     } else if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) {
-                        LAYERNORM_2ND_HALF<dw_fx_x_t>(mem_map.at(MLP_HEAD_LN_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_BETA_OFF, DOUBLE_WIDTH);
+                        LAYERNORM_2ND_HALF<dw_fx_x_t, params_fx_3_x_t>(mem_map.at(MLP_HEAD_LN_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_BETA_OFF, DOUBLE_WIDTH);
                     }
                     word_rec_cnt.reset();
                 }
             }
 
             if (inst.op == PISTOL_START_OP) {
-                if (id == 0) { cout << "CiM: Finished LayerNorm (2nd half)" << endl; }
+                if (id == 0 && PRINT_INF_PROGRESS) { cout << "CiM: Finished LayerNorm (2nd half)" << endl; }
                 if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) {
                     current_inf_step = POST_LAYERNORM_TRANSPOSE_STEP;
                     verify_layer_out(ENC_LAYERNORM1_VERIF, id, int_res, mem_map.at(ENC_LN1_2ND_HALF_MEM), DOUBLE_WIDTH);
@@ -297,33 +297,33 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 if ((compute_in_progress == false) && (current_inf_step == ENC_MHSA_DENSE_STEP)) {
                     if (gen_reg_2b == 0) {
                         is_ready = false;
-                        MAC<dw_fx_x_t,fx_2_x_t>(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_Q_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_Q_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION, DOUBLE_WIDTH); // Q
+                        MAC<dw_fx_x_t,params_fx_2_x_t>(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_Q_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_Q_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION, DOUBLE_WIDTH); // Q
                         gen_reg_2b = 1;
                     } else if (gen_reg_2b == 1) {
                         int_res_write(computation_result , mem_map.at(ENC_Q_MEM)+SINGLE_WIDTH*sender_id, SINGLE_WIDTH); // Q
-                        MAC<dw_fx_x_t,fx_2_x_t>(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_K_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_K_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION, DOUBLE_WIDTH); // K
+                        MAC<dw_fx_x_t,params_fx_2_x_t>(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_K_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_K_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION, DOUBLE_WIDTH); // K
                         gen_reg_2b = 2;
                     } else if (gen_reg_2b == 2) {
                         int_res_write(computation_result , mem_map.at(ENC_K_MEM)+SINGLE_WIDTH*sender_id, SINGLE_WIDTH); // K
-                        MAC<dw_fx_x_t,fx_2_x_t>(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_V_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_V_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION, DOUBLE_WIDTH); // V
+                        MAC<dw_fx_x_t,params_fx_2_x_t>(mem_map.at(ENC_QVK_IN_MEM), param_addr_map[ENC_V_DENSE_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_V_DENSE_BIAS_0FF, MODEL_PARAM, LINEAR_ACTIVATION, DOUBLE_WIDTH); // V
                         gen_reg_2b = 3;
                         word_rec_cnt.reset();
                     }
                 } else if ((compute_in_progress == false) && (current_inf_step == MLP_DENSE_1_STEP)) { // Only least significant MLP_DIM number of CiMs will perform this computation
                     if (id < MLP_DIM) {
-                        MAC<dw_fx_x_t,fx_2_x_t>(mem_map.at(ENC_MLP_IN_MEM), param_addr_map[ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_1_MLP_HEAD_DENSE_1_BIAS_OFF, MODEL_PARAM, SWISH_ACTIVATION, DOUBLE_WIDTH);
+                        MAC<dw_fx_x_t,params_fx_2_x_t>(mem_map.at(ENC_MLP_IN_MEM), param_addr_map[ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_1_MLP_HEAD_DENSE_1_BIAS_OFF, MODEL_PARAM, SWISH_ACTIVATION, DOUBLE_WIDTH);
                         gen_reg_2b = 3;
                     }
                     word_rec_cnt.reset();
                 } else if ((compute_in_progress == false) && (current_inf_step == MLP_HEAD_DENSE_1_STEP) && (id >= MLP_DIM)) { // Only most significant MLP_DIM number of CiMs will perform this computation
-                    MAC<dw_fx_x_t,fx_2_x_t>(mem_map.at(MLP_HEAD_DENSE_1_IN_MEM), param_addr_map[ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_1_MLP_HEAD_DENSE_1_BIAS_OFF, MODEL_PARAM, SWISH_ACTIVATION, DOUBLE_WIDTH);
+                    MAC<dw_fx_x_t,params_fx_2_x_t>(mem_map.at(MLP_HEAD_DENSE_1_IN_MEM), param_addr_map[ENC_MLP_DENSE_1_OR_MLP_HEAD_DENSE_1_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_1_MLP_HEAD_DENSE_1_BIAS_OFF, MODEL_PARAM, SWISH_ACTIVATION, DOUBLE_WIDTH);
                     gen_reg_2b = 3;
                     word_rec_cnt.reset();
                 }
             } else if ((word_rec_cnt.get_cnt() >= MLP_DIM) && (current_inf_step == MLP_DENSE_2_AND_SUM_STEP || current_inf_step == MLP_HEAD_DENSE_2_STEP)) { // No more data to receive for this broadcast (for MLP's dense #2), start MACs
                 if ((compute_in_progress == false) && (current_inf_step == MLP_DENSE_2_AND_SUM_STEP)) {
                     if (gen_reg_2b == 0) {
-                        MAC<dw_fx_x_t,fx_2_x_t>(mem_map.at(ENC_MLP_DENSE2_IN_MEM), param_addr_map[ENC_MLP_DENSE_2_PARAMS].addr, MLP_DIM, param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_2_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION, DOUBLE_WIDTH);
+                        MAC<dw_fx_x_t,params_fx_2_x_t>(mem_map.at(ENC_MLP_DENSE2_IN_MEM), param_addr_map[ENC_MLP_DENSE_2_PARAMS].addr, MLP_DIM, param_addr_map[SINGLE_PARAMS].addr+ENC_MLP_DENSE_2_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION, DOUBLE_WIDTH);
                         gen_reg_2b = 1;
                     } else if (gen_reg_2b == 1) {
                         int_res_write(computation_result , mem_map.at(ENC_MLP_OUT_MEM) + DOUBLE_WIDTH*sender_id, DOUBLE_WIDTH); // MLP Dense 2
@@ -332,26 +332,26 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                         word_rec_cnt.reset();
                     }
                 } else if ((compute_in_progress == false) && (current_inf_step == MLP_HEAD_DENSE_2_STEP) && (id < NUM_SLEEP_STAGES)) {
-                    MAC<dw_fx_x_t,fx_3_x_t>(mem_map.at(MLP_HEAD_DENSE_2_IN_MEM), param_addr_map[MLP_HEAD_DENSE_2_PARAMS].addr, MLP_DIM, param_addr_map[SINGLE_PARAMS].addr+MLP_HEAD_DENSE_2_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION, DOUBLE_WIDTH);
+                    MAC<dw_fx_x_t,params_fx_3_x_t>(mem_map.at(MLP_HEAD_DENSE_2_IN_MEM), param_addr_map[MLP_HEAD_DENSE_2_PARAMS].addr, MLP_DIM, param_addr_map[SINGLE_PARAMS].addr+MLP_HEAD_DENSE_2_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION, DOUBLE_WIDTH);
                     gen_reg_2b = 3;
                     word_rec_cnt.reset();
                 }
             } else if ((compute_in_progress == false) && (gen_reg_2b == 3)){ // Done
                 gen_cnt_7b_2.inc();
                 if (current_inf_step == ENC_MHSA_DENSE_STEP) { // Encoder's MHSA Q/K/V Dense
-                    if ((id == 0) && (gen_cnt_7b_2.get_cnt() >= EMB_DEPTH)) { cout << "CiM: Finished encoder's MHSA Q/K/V Dense" << endl; }
+                    if ((id == 0) && (gen_cnt_7b_2.get_cnt() >= EMB_DEPTH) && PRINT_INF_PROGRESS) { cout << "CiM: Finished encoder's MHSA Q/K/V Dense" << endl; }
                     int_res_write(computation_result , mem_map.at(ENC_V_MEM)+SINGLE_WIDTH*sender_id, SINGLE_WIDTH); // V
                 } else if (current_inf_step == MLP_DENSE_1_STEP) { // MLP Dense 1
-                    if ((id == 0) && (gen_cnt_7b_2.get_cnt() == MLP_DIM)) { cout << "CiM: Finished MLP Dense 1" << endl; }
+                    if ((id == 0) && (gen_cnt_7b_2.get_cnt() == MLP_DIM) && PRINT_INF_PROGRESS) { cout << "CiM: Finished MLP Dense 1" << endl; }
                     int_res_write(computation_result , mem_map.at(ENC_MLP_DENSE1_MEM) + DOUBLE_WIDTH*sender_id, DOUBLE_WIDTH);
                 } else if (current_inf_step == MLP_DENSE_2_AND_SUM_STEP) { // MLP Dense 2 and sum
-                    if ((id == 0) && (gen_cnt_7b_2.get_cnt() == 1)) { cout << "CiM: Finished MLP Dense 2" << endl; }
+                    if ((id == 0) && (gen_cnt_7b_2.get_cnt() == 1) && PRINT_INF_PROGRESS) { cout << "CiM: Finished MLP Dense 2" << endl; }
                     int_res_write(computation_result , mem_map.at(ENC_MLP_OUT_MEM) + DOUBLE_WIDTH*sender_id, DOUBLE_WIDTH);
                 } else if (current_inf_step == MLP_HEAD_DENSE_1_STEP) { // MLP head's Dense 1
-                    if ((id == 32) && (gen_cnt_7b_2.get_cnt() == 1)) { cout << "CiM: Finished MLP head's Dense 1" << endl; }
+                    if ((id == 32) && (gen_cnt_7b_2.get_cnt() == 1) && PRINT_INF_PROGRESS) { cout << "CiM: Finished MLP head's Dense 1" << endl; }
                     int_res_write(computation_result , mem_map.at(MLP_HEAD_DENSE_1_OUT_MEM) + DOUBLE_WIDTH*sender_id, DOUBLE_WIDTH);
                 } else if (current_inf_step == MLP_HEAD_DENSE_2_STEP) { // MLP Dense 2 (softmax)
-                    if ((id == 0) && (gen_cnt_7b_2.get_cnt() == 1)) { cout << "CiM: Finished MLP head's Dense 2" << endl; }
+                    if ((id == 0) && (gen_cnt_7b_2.get_cnt() == 1) && PRINT_INF_PROGRESS) { cout << "CiM: Finished MLP head's Dense 2" << endl; }
                     int_res_write(computation_result , mem_map.at(MLP_HEAD_DENSE_2_OUT_MEM), DOUBLE_WIDTH);
                 }
                 is_ready = true;
@@ -424,7 +424,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 }
             } else if (compute_in_progress == false && gen_reg_2b == 1) { // Done with this MAC
                 gen_reg_2b = 0;
-                computation_result  = static_cast<float>(static_cast<comp_fx_t>(computation_result ) * static_cast<fx_4_x_t>(params[param_addr_map[SINGLE_PARAMS].addr+ENC_INV_SQRT_NUM_HEADS_OFF])); // Divide by sqrt(NUM_HEADS). Done in ASIC before writing to mem, so can be left cast as comp_fx_t
+                computation_result  = static_cast<float>(static_cast<comp_fx_t>(computation_result ) * static_cast<params_fx_4_x_t>(params[param_addr_map[SINGLE_PARAMS].addr+ENC_INV_SQRT_NUM_HEADS_OFF])); // Divide by sqrt(NUM_HEADS). Done in ASIC before writing to mem, so can be left cast as comp_fx_t
                 int_res_write(computation_result , MAC_storage_addr, SINGLE_WIDTH);
                 gen_cnt_7b.inc();
                 if (gen_cnt_7b.get_cnt() == (NUM_PATCHES+1)) { // All MACs for one matrix are done
@@ -434,7 +434,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             }
 
             if (inst.op == PISTOL_START_OP) {
-                if (id == 0) { cout << "CiM: Finished encoder's MHSA QK_T" << endl; }
+                if (id == 0 && PRINT_INF_PROGRESS) { cout << "CiM: Finished encoder's MHSA QK_T" << endl; }
                 if (id < NUM_PATCHES+1) { verify_layer_out(ENC_MHSA_DENSE_QK_T_VERIF, id, int_res, mem_map.at(ENC_QK_T_MEM), SINGLE_WIDTH); }
                 gen_cnt_7b_2.reset();
                 current_inf_step = ENC_MHSA_PRE_SOFTMAX_TRANSPOSE_STEP;
@@ -447,7 +447,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 gen_reg_2b = 1; // Just a signal to avoid coming here every time FSM runs
             } else if (compute_in_progress == false) {
                 if (id == 0) {
-                    cout << "CiM #0: Finished MLP head's Softmax" << endl;
+                    if (PRINT_INF_PROGRESS) { cout << "CiM #0: Finished MLP head's Softmax" << endl; }
                     verify_layer_out(MLP_HEAD_SOFTMAX_VERIF, id, int_res, mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM), DOUBLE_WIDTH);
                     // Find the argmax of the softmax for fixed-point accuracy study as it doesn't use the post-averaging softmax
                     float softmax_max = 0;
@@ -477,7 +477,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 int_res_write(computation_result , mem_map.at(SOFTMAX_AVG_SUM_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt(), DOUBLE_WIDTH); // Copy there for averaging sum step
                 gen_cnt_7b.inc();
             } else if ((gen_cnt_7b.get_cnt() == NUM_SLEEP_STAGES) && (compute_in_progress == false)) {
-                cout << "CiM #0: Finished MLP head's Softmax averaging divide" << endl;
+                if (PRINT_INF_PROGRESS) { cout << "CiM #0: Finished MLP head's Softmax averaging divide" << endl; }
                 verify_layer_out(MLP_HEAD_SOFTMAX_DIV_VERIF, id, int_res, mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM), DOUBLE_WIDTH);
                 current_inf_step = POST_SOFTMAX_AVERAGING_STEP;
                 gen_cnt_7b.reset();
@@ -517,7 +517,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 gen_reg_2b = 1;
             } else if ((compute_in_progress == false) && (gen_reg_2b == 1)) {
                 current_inf_step = RETIRE_SOFTMAX_STEP;
-                cout << "CiM #0: Finished averaging softmax with previous epochs." << endl;
+                if (PRINT_INF_PROGRESS) { cout << "CiM #0: Finished averaging softmax with previous epochs." << endl; }
                 verify_layer_out(POST_SOFTMAX_AVG_VERIF, id, int_res, mem_map.at(SOFTMAX_AVG_SUM_MEM), DOUBLE_WIDTH);
             }
             break;
@@ -564,7 +564,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             } else { is_ready = true; }
 
             if (inst.op == PISTOL_START_OP) {
-                if (id == 0) { cout << "CiM: Finished encoder's MHSA softmax" << endl; }
+                if (id == 0 && PRINT_INF_PROGRESS) { cout << "CiM: Finished encoder's MHSA softmax" << endl; }
                 if (id < NUM_PATCHES+1) { verify_layer_out(ENC_SOFTMAX_VERIF, id, int_res, mem_map.at(ENC_PRE_SOFTMAX_MEM), SINGLE_WIDTH); }
                 current_inf_step = ENC_MHSA_MULT_V_STEP;
                 gen_cnt_7b.reset();
@@ -592,7 +592,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 current_inf_step = ENC_POST_MHSA_TRANSPOSE_STEP;
                 is_ready = true;
                 gen_reg_2b = 0;
-                if (id == 0) { cout << "CiM: Finished encoder's V matmul" << endl; }
+                if (id == 0 && PRINT_INF_PROGRESS) { cout << "CiM: Finished encoder's V matmul" << endl; }
                 verify_layer_out(ENC_MULT_V_VERIF, id, int_res, mem_map.at(ENC_V_MULT_MEM), SINGLE_WIDTH);
                 word_rec_cnt.reset();
                 gen_cnt_7b_2.reset();
@@ -602,7 +602,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP:
             if (word_rec_cnt.get_cnt() >= EMB_DEPTH) { // No more data to receive for this broadcast, start MACs
                 if ((compute_in_progress == false) && (gen_reg_2b == 0)){ // Start computation
-                    MAC<dw_fx_x_t,dw_fx_x_t>(mem_map.at(ENC_DENSE_IN_MEM), param_addr_map[ENC_COMB_HEAD_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_COMB_HEAD_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION, SINGLE_WIDTH);
+                    MAC<dw_fx_x_t,params_fx_2_x_t>(mem_map.at(ENC_DENSE_IN_MEM), param_addr_map[ENC_COMB_HEAD_PARAMS].addr, EMB_DEPTH, param_addr_map[SINGLE_PARAMS].addr+ENC_COMB_HEAD_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION, SINGLE_WIDTH);
                     gen_reg_2b = 1; // Just a signal to avoid coming here every time FSM runs
                 } else if ((compute_in_progress == false) && (gen_reg_2b == 1)) {
                     int_res_write(computation_result , mem_map.at(ENC_MHSA_OUT_MEM) + DOUBLE_WIDTH*sender_id, DOUBLE_WIDTH);
@@ -617,7 +617,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             }
 
             if (inst.op == PISTOL_START_OP) {
-                if (id == 0) { cout << "CiM: Finished encoder's post-MHSA Dense" << endl; }
+                if (id == 0 && PRINT_INF_PROGRESS) { cout << "CiM: Finished encoder's post-MHSA Dense" << endl; }
                 verify_layer_out(ENC_RES_SUM_1_VERIF, id, int_res, mem_map.at(ENC_MHSA_OUT_MEM), DOUBLE_WIDTH);
                 current_inf_step = ENC_LAYERNORM_2_1ST_HALF_STEP; // Start another round of LayerNorm
                 gen_reg_2b = 0;

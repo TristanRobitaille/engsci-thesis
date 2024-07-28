@@ -171,20 +171,20 @@ class CiM_Compute {
             }
         }
 
-        template <typename storage_fx_t>
+        template <typename in1_storage_fx_t, typename in2_storage_fx_t>
         void LAYERNORM_2ND_HALF(uint16_t input_addr, uint16_t gamma_addr, uint16_t beta_addr, DATA_WIDTH data_width) {
             /* 2nd half of Layer normalization of input. This applies gamma and beta on each column. */
             if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start LAYERNORM_2ND_HALF!"); }
             compute_in_progress = true;
 
-            compute_temp_fp_2 = comp_fx_t { params[gamma_addr] }; // Gamma
-            compute_temp_fp_3 = comp_fx_t { params[beta_addr] }; // Beta
+            compute_temp_fp_2 = comp_fx_t { static_cast<in2_storage_fx_t>(params[gamma_addr]) }; // Gamma
+            compute_temp_fp_3 = comp_fx_t { static_cast<in2_storage_fx_t>(params[beta_addr]) }; // Beta
 
             uint16_t stride = (data_width == SINGLE_WIDTH) ? 1 : 2;
 
             // Normalize
             for (uint16_t i = 0; i < stride*(NUM_PATCHES+1); i += stride) {
-                compute_temp_fp_1 = comp_fx_t { static_cast<storage_fx_t>(int_res[input_addr+i]) };
+                compute_temp_fp_1 = comp_fx_t { static_cast<in1_storage_fx_t>(int_res[input_addr+i]) };
                 float result = static_cast<float>(compute_temp_fp_2 * compute_temp_fp_1 + compute_temp_fp_3);
                 int_res_write(result, input_addr+i, data_width);
             }

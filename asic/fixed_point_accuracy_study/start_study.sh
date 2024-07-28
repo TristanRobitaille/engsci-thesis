@@ -1,11 +1,13 @@
+#!/bin/bash
+
 # Spawn processes of the program to run the fixed point accuracy study
 num_total_clips=960
 num_process=192
-starting_num_bits=7
-num_bit_studies=14
+starting_num_bits=2
+num_bit_studies=15
 
-cd ../func_sim
-export N_STO_PARAMS=20
+cd asic/func_sim
+export N_STO_PARAMS=9
 
 for i in $(seq $starting_num_bits $((starting_num_bits + num_bit_studies - 1)))
 do
@@ -13,13 +15,13 @@ do
     export N_STO_INT_RES=${i}
     echo $N_STO_INT_RES
     make clean
-    make configureNoBoost
-    make build -j12
+    cmake CMakeLists.txt
+    make -j24
     mv build/Func_Sim build/Func_Sim_${i}b
     
     for j in $(seq 0 $((num_process-1)))
     do
-        ./build/Func_Sim_${i}b --start_index $((j*(num_total_clips/num_process))) --end_index $(((j+1)*(num_total_clips/num_process)-1)) --results_csv_fp "../fixed_point_accuracy_study/results/results_template_w_python.csv" &
+        ./build/Func_Sim_${i}b --start_index $((j*(num_total_clips/num_process))) --end_index $(((j+1)*(num_total_clips/num_process)-1)) --results_csv_fp "../fixed_point_accuracy_study/results/results_template_w_python.csv" --study_bit_type "INT_RES" &
     done
     wait # Wait for all background jobs to finish
 

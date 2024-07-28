@@ -319,7 +319,7 @@ def read_all_nights_from_directory(args, channels_to_read:List[str]) -> (dict, L
     PSG_file_list = glob.glob(os.path.join(args.directory_psg, "*PSG.edf"))
     if len(PSG_file_list) == 0:
         print(f"No valid PSG (*PSG.edf) files found in search directory ({args.directory_psg})!")
-        return -1
+        return -1, -1, -1
 
     if (len(PSG_file_list) < args.num_files):
         print(f"Did not find the requested number of files ({args.num_files}). Will use {len(PSG_file_list)} files instead.")    
@@ -483,6 +483,7 @@ def main():
         print(f"Output directory: {args.export_directory}")
 
         output, labels_file_list, return_code = read_all_nights_from_directory(args, channels_to_read=channels_to_read)
+        if return_code == -1: return
 
     # Create and save dataset
     if return_code == 0:
@@ -508,9 +509,7 @@ def main():
         if os.path.exists(path=ds_filepath): 
             shutil.rmtree(path=ds_filepath) # Delete file if it exists
         
-        if "cedar.computecanada.ca" in socket.gethostname(): # Compute Canada Cedar (aka running on GPU needs Tensorflow 2.8.0) needs a Tensorflow downgrade (or gets a compilation error)
-            tf.data.experimental.save(ds, compression=None, path=ds_filepath)
-        else: tf.data.Dataset.save(ds, compression=None, path=ds_filepath)
+        tf.data.Dataset.save(ds, compression=None, path=ds_filepath)
 
         # Save metadata JSON
         stages_cnt = utilities.count_instances_per_class(output['sleep_stage'], sleep_map.get_num_stages()+1) # +1 is to account for unknown sleep stage

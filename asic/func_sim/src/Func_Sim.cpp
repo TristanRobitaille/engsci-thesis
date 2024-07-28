@@ -17,6 +17,7 @@ Master_Ctrl ctrl((string(DATA_BASE_DIR)+"eeg.h5"), (string(DATA_BASE_DIR)+"model
 int init(){
     cout << "N_STO_INT_RES: " << N_STO_INT_RES << endl;
     cout << "N_STO_PARAMS: " << N_STO_PARAMS << endl;
+    cout << "NUM. TERMS TAYLOR EXPANSION EXP APPROX: " << NUM_TERMS_EXP_TAYLOR_APPROX << endl;
     ext_sigs.master_nrst = false;
     ext_sigs.new_sleep_epoch = false;
 
@@ -51,7 +52,7 @@ void copy_file(const char *src, const char *dst) {
     dst_file.close();
 }
 
-void update_results_csv(uint32_t starting_clip_num, uint32_t num_clips, string template_csv_fp) {
+void update_results_csv(uint32_t starting_clip_num, uint32_t num_clips, string template_csv_fp, string study_bit_type) {
     /*
     Exports a copy of the given template CSV file with the softmax argmaxes for the given clips.
     Filename: <template_csv_fp>_<N_STO_PARAMS>_<N_STO_INT_RES>_<starting_clip_index>_<end_clip_index>.csv
@@ -65,7 +66,13 @@ void update_results_csv(uint32_t starting_clip_num, uint32_t num_clips, string t
     // Update the CSV
     try {
         rapidcsv::Document results_csv(results_csv_fp, rapidcsv::LabelParams(-1, -1));
-        int column = N_STO_INT_RES - FIXED_POINT_ACCURACY_STUDY_START_N_STO_INT_RES + 3;
+	int column = 0;
+	if (study_bit_type == "INT_RES") {
+	    column = N_STO_INT_RES - FIXED_POINT_ACCURACY_STUDY_START_N_STO + 3;
+	} else if (study_bit_type == "PARAMS") {
+	    column = N_STO_PARAMS - FIXED_POINT_ACCURACY_STUDY_START_N_STO + 3;
+	}
+
         int starting_row = starting_clip_num + 2;
         for (int i=0; i<num_clips; i++) { results_csv.SetCell<int>(column, starting_row+i, softmax_max_indices[i]); }
         results_csv.Save(results_csv_fp);
@@ -98,6 +105,7 @@ int main(int argc, char *argv[]){
     uint32_t start_index;
     uint32_t end_index;
     string results_csv_fp;
+    string study_bit_type;
 
     // Parse arguments
     if (argc == 1) { // No arguments provided, run on first clip and don't write to CSV
@@ -109,11 +117,13 @@ int main(int argc, char *argv[]){
         cout << "--start_index: The index of the clip to use for the first run" << endl;
         cout << "--end_index: The index of the clip to use for the last run" << endl;
         cout << "--results_csv_fp: The file path to the results CSV file" << endl;
-        return 0;
-    } else if (argc == 7) { // All arguments provided
+        cout << "--study_bit_type: Type of bits used to index in fixed-point accuracy study results CSV column. Either 'INT_RES' or 'PARAMS'." << endl;
+	return 0;
+    } else if (argc == 9) { // All arguments provided
         start_index = stoi(argv[2]);
         end_index = stoi(argv[4]);
         results_csv_fp = string(argv[6]);
+    	study_bit_type = string(argv[8]);
     } else {
         throw invalid_argument("Please provide all or none of the arguments! Use --help for more information.");
     }
@@ -121,12 +131,12 @@ int main(int argc, char *argv[]){
     // Check N_STO_x
     const char* env_vars[2] = {"N_STO_PARAMS", "N_STO_INT_RES"};
     bool missing_env_var = false;
-    // for (int i=0; i<2; i++){
-    //     if (getenv(env_vars[i]) == NULL) {
-    //         cout << "Could not find environment variable " << env_vars[i] << "! Did you forget to define it?" << endl;
-    //         missing_env_var = true;
-    //     }
-    // }
+    for (int i=0; i<2; i++){
+    	if (getenv(env_vars[i]) == NULL) {
+ 	    cout << "Could not find environment variable " << env_vars[i] << "! Did you forget to define it?" << endl;
+            missing_env_var = true;
+        }
+    }
     if (missing_env_var) { return 1; }
 
     // Run functional simulation
@@ -137,7 +147,7 @@ int main(int argc, char *argv[]){
         run_sim(start_index+i, results_csv_fp);
     }
     cout << "Finished running all simulation runs." << endl;
-    if (results_csv_fp != "") { update_results_csv(start_index, (end_index-start_index+1), results_csv_fp); }
+    if (results_csv_fp != "") { update_results_csv(start_index, (end_index-start_index+1), results_csv_fp, study_bit_type); }
 
     return 0;
 }

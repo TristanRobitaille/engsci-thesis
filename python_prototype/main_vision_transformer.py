@@ -17,7 +17,6 @@ import utilities
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
-import tensorflow_addons as tfa
 import plotly.graph_objects as go
 
 MAX_VOLTAGE = 2**16-1 # Maximum ADC code output
@@ -188,10 +187,7 @@ def load_from_dataset(args):
         raise ValueError(f"Patch length (# of samples; {int(args.patch_length)}) needs to be an integer divisor of clip length (# of samples; {CLIP_LENGTH_NUM_SAMPLES}s! Aborting.)")
 
     # Load dataset
-    if "cedar.computecanada.ca" in socket.gethostname(): # Compute Canada (aka running on GPU needs Tensorflow 2.8.0) needs a Tensorflow downgrade (or gets a compilation error)
-        data = tf.data.experimental.load(args.input_dataset)
-    else: data = tf.data.Dataset.load(args.input_dataset)
-
+    data = tf.data.Dataset.load(args.input_dataset)
     data = next(iter(data))
 
     sleep_stages = data['sleep_stage']
@@ -415,11 +411,7 @@ def train_model(args, data:dict, mlp_dense_activation:str):
             optimizer = tf.keras.optimizers.Adam(CustomSchedule(args.embedding_depth), beta_1=0.9, beta_2=0.98, epsilon=1e-9)
 
         elif args.optimizer == "AdamW": # AdamW is used in 'MultiChannelSleepNet: A Transformer-Based Model for Automatic Sleep Stage Classification With PSG'
-            if "cedar.computecanada.ca" in socket.gethostname(): # Compute Canada (aka running on GPU needs Tensorflow 2.8.0) doesn't have AdamW in Keras
-                print("CAUTION: You are using the AdamW optimizer on Cedar (so with TensorFlow 2.8), which isn't working (accuracy stuck during training)")
-                optimizer = tfa.optimizers.AdamW(learning_rate=CustomSchedule(args.embedding_depth), weight_decay=0.004, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
-            else:
-                optimizer = tf.keras.optimizers.AdamW(learning_rate=CustomSchedule(args.embedding_depth), weight_decay=0.004, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
+            optimizer = tf.keras.optimizers.AdamW(learning_rate=CustomSchedule(args.embedding_depth), weight_decay=0.004, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
 
         model.compile(loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False), optimizer=optimizer, metrics=["accuracy"])
 
@@ -630,11 +622,11 @@ def export_k_fold_results(args, acc:dict):
 
 def save_models(model, args, all_models:dict, out_fp:str):
     model.save(f"{out_fp}/models/model.tf", save_format="tf")
+    model.save(f"{out_fp}/models/model.keras", save_format="keras")
     model.save_weights(filepath=f"{out_fp}/models/model_weights.h5")
     print(f"[{(time.time()-start_time):.2f}s] Saved model to {out_fp}/models/model.tf")
 
-    if "cedar.computecanada.ca" not in socket.gethostname(): # Only plot model if not running on Cedar (aka running TF 2.8) since it doesn't support it
-        tf.keras.utils.plot_model(model.build_graph(), to_file=f"{out_fp}/model_architecture.png", expand_nested=True, show_trainable=True, show_shapes=True, show_layer_activations=True, dpi=300, show_dtype=True)
+    tf.keras.utils.plot_model(model.build_graph(), to_file=f"{out_fp}/model_architecture.png", expand_nested=True, show_trainable=True, show_shapes=True, show_layer_activations=True, dpi=300, show_dtype=True)
 
     # Convert to Tensorflow Lite model and save
     converter = tf.lite.TFLiteConverter.from_keras_model(model)
