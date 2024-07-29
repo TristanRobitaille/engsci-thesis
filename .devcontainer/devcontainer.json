@@ -1,5 +1,5 @@
 {
-    "name": "Dev Container",
+    "name": "engsci-thesis",
     "context": "..",
     "dockerFile": "../Dockerfile",
     "customizations/vscode/settings": {

@@ -11,8 +11,10 @@ You can now run everything inside a Docker container. Ensure you have the Docker
 Build it with `docker build -t engsci-thesis .`. Be prepared to wait around 20 minutes for the build process to complete. Unfortunately, there are a lot of components to this thesis, and a lot of dependencies.
 Run it with ``docker run -it -v `pwd`:/tmp engsci-thesis``. 
 You will also probably want to use VSCode with the container:
-1. Install `Dev Containers` in VSCode. Open the container by running `Dev Containers: Reopen in Container`.
-2. [First time only] In the container, install `C/C++` and `debugpy`.
+1. Install `Dev Containers` in VSCode.
+2. Run the container: ``docker run -it -v `pwd`:/tmp engsci-thesis``.
+3. Execute the command: "Dev Containers: Attach to Running Container" and select the `engsci-thesis` container.
+4. [First time only] In the container, install the VSCode extensions `C/C++` and `debugpy`.
 
 #### Apptainer on Compute Canada
 Compute Canada does not use Docker, but rather Apptainer. We must generate an Apptainer image (`.sif`) from the Docker image and transfer it to the server in order to run the container.

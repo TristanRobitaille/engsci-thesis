@@ -6,6 +6,8 @@ logs/*
 WORK/*
 build/*
 *.sif
+vscode-remote-containers*
+devcontainers*
 
 ### Latex
 # Thesis
