@@ -69,6 +69,9 @@ COPY asic/rtl/requirements.txt .
 RUN pip3 install --upgrade -r requirements.txt
 
 #----- Tensorflow dependencies -----#
+RUN apt-get update && apt-get install -y \
+    graphviz && \
+    rm -rf /var/lib/apt/lists/*
 COPY python_prototype/requirements.txt .
 RUN pip3 install --upgrade -r requirements.txt
 
