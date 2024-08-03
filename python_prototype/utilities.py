@@ -20,7 +20,7 @@ print(f"TensorFlow version: {tf.__version__}")
 
 #--- GLOBALS ---#
 PRUNE_THRESHOLD = 1e-4 # To reduce ASIC power consumption, we prune weights below this threshold and avoid computation if one of the input is 0
-SLEEP_STAGE_ANNOTATONS_CHANNEL = 2 #Channel of sleep stages in annotations file
+SLEEP_STAGE_ANNOTATONS_CHANNEL = 2 # Channel of sleep stages in annotations file
 global_min = np.inf
 global_max = -np.inf
 global_closest_to_zero = np.inf

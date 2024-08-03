@@ -5,11 +5,11 @@ import time
 start_time = time.time()
 
 import os
+os.environ["GIT_PYTHON_REFRESH"] = "quiet"
 import glob
 import math
 import json
 import shutil
-import socket
 import utilities
 
 from typing import List
@@ -22,15 +22,15 @@ import numpy as np
 import tensorflow as tf
 import multiprocessing as mp
 
-SLEEP_STAGE_RESOLUTION_SEC = 30.0 #Nominal (i.e. in EDF file) length or each clip/sleep stage annotation
-NOMINAL_FREQUENCY_HZ = 256 #Sampling frequency for most channels
-HISTORICAL_LOOKBACK_LENGTH = 0 #We save the last HISTORICAL_LOOKBACK_LENGTH sleep stages. Set to 0 to disable.
-SLEEP_STAGE_ANNOTATONS_CHANNEL = 2 #Channel of sleep stages in annotations file
-NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE = 5000 #Number of pseudo-random clips to generate for each sleep stage
+SLEEP_STAGE_RESOLUTION_SEC = 30.0 # Nominal (i.e. in EDF file) length or each clip/sleep stage annotation
+NOMINAL_FREQUENCY_HZ = 256 # Sampling frequency for most channels
+HISTORICAL_LOOKBACK_LENGTH = 0 # We save the last HISTORICAL_LOOKBACK_LENGTH sleep stages. Set to 0 to disable.
+SLEEP_STAGE_ANNOTATONS_CHANNEL = 2 # Channel of sleep stages in annotations file
+NUM_PSEUDO_RANDOM_CLIP_PER_SLEEP_STAGE = 5000 # Number of pseudo-random clips to generate for each sleep stage
 MAX_VOLTAGE = 2**15 - 1
 MIN_VOLTAGE = 0
-ONE_HOT_OUTPUT = False #If true, sleep stages are exported as their one-hot classes tensor, else they are reported as a scalar
-NUM_PROCESSES = 10
+ONE_HOT_OUTPUT = False # If true, sleep stages are exported as their one-hot classes tensor, else they are reported as a scalar
+NUM_PROCESSES = mp.cpu_count() - 2 # Keep 2 cores for good measure
 DATA_TYPE = tf.uint16
 AVAILABLE_SIGNAL_PROCESSING_OPS = ["15b_offset", "notch_60Hz", "0_3Hz-100Hz_bandpass", "0_5Hz-32Hz_bandpass", "none"]
 

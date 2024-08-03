@@ -9,7 +9,6 @@ import csv
 import git
 import sys
 import json
-import socket
 import datetime
 import imblearn
 import utilities
@@ -30,7 +29,7 @@ RANDOM_SEED = 42
 RESAMPLE_TRAINING_DATASET = False
 SHUFFLE_TRAINING_CLIPS = True
 NUM_CLIPS_PER_FILE_EDGETPU = 500 # 500 is only valid for 256Hz
-K_FOLD_OUTPUT_TO_FILE = False # If true, will write validation accuracy to a CSV for k-fold sweep validation
+K_FOLD_OUTPUT_TO_FILE = True # If true, will write validation accuracy to a CSV for k-fold sweep validation
 K_FOLD_SETS_MANUAL_PRUNE = [4]
 REF_DATA_DIR = "asic/fixed_point_accuracy_study/reference_data"
 
@@ -173,6 +172,7 @@ def load_from_dataset(args):
 
     # Check validity of arguments
     val_nights = range(args.k_fold_val_set*NUM_NIGHTS_VALIDATION, args.k_fold_val_set*NUM_NIGHTS_VALIDATION+NUM_NIGHTS_VALIDATION)
+    if args.class_weights == -1: args.class_weights = (sleep_map.get_num_stages()+1)*[1] # Default to unit weight for all classes if no argument is provided
     if len(args.class_weights) != (sleep_map.get_num_stages()+1):
         raise ValueError(f"Number of class weights ({len(args.class_weights)}) should be equal to number of sleep stages ({sleep_map.get_num_stages()+1})")
     if (dataset_metadata["num_files_used"] % NUM_NIGHTS_VALIDATION != 0):
@@ -356,7 +356,7 @@ def parse_arguments():
     parser.add_argument('--num_epochs', help='Number of training epochs. Defaults to 25.', default=25, type=int)
     parser.add_argument('--batch_size', help='Batch size for training. Defaults to 8.', default=8, type=int)
     parser.add_argument('--learning_rate', help='Learning rate for training. Defaults to 1e-4.', default=1e-4, type=float)
-    parser.add_argument('--class_weights', help='List of weights to apply in loss calculation.', nargs='+', default=[1, 1, 1, 1, 1, 1], type=float)
+    parser.add_argument('--class_weights', help='List of weights to apply in loss calculation. Set to -1 for default of unit weight for all classes.', nargs='+', default=-1, type=float)
     parser.add_argument('--dataset_resample_algo', help="Which dataset resampling algorithm to use. Currently using 'imblearn' package.", choices=AVAILABLE_RESAMPLERS, default='RandomUnderSampler', type=str)
     parser.add_argument('--enable_dataset_resample_replacement', help='Whether replacement is allowed when resampling dataset.', action='store_true')
     parser.add_argument('--training_set_target_count', help='Target number of clips per class in training set. Defaults to [3500, 5000, 4000, 4250, 3750].', nargs='+', default=[3500, 5000, 4000, 4250, 3750], type=int)
