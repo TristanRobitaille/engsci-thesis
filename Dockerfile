@@ -50,6 +50,8 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     texlive-latex-extra \
     texlive-science \
     texlive-bibtex-extra \
+    cm-super \
+    dvipng \
     && rm -rf /var/lib/apt/lists/*
 RUN pip3 install scienceplots
 
