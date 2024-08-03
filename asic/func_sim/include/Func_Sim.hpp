@@ -7,9 +7,11 @@
 #include <map>
 #include <variant>
 
+#include <Misc.hpp>
+#if DISTRIBUTED_ARCH
 #include <CiM.hpp>
 #include <Master_Ctrl.hpp>
-#include <Misc.hpp>
+#endif //DISTRIBUTED_ARCH
 #include <Compute_Verification.hpp>
 
 typedef void (*FcnPtr)(struct ext_signals*);

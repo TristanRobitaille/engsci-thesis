@@ -9,9 +9,11 @@ map<int, FcnPtr> event_schedule;
 struct ext_signals ext_sigs;
 vector<uint32_t> softmax_max_indices;
 
+#if DISTRIBUTED_ARCH
 Bus bus;
 vector<CiM> cims;
 Master_Ctrl ctrl((string(DATA_BASE_DIR)+"eeg.h5"), (string(DATA_BASE_DIR)+"model_weights.h5"));
+#endif //DISTRIBUTED_ARCH
 
 /*----- DEFINITION -----*/
 int init(){
@@ -29,10 +31,12 @@ int init(){
     event_schedule[40000] = epoch_start;
     event_schedule[40002] = epoch_start_reset;
 
+#if DISTRIBUTED_ARCH
     // Construct CiMs
     for (int16_t i = 0; i < NUM_CIM; ++i) {
         cims.emplace_back(i);
     }
+#endif //DISTRIBUTED_ARCH
     return 0;
 }
 
@@ -86,19 +90,27 @@ void run_sim(uint32_t clip_num, string results_csv_fp) {
     cout << ">----- STARTING SIMULATION -----<" << endl;
     uint64_t epoch_cnt = 0;
     while (1) {
+#if DISTRIBUTED_ARCH
         if ((epoch_cnt == 7) && (ctrl.get_are_params_loaded() == true)) { epoch_cnt = 12500; } // Fast forward if params don't need to be loaded
         if (event_schedule.count(epoch_cnt) > 0) { event_schedule[epoch_cnt](&ext_sigs); } // Update external signals if needed
         for (auto& cim: cims) { cim.run(&ext_sigs, &bus); } // Run CiMs
         if (ctrl.run(&ext_sigs, &bus, cims, clip_num) == EVERYTHING_FINISHED) { break; }; // Run Master Controller
         bus.run(); // Run bus
         epoch_cnt++;
+#elif CENTRALIZED_ARCH
+        break;
+#else 
+        throw invalid_argument("Please define either DISTRIBUTED_ARCH or CENTRALIZED_ARCH!");
+#endif
     }
 
+#if DISTRIBUTED_ARCH //FIXME: Temporary fix to avoid fault while centralized architecture is brought up
     print_intermediate_value_stats();
     cout << "Total number of epochs: " << epoch_cnt << endl;
     cout << ">----- SIMULATION FINISHED -----<" << endl;
     softmax_max_indices.emplace_back(ctrl.get_softmax_max_index());
     reset_stats();
+#endif //DISTRIBUTED_ARCH
 }
 
 int main(int argc, char *argv[]){

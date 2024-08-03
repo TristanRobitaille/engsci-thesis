@@ -7,7 +7,6 @@
 using namespace std;
 
 /*----- DEFINE -----*/
-#define NUM_TERMS_EXP_TAYLOR_APPROX 6
 #define CIM_PARAMS_STORAGE_SIZE_NUM_ELEM 528
 #define CIM_INT_RES_SIZE_NUM_ELEM 886
 

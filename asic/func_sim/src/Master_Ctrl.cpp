@@ -1,3 +1,4 @@
+#if DISTRIBUTED_ARCH
 #include <Master_Ctrl.hpp>
 
 /*----- NAMESPACE -----*/
@@ -417,3 +418,5 @@ uint32_t Master_Ctrl::get_softmax_max_index() {
 bool Master_Ctrl::get_are_params_loaded() {
     return params_loaded;
 }
+
+#endif //DISTRIBUTED_ARCH

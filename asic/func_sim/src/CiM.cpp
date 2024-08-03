@@ -1,3 +1,4 @@
+#if DISTRIBUTED_ARCH
 #include <CiM.hpp>
 
 /*----- NAMESPACE -----*/
@@ -675,3 +676,5 @@ void CiM::overflow_check() {
 uint32_t CiM::get_softmax_max_index() {
     return softmax_max_index;
 }
+
+#endif // DISTRIBUTED_ARCH
