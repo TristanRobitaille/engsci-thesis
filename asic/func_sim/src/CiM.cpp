@@ -13,7 +13,7 @@ CiM::CiM(const int16_t cim_id) : id(cim_id), gen_cnt_7b(7), gen_cnt_7b_2(7), wor
 void CiM::load_previous_softmax() {
     if (id == 0) {
         for (int i = 0; i < (NUM_SAMPLES_OUT_AVG-1); i++) { // Softmax for previous dummy epochs
-            std::string filename = std::string(DATA_BASE_DIR)+"/dummy_softmax_" + std::to_string(i) + ".csv";
+            std::string filename = std::string(DATA_BASE_DIR)+"dummy_softmax_" + std::to_string(i) + ".csv";
             rapidcsv::Document csv(filename, rapidcsv::LabelParams(-1, -1));
             std::vector<float> dummy_softmax = csv.GetRow<float>(0);
             for (int j = 0; j < NUM_SLEEP_STAGES; j++) { int_res_write((dummy_softmax[j] / NUM_SAMPLES_OUT_AVG), mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + i*NUM_SLEEP_STAGES*DOUBLE_WIDTH + DOUBLE_WIDTH*j, DOUBLE_WIDTH); }
@@ -59,7 +59,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         break;
 
     case PATCH_LOAD_BROADCAST_OP:
-        int_res_write(inst.data[0], word_rec_cnt.get_cnt(), SINGLE_WIDTH);
+        int_res_write(inst.data[0], mem_map.at(EEG_INPUT_MEM) + SINGLE_WIDTH*word_rec_cnt.get_cnt(), SINGLE_WIDTH);
         word_rec_cnt.inc();
         break;
 

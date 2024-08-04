@@ -11,7 +11,6 @@ Master_Ctrl::Master_Ctrl(const string eeg_filepath, const string params_filepath
     // EEG data file
     HighFive::File eeg_file(eeg_filepath, HighFive::File::ReadOnly);
     eeg_ds = eeg_file.getDataSet("eeg").read<std::vector<std::vector<float>>>();
-    eeg = eeg_ds[0].begin(); // 1st clip
 
     // Parameters data file
     load_params_from_h5(params_filepath);

@@ -25,8 +25,8 @@
 #define CIM_PARAMS_STORAGE_SIZE_NUM_ELEM 528
 #define CIM_INT_RES_SIZE_NUM_ELEM 886
 #elif CENTRALIZED_ARCH
-#define CIM_PARAMS_STORAGE_SIZE_NUM_ELEM 10 // TODO: Update this value
-#define CIM_INT_RES_SIZE_NUM_ELEM 10 // TODO: Update this value
+#define CIM_PARAMS_STORAGE_SIZE_NUM_ELEM 31649
+#define CIM_INT_RES_SIZE_NUM_ELEM 100000 // TODO: Update this value
 #endif
 
 
@@ -99,8 +99,8 @@ struct instruction {
 struct ext_signals {
     /* Signals external to the master controller and CiM, coming from peripherals or the RISC-V processor */
     bool master_nrst;
-    bool new_sleep_epoch;
     bool start_param_load;
+    bool new_sleep_epoch;
 };
 
 /*----- CLASS -----*/

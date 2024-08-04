@@ -11,8 +11,8 @@ set(BOOST_INCLUDEDIR /usr/local/include/boost)
 
 add_definitions(-DN_STO_INT_RES=$ENV{N_STO_INT_RES})
 add_definitions(-DN_STO_PARAMS=$ENV{N_STO_PARAMS})
-add_definitions(-DDISTRIBUTED_ARCH=true)
-add_definitions(-DCENTRALIZED_ARCH=false)
+add_definitions(-DDISTRIBUTED_ARCH=false)
+add_definitions(-DCENTRALIZED_ARCH=true)
 
 file(GLOB FILES "src/*.cpp")
 add_executable(Func_Sim ${FILES})

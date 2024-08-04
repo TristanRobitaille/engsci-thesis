@@ -304,7 +304,7 @@ class CiM_Compute {
             return comp_fx_t { floor(static_cast<float>(input)) };
         }
 
-        void int_res_write(float data, uint16_t index, DATA_WIDTH data_width) {
+        void int_res_write(float data, uint32_t index, DATA_WIDTH data_width) {
             int_res[index] = data;
             if (data_width == DOUBLE_WIDTH) {
                 int_res[index + 1] = data;
@@ -318,8 +318,7 @@ class CiM_Compute {
                 compute_in_progress = false;
                 _num_compute_done++;
             }
-}
-
+        }
 };
 
 #endif //CIM_COMPUTE_H

@@ -29,9 +29,9 @@ bool are_equal(float a, float b, uint16_t index) {
         highest_rel_error = (100*(a-b)/b > highest_rel_error) ? 100*(a-b)/b : highest_rel_error; // Instead if statement to avoid extremely high relative errors when the abolute error is very small
         rel_errors.push_back(100*(a-b)/b);
 #if DISTRIBUTED_ARCH
-        std::cout << "Mismatch for CiM #" << (uint16_t) id << " at index " << index << ": Expected: " << a << ", got " << b << " (error: " << 100*(a-b)/b << "%)" << std::endl;
+        cout << "Mismatch for CiM #" << (uint16_t) id << " at index " << index << ": Expected: " << a << ", got " << b << " (error: " << 100*(a-b)/b << "%)" << endl;
 #elif CENTRALIZED_ARCH
-        std::cout << "Mismatch detected at index " << index << ": Expected: " << a << ", got " << b << " (error: " << 100*(a-b)/b << "%)" << std::endl;
+        cout << "Mismatch detected at index " << index << ": Expected: " << a << ", got " << b << " (error: " << 100*(a-b)/b << "%)" << endl;
 #endif
         data_over_threshold_cnt++;
         return false;
@@ -46,11 +46,11 @@ void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, uint8_t id, float* dat
     if (ENABLE_COMPUTATION_VERIFICATION == false) { return; }
 
     uint16_t stride = (data_width == SINGLE_WIDTH) ? 1 : 2;
-    std::vector<float> ref_data;
+    vector<float> ref_data;
 
     if ((cim_step == ENC_MHSA_DENSE_QK_T_VERIF) || (cim_step == ENC_SOFTMAX_VERIF)) {
         for (int head = 0; head < NUM_HEADS; head++) {
-            std::string filename = step_verif_info[cim_step].csv_fp + std::to_string(head) + ".csv";
+            string filename = step_verif_info[cim_step].csv_fp + to_string(head) + ".csv";
             rapidcsv::Document csv(filename, rapidcsv::LabelParams(-1, -1));
             if (cim_step == ENC_MHSA_DENSE_QK_T_VERIF) { ref_data = csv.GetColumn<float>(id); }
             else if (cim_step == ENC_SOFTMAX_VERIF) { ref_data = csv.GetRow<float>(id); }
@@ -62,16 +62,16 @@ void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, uint8_t id, float* dat
         for (int i = 0; i < ref_data.size(); i++) { ref_data[i] = ref_data[i] / NUM_SAMPLES_OUT_AVG; } // Divide this epoch's reference softmax
 
         for (int i = 0; i < (NUM_SAMPLES_OUT_AVG-1); i++) { // Softmax for previous dummy epochs
-            std::string filename = step_verif_info[cim_step].csv_fp + std::to_string(i) + ".csv";
+            string filename = step_verif_info[cim_step].csv_fp + to_string(i) + ".csv";
             rapidcsv::Document csv(filename, rapidcsv::LabelParams(-1, -1));
-            std::vector<float> dummy_softmax = csv.GetRow<float>(0);
+            vector<float> dummy_softmax = csv.GetRow<float>(0);
             for (int j = 0; j < NUM_SLEEP_STAGES; j++) { ref_data[j] += dummy_softmax[j] / NUM_SAMPLES_OUT_AVG; }
         }
         for (int i = 0; i < NUM_SLEEP_STAGES; i++) { are_equal(ref_data[i], data[starting_addr + stride*i], starting_addr + stride*i, id); }
     } else {
         rapidcsv::Document csv(step_verif_info[cim_step].csv_fp, rapidcsv::LabelParams(-1, -1));
         if (cim_step == ENC_OUT_VERIF) { 
-            std::vector<float> col = csv.GetColumn<float>(id);
+            vector<float> col = csv.GetColumn<float>(id);
             are_equal(col[0], data[starting_addr], starting_addr, id); // Only check the first row since we are not computing the rest
         } else {
             if (cim_step == MLP_HEAD_LAYERNORM_VERIF || cim_step == MLP_HEAD_DENSE_1_VERIF) { ref_data = csv.GetRow<float>(id); }
@@ -94,8 +94,8 @@ void print_softmax_error(float* data, uint16_t starting_addr, DATA_WIDTH data_wi
     uint16_t stride = (data_width == SINGLE_WIDTH) ? 1 : 2;
 
     rapidcsv::Document csv(step_verif_info[MLP_HEAD_SOFTMAX_VERIF].csv_fp, rapidcsv::LabelParams(-1, -1));
-    std::vector<float> ref_softmax = csv.GetColumn<float>(0);
-    std::vector<float> softmax_err_rel, softmax_err_abs;
+    vector<float> ref_softmax = csv.GetColumn<float>(0);
+    vector<float> softmax_err_rel, softmax_err_abs;
 
     cout << "Error on final softmax: ";
     for (int i = 0; i < NUM_SLEEP_STAGES; i++) { 
@@ -134,13 +134,13 @@ void verify_softmax_storage(float* intermediate_res, uint16_t prev_softmax_base_
     for (int i = 0; i < (NUM_SAMPLES_OUT_AVG-2); i++) {
         for (int j = 0; j < NUM_SLEEP_STAGES; j++) {
             // Check that the previous sleep epochs have been shifted
-            std::string filename = step_verif_info[POST_SOFTMAX_AVG_VERIF].csv_fp + std::to_string(i) + ".csv";
+            string filename = step_verif_info[POST_SOFTMAX_AVG_VERIF].csv_fp + to_string(i) + ".csv";
             rapidcsv::Document csv(filename, rapidcsv::LabelParams(-1, -1));
-            std::vector<float> dummy_softmax = csv.GetRow<float>(0);
+            vector<float> dummy_softmax = csv.GetRow<float>(0);
             
             // Check that the current sleep epoch's softmax got moved to the previous sleep epochs softmax storage
             rapidcsv::Document csv_current(step_verif_info[MLP_HEAD_SOFTMAX_VERIF].csv_fp, rapidcsv::LabelParams(-1, -1));
-            std::vector<float> ref_softmax = csv_current.GetColumn<float>(0);
+            vector<float> ref_softmax = csv_current.GetColumn<float>(0);
 
             uint16_t addr = prev_softmax_base_addr + DOUBLE_WIDTH*(j +(i+1)*NUM_SLEEP_STAGES);
 #if DISTRIBUTED_ARCH
@@ -161,13 +161,13 @@ void print_intermediate_value_stats() {
     arma::fvec arma_abs_errors(abs_errors.data(), abs_errors.size());
     arma::fvec arma_rel_errors(rel_errors.data(), rel_errors.size());
     
-    std::cout << ">----- COMPUTE VERIFICATION STATS -----<" << std::endl;
-    std::cout << "Min. intermediate value: " << min_val << std::endl;
-    std::cout << "Max. intermediate value: " << max_val << std::endl;
-    std::cout << "Highest valid absolute error: " << highest_abs_error << ". Avg: " << arma::mean(arma_abs_errors) << ". Std. dev.: " << arma::stddev(arma_abs_errors) << std::endl;
-    if (rel_errors.size() == 0) { std::cout << "Highest valid relative error: " << highest_rel_error << ". Avg: " << 0 << ". Std. dev.: " << 0 << std::endl; }
-    else { std::cout << "Highest valid relative error: " << highest_rel_error << ". Avg: " << arma::mean(arma_rel_errors) << ". Std. dev.: " << arma::stddev(arma_rel_errors) << std::endl; }
-    std::cout << data_over_threshold_cnt << "/" << data_cnt << " over threshold (" << (100.0f*data_over_threshold_cnt/data_cnt) << "%)" << std::endl;
+    cout << ">----- COMPUTE VERIFICATION STATS -----<" << endl;
+    cout << "Min. intermediate value: " << min_val << endl;
+    cout << "Max. intermediate value: " << max_val << endl;
+    cout << "Highest valid absolute error: " << highest_abs_error << ". Avg: " << arma::mean(arma_abs_errors) << ". Std. dev.: " << arma::stddev(arma_abs_errors) << endl;
+    if (rel_errors.size() == 0) { cout << "Highest valid relative error: " << highest_rel_error << ". Avg: " << 0 << ". Std. dev.: " << 0 << endl; }
+    else { cout << "Highest valid relative error: " << highest_rel_error << ". Avg: " << arma::mean(arma_rel_errors) << ". Std. dev.: " << arma::stddev(arma_rel_errors) << endl; }
+    cout << data_over_threshold_cnt << "/" << data_cnt << " over threshold (" << (100.0f*data_over_threshold_cnt/data_cnt) << "%)" << endl;
 }
 
 void reset_stats() {

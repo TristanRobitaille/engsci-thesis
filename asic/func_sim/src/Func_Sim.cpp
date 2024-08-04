@@ -12,9 +12,9 @@ vector<uint32_t> softmax_max_indices;
 #if DISTRIBUTED_ARCH
 Bus bus;
 vector<CiM> cims;
-Master_Ctrl ctrl((string(DATA_BASE_DIR)+"eeg.h5"), (string(DATA_BASE_DIR)+"model_weights.h5"));
+Master_Ctrl ctrl(string(DATA_BASE_DIR)+"eeg.h5", string(DATA_BASE_DIR)+"model_weights.h5");
 #elif CENTRALIZED_ARCH
-CiM_Centralized cim;
+CiM_Centralized cim(string(DATA_BASE_DIR)+"model_weights.h5");
 #endif
 
 /*----- DEFINITION -----*/
@@ -28,11 +28,11 @@ int init(){
 
     // Define schedule for external events (triggered by the RISC-V processor)
     event_schedule[0] = master_nrst;
-    event_schedule[2] = master_nrst_reset;
+    event_schedule[1] = master_nrst_reset;
     event_schedule[4] = param_load;
-    event_schedule[6] = param_load_reset;
+    event_schedule[5] = param_load_reset;
     event_schedule[40000] = epoch_start;
-    event_schedule[40002] = epoch_start_reset;
+    event_schedule[40001] = epoch_start_reset;
 
 #if DISTRIBUTED_ARCH
     // Construct CiMs
@@ -102,7 +102,7 @@ void run_sim(uint32_t clip_num, string results_csv_fp) {
         epoch_cnt++;
 #elif CENTRALIZED_ARCH
         if (event_schedule.count(epoch_cnt) > 0) { event_schedule[epoch_cnt](&ext_sigs); } // Update external signals if needed
-        if (cim.run(&ext_sigs) == EVERYTHING_FINISHED) { break; }; // Run CiM
+        if (cim.run(&ext_sigs, string(DATA_BASE_DIR)+"dummy_softmax_", string(DATA_BASE_DIR)+"eeg.h5", clip_num) == EVERYTHING_FINISHED) { break; }; // Run CiM
         epoch_cnt++;
 #else 
         throw invalid_argument("Please define either DISTRIBUTED_ARCH or CENTRALIZED_ARCH!");
