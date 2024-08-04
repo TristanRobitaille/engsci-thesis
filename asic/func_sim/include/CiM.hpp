@@ -7,8 +7,6 @@
 #include <Compute_Verification.hpp>
 
 /*----- DEFINE -----*/
-#define COMPUTE_CNT_THRESHOLD 3 // Used to simulate the delay in the computation to match the real hardware
-
 #define HAS_MY_DATA(x) ((id >= (x)) && (id < (x+3))) // Determines whether the current broadcast transaction contains data I need
 #define IS_MY_MATRIX(x) ((id >= (x)*NUM_HEADS) && (id < (x+1)*NUM_HEADS)) // Returns whether a given count corresponds to my matrix (for the *V matmul in encoder's MHSA)
 
@@ -132,6 +130,7 @@ class CiM : public CiM_Compute {
             {SOFTMAX_AVG_SUM_MEM,       DOUBLE_WIDTH*(2*EMB_DEPTH)}
         };
 
+        /*----- PRIVATE VARIABLES -----*/
         bool is_ready = true; // Signal that CiM can use to override the compute_in_progress signal and force the master to wait before sending the next instruction
         uint16_t id; // ID of the CiM
         uint16_t gen_reg_2b; // General-purpose register
@@ -139,19 +138,16 @@ class CiM : public CiM_Compute {
         uint16_t rx_addr_reg; // Record the address of the data received on the bus
         uint16_t sender_id; // Record the id of an instruction's sender at a start of broadcast
         uint16_t data_len_reg; // General-purpose register used to record len of data sent/received on the bus
-        uint16_t _compute_process_cnt; // [Not in ASIC] Counter used to track the progress of the current computation (used to simulate the delay in the computation to match the real hardware)
-        uint16_t _num_compute_done; // [Not in ASIC] Counter used to track the number of computations done in a given inference step
         uint32_t softmax_max_index;
         DATA_WIDTH data_width;
 
         STATE cim_state;
-        INFERENCE_STEP current_inf_step = CLASS_TOKEN_CONCAT_STEP;
+        INFERENCE_STEP current_inf_step;
         Counter gen_cnt_7b;
         Counter gen_cnt_7b_2;
         Counter word_rec_cnt; // Tracks the # of words received from the bus that are relevant to me
         Counter word_snt_cnt; // Tracks the # of words sent to the bus
 
-        void update_compute_process_cnt();
         void update_state(STATE new_state);
         void load_previous_softmax();
         void overflow_check();

@@ -13,7 +13,9 @@ vector<uint32_t> softmax_max_indices;
 Bus bus;
 vector<CiM> cims;
 Master_Ctrl ctrl((string(DATA_BASE_DIR)+"eeg.h5"), (string(DATA_BASE_DIR)+"model_weights.h5"));
-#endif //DISTRIBUTED_ARCH
+#elif CENTRALIZED_ARCH
+CiM_Centralized cim;
+#endif
 
 /*----- DEFINITION -----*/
 int init(){
@@ -21,13 +23,14 @@ int init(){
     cout << "N_STO_PARAMS: " << N_STO_PARAMS << endl;
     cout << "NUM. TERMS TAYLOR EXPANSION EXP APPROX: " << NUM_TERMS_EXP_TAYLOR_APPROX << endl;
     ext_sigs.master_nrst = false;
+    ext_sigs.start_param_load = false;
     ext_sigs.new_sleep_epoch = false;
 
     // Define schedule for external events (triggered by the RISC-V processor)
     event_schedule[0] = master_nrst;
     event_schedule[2] = master_nrst_reset;
-    event_schedule[4] = master_param_load;
-    event_schedule[6] = master_param_load_reset;
+    event_schedule[4] = param_load;
+    event_schedule[6] = param_load_reset;
     event_schedule[40000] = epoch_start;
     event_schedule[40002] = epoch_start_reset;
 
@@ -98,7 +101,9 @@ void run_sim(uint32_t clip_num, string results_csv_fp) {
         bus.run(); // Run bus
         epoch_cnt++;
 #elif CENTRALIZED_ARCH
-        break;
+        if (event_schedule.count(epoch_cnt) > 0) { event_schedule[epoch_cnt](&ext_sigs); } // Update external signals if needed
+        if (cim.run(&ext_sigs) == EVERYTHING_FINISHED) { break; }; // Run CiM
+        epoch_cnt++;
 #else 
         throw invalid_argument("Please define either DISTRIBUTED_ARCH or CENTRALIZED_ARCH!");
 #endif
@@ -106,11 +111,14 @@ void run_sim(uint32_t clip_num, string results_csv_fp) {
 
 #if DISTRIBUTED_ARCH //FIXME: Temporary fix to avoid fault while centralized architecture is brought up
     print_intermediate_value_stats();
+#endif //DISTRIBUTED_ARCH
+    
     cout << "Total number of epochs: " << epoch_cnt << endl;
     cout << ">----- SIMULATION FINISHED -----<" << endl;
+#if DISTRIBUTED_ARCH //FIXME: Temporary fix to avoid fault while centralized architecture is brought up
     softmax_max_indices.emplace_back(ctrl.get_softmax_max_index());
-    reset_stats();
 #endif //DISTRIBUTED_ARCH
+    reset_stats();
 }
 
 int main(int argc, char *argv[]){

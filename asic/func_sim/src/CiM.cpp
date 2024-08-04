@@ -35,12 +35,6 @@ int CiM::reset(){
     gen_cnt_7b_2.reset();
     word_rec_cnt.reset();
     word_snt_cnt.reset();
-    _neg_exp_cnt = 0;
-    _total_exp_cnt = 0;
-    _max_exp_input_arg = comp_fx_t(0);
-    _min_exp_input_arg = comp_fx_t(0);
-    _compute_process_cnt = 0;
-    _num_compute_done = 0;
     load_previous_softmax(); // Load in dummy softmax data of previous epochs for verification
     update_state(IDLE_CIM);
     return 0;
@@ -649,15 +643,6 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         break;
     }
     return 0;
-}
-
-void CiM::update_compute_process_cnt() {
-    if (compute_in_progress == true) { _compute_process_cnt++; }
-    if (_compute_process_cnt == COMPUTE_CNT_THRESHOLD) {
-        _compute_process_cnt = 0;
-        compute_in_progress = false;
-        _num_compute_done++;
-    }
 }
 
 bool CiM::get_is_ready() {

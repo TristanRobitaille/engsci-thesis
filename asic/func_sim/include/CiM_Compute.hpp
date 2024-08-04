@@ -7,8 +7,7 @@
 using namespace std;
 
 /*----- DEFINE -----*/
-#define CIM_PARAMS_STORAGE_SIZE_NUM_ELEM 528
-#define CIM_INT_RES_SIZE_NUM_ELEM 886
+#define COMPUTE_CNT_THRESHOLD 3 // Used to simulate the delay in the computation to match the real hardware
 
 /*----- CLASS -----*/
 class CiM_Compute {
@@ -16,6 +15,8 @@ class CiM_Compute {
         comp_fx_t compute_temp_fp_1;
         comp_fx_t compute_temp_fp_2;
         comp_fx_t compute_temp_fp_3;
+        uint16_t _num_compute_done; // [Not in ASIC] Counter used to track the number of computations done in a given inference step
+        uint16_t _compute_process_cnt; // [Not in ASIC] Counter used to track the progress of the current computation (used to simulate the delay in the computation to match the real hardware)
         float softmax_exp_int_res[PATCH_LEN];
 
     public:
@@ -51,6 +52,12 @@ class CiM_Compute {
             compute_temp_fp_2 = comp_fx_t { 0 };
             compute_temp_fp_3 = comp_fx_t { 0 };
             computation_result = 0.0f;
+            _num_compute_done = 0;
+            _compute_process_cnt = 0;
+            _neg_exp_cnt = 0;
+            _total_exp_cnt = 0;
+            _max_exp_input_arg = comp_fx_t(0);
+            _min_exp_input_arg = comp_fx_t(0);
             compute_in_progress = false;
         }
 
@@ -134,7 +141,11 @@ class CiM_Compute {
         }
 
         template <typename storage_fx_t>
+#if DISTRIBUTED_ARCH
         void LAYERNORM_1ST_HALF(uint8_t id, uint16_t input_addr, DATA_WIDTH data_width) {
+#elif CENTRALIZED_ARCH
+        void LAYERNORM_1ST_HALF(uint16_t input_addr, DATA_WIDTH data_width) {
+#endif
             /* 1st half of Layer normalization of input. Input is in intermediate storage location. Note: All LayerNorms are done over a row of EMB_DEPTH length. */
             if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start LAYERNORM_1ST_HALF!"); }
             compute_in_progress = true; // Using this compute_in_progress signal as it will be used in the CiM (in ASIC, this compute is multi-cycle, so leaving this here for visibility)
@@ -148,8 +159,11 @@ class CiM_Compute {
             // Mean
             for (uint16_t i = 0; i < stride*EMB_DEPTH; i += stride) { compute_temp_fp_1 += comp_fx_t { static_cast<storage_fx_t>(int_res[input_addr+i]) }; }
             compute_temp_fp_1 /= EMB_DEPTH;
+#if DISTRIBUTED_ARCH
             verify_result(MEAN, static_cast<float>(compute_temp_fp_1), int_res, input_addr, EMB_DEPTH, id, DOUBLE_WIDTH);
-
+#elif CENTRALIZED_ARCH
+            verify_result(MEAN, static_cast<float>(compute_temp_fp_1), int_res, input_addr, EMB_DEPTH, DOUBLE_WIDTH);
+#endif
             // Variance
             for (uint16_t i = 0; i < stride*EMB_DEPTH; i += stride) {
                 compute_temp_fp_3 = comp_fx_t { static_cast<storage_fx_t>(int_res[input_addr+i]) } - compute_temp_fp_1; // Subtract
@@ -158,7 +172,11 @@ class CiM_Compute {
             }
 
             compute_temp_fp_2 /= EMB_DEPTH;
+#if DISTRIBUTED_ARCH
             verify_result(VARIANCE, static_cast<float> (compute_temp_fp_2), int_res, input_addr, EMB_DEPTH, id, DOUBLE_WIDTH);
+#elif CENTRALIZED_ARCH
+            verify_result(VARIANCE, static_cast<float> (compute_temp_fp_2), int_res, input_addr, EMB_DEPTH, DOUBLE_WIDTH);
+#endif
             compute_temp_fp_2 = SQRT(compute_temp_fp_2); // Standard deviation
             if (compute_temp_fp_2 == comp_fx_t {0.0f}) { compute_temp_fp_3 = POW(comp_fx_t{2}, N_COMP); } // Avoid division by zero by saturating
             else { compute_temp_fp_3 = comp_fx_t {1.0f} / compute_temp_fp_2; } // Inverse standard deviation (so we can simply multiply instead of divide in the next step)
@@ -282,7 +300,7 @@ class CiM_Compute {
         }
 
         comp_fx_t FLOOR(comp_fx_t input) {
-            /* Performs floor() on fixed-point input */
+            // Performs floor() on fixed-point input
             return comp_fx_t { floor(static_cast<float>(input)) };
         }
 
@@ -292,6 +310,16 @@ class CiM_Compute {
                 int_res[index + 1] = data;
             }
         }
+
+        void update_compute_process_cnt() {
+            if (compute_in_progress == true) { _compute_process_cnt++; }
+            if (_compute_process_cnt == COMPUTE_CNT_THRESHOLD) {
+                _compute_process_cnt = 0;
+                compute_in_progress = false;
+                _num_compute_done++;
+            }
+}
+
 };
 
 #endif //CIM_COMPUTE_H

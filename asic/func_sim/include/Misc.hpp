@@ -21,6 +21,15 @@
 #define NUM_TERMS_EXP_TAYLOR_APPROX 6
 #define PRINT_INF_PROGRESS          false
 
+#if DISTRIBUTED_ARCH
+#define CIM_PARAMS_STORAGE_SIZE_NUM_ELEM 528
+#define CIM_INT_RES_SIZE_NUM_ELEM 886
+#elif CENTRALIZED_ARCH
+#define CIM_PARAMS_STORAGE_SIZE_NUM_ELEM 10 // TODO: Update this value
+#define CIM_INT_RES_SIZE_NUM_ELEM 10 // TODO: Update this value
+#endif
+
+
 /*----- TYPEDEFS -----*/
 // All fixed-point types are signed and all except for comp_fx_t have the same number of bits. We adjust the fix point format on each layer.
 // Xilinx AP_FIXED format: ap_fixed<width, integer, quantization_mode, overflow_mode, num. sat. bit> (https://docs.amd.com/r/en-US/ug1399-vitis-hls/Arbitrary-Precision-Fixed-Point-Data-Types)
@@ -61,6 +70,7 @@ enum OP {
 #endif //DISTRIBUTED_ARCH
 
 enum SYSTEM_STATE {
+    IDLE,
     RUNNING,
     EVERYTHING_FINISHED
 };
