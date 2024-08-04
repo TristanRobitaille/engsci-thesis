@@ -14,7 +14,11 @@ uint32_t data_cnt = 0;
 uint32_t data_over_threshold_cnt = 0;
 
 /*----- DECLARATION -----*/
+#if DISTRIBUTED_ARCH
 bool are_equal(float a, float b, uint16_t index, uint8_t id) {
+#elif CENTRALIZED_ARCH
+bool are_equal(float a, float b, uint16_t index) {
+#endif
     float diff = abs(a - b);
     min_val = (b < min_val) ? b : min_val;
     max_val = (b > max_val) ? b : max_val;
@@ -24,7 +28,11 @@ bool are_equal(float a, float b, uint16_t index, uint8_t id) {
     if ((diff > REL_TOLERANCE*abs(b)) && (diff > ABS_TOLERANCE)) {
         highest_rel_error = (100*(a-b)/b > highest_rel_error) ? 100*(a-b)/b : highest_rel_error; // Instead if statement to avoid extremely high relative errors when the abolute error is very small
         rel_errors.push_back(100*(a-b)/b);
+#if DISTRIBUTED_ARCH
         std::cout << "Mismatch for CiM #" << (uint16_t) id << " at index " << index << ": Expected: " << a << ", got " << b << " (error: " << 100*(a-b)/b << "%)" << std::endl;
+#elif CENTRALIZED_ARCH
+        std::cout << "Mismatch detected at index " << index << ": Expected: " << a << ", got " << b << " (error: " << 100*(a-b)/b << "%)" << std::endl;
+#endif
         data_over_threshold_cnt++;
         return false;
     }
@@ -33,6 +41,7 @@ bool are_equal(float a, float b, uint16_t index, uint8_t id) {
     return true;
 }
 
+#if DISTRIBUTED_ARCH
 void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, uint8_t id, float* data, uint16_t starting_addr, DATA_WIDTH data_width) {
     if (ENABLE_COMPUTATION_VERIFICATION == false) { return; }
 
@@ -74,6 +83,11 @@ void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, uint8_t id, float* dat
         }
     }
 }
+#elif CENTRALIZED_ARCH
+void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, float* data, uint16_t starting_addr, DATA_WIDTH data_width) {
+    // TODO: Implement centralized architecture verification
+}
+#endif
 
 void print_softmax_error(float* data, uint16_t starting_addr, DATA_WIDTH data_width) {
     if (ENABLE_COMPUTATION_VERIFICATION == false) { return; }
@@ -92,7 +106,11 @@ void print_softmax_error(float* data, uint16_t starting_addr, DATA_WIDTH data_wi
     cout << endl;
 }
 
+#if DISTRIBUTED_ARCH
 void verify_result(RESULT_TYPE type, float result, float* input_data, uint16_t starting_addr, uint16_t len, uint8_t id, DATA_WIDTH data_width) {
+#elif CENTRALIZED_ARCH
+void verify_result(RESULT_TYPE type, float result, float* input_data, uint16_t starting_addr, uint16_t len, DATA_WIDTH data_width) {
+#endif
     if (ENABLE_COMPUTATION_VERIFICATION == false) { return; }
 
     float data[len];
@@ -103,8 +121,11 @@ void verify_result(RESULT_TYPE type, float result, float* input_data, uint16_t s
 
     if (type == MEAN) { reference_result = arma::mean(arma_data); }
     else if (type == VARIANCE) { reference_result = arma::var(arma_data, 1 /*norm_type of 1 to divide by N to match TF*/); }
-
+#if DISTRIBUTED_ARCH
     are_equal(reference_result, result, -1, id);
+#elif CENTRALIZED_ARCH
+    are_equal(reference_result, result, -1);
+#endif
 }
 
 void verify_softmax_storage(float* intermediate_res, uint16_t prev_softmax_base_addr) {
@@ -116,14 +137,21 @@ void verify_softmax_storage(float* intermediate_res, uint16_t prev_softmax_base_
             std::string filename = step_verif_info[POST_SOFTMAX_AVG_VERIF].csv_fp + std::to_string(i) + ".csv";
             rapidcsv::Document csv(filename, rapidcsv::LabelParams(-1, -1));
             std::vector<float> dummy_softmax = csv.GetRow<float>(0);
-            uint16_t addr = prev_softmax_base_addr + DOUBLE_WIDTH*(j +(i+1)*NUM_SLEEP_STAGES);
-            are_equal(dummy_softmax[j]/NUM_SAMPLES_OUT_AVG, intermediate_res[addr], addr, 0);
             
             // Check that the current sleep epoch's softmax got moved to the previous sleep epochs softmax storage
             rapidcsv::Document csv_current(step_verif_info[MLP_HEAD_SOFTMAX_VERIF].csv_fp, rapidcsv::LabelParams(-1, -1));
             std::vector<float> ref_softmax = csv_current.GetColumn<float>(0);
+
+            uint16_t addr = prev_softmax_base_addr + DOUBLE_WIDTH*(j +(i+1)*NUM_SLEEP_STAGES);
+#if DISTRIBUTED_ARCH
+            are_equal(dummy_softmax[j]/NUM_SAMPLES_OUT_AVG, intermediate_res[addr], addr, 0);
             addr = prev_softmax_base_addr + DOUBLE_WIDTH*j;
             are_equal(ref_softmax[j]/NUM_SAMPLES_OUT_AVG, intermediate_res[addr], addr, 0);
+#elif CENTRALIZED_ARCH
+            are_equal(dummy_softmax[j]/NUM_SAMPLES_OUT_AVG, intermediate_res[addr], addr);
+            addr = prev_softmax_base_addr + DOUBLE_WIDTH*j;
+            are_equal(ref_softmax[j]/NUM_SAMPLES_OUT_AVG, intermediate_res[addr], addr);
+#endif
         }
     }
 }
