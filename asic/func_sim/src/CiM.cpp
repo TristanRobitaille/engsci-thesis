@@ -186,7 +186,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
     case PATCH_LOAD_CIM:
         if ((compute_in_progress == false) && (word_rec_cnt.get_cnt() == PATCH_LEN) && (gen_reg_2b == 0)) { // Received my complete patch, perform part of Dense layer
-            MAC<dw_fx_x_t,params_fx_2_x_t>(0, 0, PATCH_LEN, param_addr_map[SINGLE_PARAMS].addr+PATCH_PROJ_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION, SINGLE_WIDTH);
+            MAC<dw_fx_x_t,params_fx_2_x_t>(mem_map.at(EEG_INPUT_MEM), param_addr_map[PATCH_PROJ_KERNEL_PARAMS].addr, PATCH_LEN, param_addr_map[SINGLE_PARAMS].addr+PATCH_PROJ_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION, SINGLE_WIDTH);
             gen_reg_2b = 1;
             word_rec_cnt.reset();
         } else if ((compute_in_progress == false) && (gen_reg_2b == 1)) { // Done computation

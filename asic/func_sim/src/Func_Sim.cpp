@@ -109,9 +109,7 @@ void run_sim(uint32_t clip_num, string results_csv_fp) {
 #endif
     }
 
-#if DISTRIBUTED_ARCH //FIXME: Temporary fix to avoid fault while centralized architecture is brought up
     print_intermediate_value_stats();
-#endif //DISTRIBUTED_ARCH
     
     cout << "Total number of epochs: " << epoch_cnt << endl;
     cout << ">----- SIMULATION FINISHED -----<" << endl;

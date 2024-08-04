@@ -37,6 +37,7 @@ class CiM_Compute {
         /*----- VARIABLES ----*/
         float computation_result;
         bool compute_in_progress;
+        bool compute_done;
         float params[CIM_PARAMS_STORAGE_SIZE_NUM_ELEM];
         float int_res[CIM_INT_RES_SIZE_NUM_ELEM];
 
@@ -62,7 +63,7 @@ class CiM_Compute {
         }
 
         template <typename in1_storage_fx_t, typename in2_storage_fx_t>
-        void MAC(uint16_t in1_start_addr, uint16_t in2_start_addr, uint16_t len, uint16_t bias_addr, INPUT_TYPE param_type, ACTIVATION activation, DATA_WIDTH data_width) {
+        void MAC(uint32_t in1_start_addr, uint32_t in2_start_addr, uint16_t len, uint32_t bias_addr, INPUT_TYPE param_type, ACTIVATION activation, DATA_WIDTH data_width) {
             /* Dot-product between two vectors with selectable activation function. data_width only applies to intermediate results. */
             if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start MAC!"); }
             if (param_type != INTERMEDIATE_RES && param_type != MODEL_PARAM) { throw runtime_error("Invalid parameter type for MAC!"); }
@@ -315,9 +316,14 @@ class CiM_Compute {
             if (compute_in_progress == true) { _compute_process_cnt++; }
             if (_compute_process_cnt == COMPUTE_CNT_THRESHOLD) {
                 _compute_process_cnt = 0;
-                compute_in_progress = false;
                 _num_compute_done++;
+                compute_in_progress = false;
+                compute_done = true;
             }
+        }
+        
+        void reset_compute_done() {
+            compute_done = false;
         }
 };
 

@@ -153,6 +153,7 @@ static std::map<PARAM_NAME, ParamInfo> param_addr_map = {
 /*----- MAP -----*/
 const std::map<DATA, uint32_t> mem_map = {
     {EEG_INPUT_MEM,             0},
+    {PATCH_MEM,                 SINGLE_WIDTH*NUM_PATCHES*PATCH_LEN},
     {PREV_SOFTMAX_OUTPUT_MEM,   99000}, //FIXME
 };
 

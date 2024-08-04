@@ -6,17 +6,18 @@
 using namespace std;
 
 /*----- DEFINITION -----*/
-CiM_Centralized::CiM_Centralized(const string params_filepath) {
+CiM_Centralized::CiM_Centralized(const string params_filepath) : gen_cnt_7b(7), gen_cnt_7b_2(7) {
     reset();
     load_params_from_h5(params_filepath);
 }
 
 int CiM_Centralized::reset(){
-    fill(begin(int_res), end(int_res), 0); // Reset local int_res
+    fill(begin(int_res), end(int_res), 0);
+    gen_cnt_7b.reset();
+    gen_cnt_7b_2.reset();
     cim_state = IDLE_CIM;
-    current_inf_step = PATCH_PROJ_STEP;
+    current_inf_step = INVALID_STEP;
     system_state = IDLE;
-
     return 0;
 }
 
@@ -35,9 +36,9 @@ void CiM_Centralized::load_params_from_h5(const string params_filepath) {
 
     // Patch projection
     PatchProjKernel_t patch_proj_kernel = file.getGroup("patch_projection_dense").getGroup(transformer_name).getGroup("patch_projection_dense").getDataSet("kernel:0").read<PatchProjKernel_t>();
-    for (int row=0; row<PATCH_LEN; row++) {
-        for (int col=0; col<EMB_DEPTH; col++) {
-            params[param_addr_map[PATCH_PROJ_KERNEL_PARAMS].addr + row*EMB_DEPTH + col] = patch_proj_kernel[row][col];
+    for (int col=0; col<PATCH_LEN; col++) {
+        for (int row=0; row<EMB_DEPTH; row++) {
+            params[param_addr_map[PATCH_PROJ_KERNEL_PARAMS].addr + row + col*EMB_DEPTH] = patch_proj_kernel[row][col];
         }
     }
     EmbDepthVect_t patch_proj_bias = file.getGroup("patch_projection_dense").getGroup(transformer_name).getGroup("patch_projection_dense").getDataSet("bias:0").read<EmbDepthVect_t>();
@@ -173,7 +174,7 @@ void CiM_Centralized::load_eeg_from_h5(const string eeg_filepath, uint16_t clip_
     vector<vector<int64_t>> eeg_ds = eeg_file.getDataSet("eeg").read<vector<vector<int64_t>>>();
 
     for (int i=0; i<NUM_PATCHES*PATCH_LEN; i++) {
-        int_res_write(static_cast<float>(eeg_ds[clip_index][i]), mem_map.at(EEG_INPUT_MEM) + i*SINGLE_WIDTH, SINGLE_WIDTH);
+        int_res_write(static_cast<float>(eeg_ds[clip_index][i])/EEG_SCALE_FACTOR, mem_map.at(EEG_INPUT_MEM) + i*SINGLE_WIDTH, SINGLE_WIDTH);
     }
 }
 
@@ -201,16 +202,61 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
 
     switch (cim_state){
         case IDLE_CIM:
-            if (ext_sigs->new_sleep_epoch) { cim_state = INFERENCE_RUNNING; }
+            if (ext_sigs->new_sleep_epoch) {
+                cim_state = INFERENCE_RUNNING;
+                current_inf_step = PATCH_PROJ_STEP;
+            }
             break;
 
         case INFERENCE_RUNNING:
-            system_state = EVERYTHING_FINISHED;
+            if (current_inf_step == CLASS_TOKEN_CONCAT_STEP) { system_state = EVERYTHING_FINISHED; }
             break;
 
         case INVALID_CIM:
             break;
     }
+
+    switch (current_inf_step){
+        case PATCH_PROJ_STEP:
+            /* gen_cnt_7b holds current parameters row 
+               gen_cnt_7b_2 holds current patch */
+
+            if (compute_done || (gen_cnt_7b.get_cnt() == 0 && !compute_in_progress)) { // Start a new MAC
+                uint32_t patch_addr = mem_map.at(EEG_INPUT_MEM) + SINGLE_WIDTH*EMB_DEPTH*gen_cnt_7b_2.get_cnt();
+                uint32_t param_addr = param_addr_map[PATCH_PROJ_KERNEL_PARAMS].addr + EMB_DEPTH*gen_cnt_7b.get_cnt();
+                uint32_t param_bias_addr = param_addr_map_bias[PATCH_PROJ_BIAS_OFF].addr + gen_cnt_7b.get_cnt();
+                MAC<dw_fx_x_t,params_fx_2_x_t>(patch_addr, param_addr, PATCH_LEN, param_bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, SINGLE_WIDTH);
+            }
+
+            if (compute_done) {
+                // Save data
+                uint32_t addr = mem_map.at(PATCH_MEM) + DOUBLE_WIDTH*(gen_cnt_7b.get_cnt() + gen_cnt_7b_2.get_cnt()*PATCH_LEN);
+                int_res_write(computation_result, addr, DOUBLE_WIDTH);
+
+                // Update index control
+                if (gen_cnt_7b.get_cnt() == EMB_DEPTH-1) { // Done going through all parameters rows with given patch
+                    gen_cnt_7b.reset();
+                    if (gen_cnt_7b_2.get_cnt() == NUM_PATCHES-1) { // Done going through all patches
+                        gen_cnt_7b_2.reset();
+                        verify_layer_out(PATCH_PROJECTION_VERIF, int_res, mem_map.at(PATCH_MEM), EMB_DEPTH, DOUBLE_WIDTH);
+                        current_inf_step = CLASS_TOKEN_CONCAT_STEP;
+                    }
+                    gen_cnt_7b_2.inc(); // New patch
+                } else {
+                    gen_cnt_7b.inc();
+                }
+            }
+            break;
+
+        case CLASS_TOKEN_CONCAT_STEP:
+            break;
+
+        case INVALID_STEP:
+            break;
+    }
+
+    // Reset compute done (stays on for only one cycle)
+    reset_compute_done();
 
     return system_state;
 }

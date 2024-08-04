@@ -84,8 +84,19 @@ void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, uint8_t id, float* dat
     }
 }
 #elif CENTRALIZED_ARCH
-void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, float* data, uint16_t starting_addr, DATA_WIDTH data_width) {
-    // TODO: Implement centralized architecture verification
+void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, float* data, uint16_t starting_addr, uint16_t outside_dim_len, DATA_WIDTH data_width) {
+    if (ENABLE_COMPUTATION_VERIFICATION == false) { return; }
+
+    rapidcsv::Document csv(step_verif_info[cim_step].csv_fp, rapidcsv::LabelParams(-1, -1));
+
+    uint16_t stride = (data_width == SINGLE_WIDTH) ? 1 : 2;
+
+    for (int i = 0; i < csv.GetRowCount(); i++) { // Row
+        vector<float> ref_data = csv.GetRow<float>(i);
+        for (int j = 0; j < csv.GetColumnCount(); j++) { // Colum
+            are_equal(ref_data[j], data[starting_addr+stride*(j+i*outside_dim_len)], starting_addr+stride*(j+i*EMB_DEPTH));
+        }
+    }
 }
 #endif
 

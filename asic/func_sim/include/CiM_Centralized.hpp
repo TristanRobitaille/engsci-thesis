@@ -17,12 +17,16 @@ class CiM_Centralized : public CiM_Compute {
 
         enum INFERENCE_STEP {
             PATCH_PROJ_STEP,
+            CLASS_TOKEN_CONCAT_STEP,
+            INVALID_STEP
         };
 
         /*----- PRIVATE VARIABLES -----*/
         STATE cim_state = INVALID_CIM;
+        INFERENCE_STEP current_inf_step = INVALID_STEP;
         SYSTEM_STATE system_state;
-        INFERENCE_STEP current_inf_step;
+        Counter gen_cnt_7b;
+        Counter gen_cnt_7b_2;
 
         void load_params_from_h5(const std::string params_filepath);
         void load_eeg_from_h5(const std::string eeg_filepath, uint16_t clip_index);
