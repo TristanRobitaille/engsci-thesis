@@ -209,7 +209,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case INFERENCE_RUNNING:
-            if (current_inf_step == CLASS_TOKEN_CONCAT_STEP) { system_state = EVERYTHING_FINISHED; }
+            if (current_inf_step == POS_EMB_STEP) { system_state = EVERYTHING_FINISHED; }
             break;
 
         case INVALID_CIM:
@@ -240,6 +240,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                         gen_cnt_7b_2.reset();
                         verify_layer_out(PATCH_PROJECTION_VERIF, int_res, mem_map.at(PATCH_MEM), EMB_DEPTH, DOUBLE_WIDTH);
                         current_inf_step = CLASS_TOKEN_CONCAT_STEP;
+                        if (PRINT_INF_PROGRESS) { cout << "Patch projection done" << endl; }
                     }
                     gen_cnt_7b_2.inc(); // New patch
                 } else {
@@ -249,6 +250,19 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case CLASS_TOKEN_CONCAT_STEP:
+            if (gen_cnt_7b.get_cnt() < EMB_DEPTH) {
+                uint32_t class_token_addr = param_addr_map_bias[CLASS_TOKEN_OFF].addr + gen_cnt_7b.get_cnt();
+                int_res_write(params[class_token_addr], mem_map.at(CLASS_TOKEN_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt(), DOUBLE_WIDTH);
+                gen_cnt_7b.inc();
+            } else {
+                gen_cnt_7b.reset();
+                verify_layer_out(CLASS_TOKEN_VERIF, int_res, mem_map.at(CLASS_TOKEN_MEM), EMB_DEPTH, DOUBLE_WIDTH);
+                current_inf_step = POS_EMB_STEP;
+                if (PRINT_INF_PROGRESS) { cout << "Classification token concatenation done" << endl; }
+            }
+            break;
+
+        case POS_EMB_STEP:
             break;
 
         case INVALID_STEP:

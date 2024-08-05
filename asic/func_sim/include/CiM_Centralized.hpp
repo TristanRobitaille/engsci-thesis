@@ -18,6 +18,7 @@ class CiM_Centralized : public CiM_Compute {
         enum INFERENCE_STEP {
             PATCH_PROJ_STEP,
             CLASS_TOKEN_CONCAT_STEP,
+            POS_EMB_STEP,
             INVALID_STEP
         };
 
