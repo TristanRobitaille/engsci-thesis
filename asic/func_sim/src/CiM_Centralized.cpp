@@ -209,7 +209,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case INFERENCE_RUNNING:
-            if (current_inf_step == POS_EMB_STEP) { system_state = EVERYTHING_FINISHED; }
+            if (current_inf_step == ENC_LAYERNORM_1_STEP) { system_state = EVERYTHING_FINISHED; }
             break;
 
         case INVALID_CIM:
@@ -241,8 +241,10 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                         verify_layer_out(PATCH_PROJECTION_VERIF, int_res, mem_map.at(PATCH_MEM), EMB_DEPTH, DOUBLE_WIDTH);
                         current_inf_step = CLASS_TOKEN_CONCAT_STEP;
                         if (PRINT_INF_PROGRESS) { cout << "Patch projection done" << endl; }
+                    } else {
+                        gen_cnt_7b_2.inc(); // New patch
                     }
-                    gen_cnt_7b_2.inc(); // New patch
+                    
                 } else {
                     gen_cnt_7b.inc();
                 }
@@ -263,6 +265,40 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case POS_EMB_STEP:
+            /* gen_cnt_7b holds the column 
+               gen_cnt_7b_2 holds the row */
+
+            // TODO: This step shares a lot fo control logic with PATCH_PROJ_STEP. Consider refactoring to reduce code duplication.
+
+            if (compute_done || (gen_cnt_7b.get_cnt() == 0 && !compute_in_progress)) { // Start a new ADD
+                uint32_t int_res_addr = mem_map.at(CLASS_TOKEN_MEM) + DOUBLE_WIDTH*(gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_7b_2.get_cnt());
+                uint32_t params_addr = param_addr_map[POS_EMB_PARAMS].addr + gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_7b_2.get_cnt();
+                ADD<dw_fx_x_t,params_fx_2_x_t>(int_res_addr, params_addr, MODEL_PARAM);
+            }
+
+            if (compute_done) {
+                // Save data
+                uint32_t addr = mem_map.at(POS_EMB_MEM) + DOUBLE_WIDTH*(gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_7b_2.get_cnt());
+                int_res_write(computation_result, addr, DOUBLE_WIDTH);
+
+                // Update index control
+                if (gen_cnt_7b.get_cnt() == EMB_DEPTH-1) { // Done going through all columns of a given row
+                    gen_cnt_7b.reset();
+                    if (gen_cnt_7b_2.get_cnt() == NUM_PATCHES) { // Done going through all rows
+                        gen_cnt_7b_2.reset();
+                        verify_layer_out(POS_EMB_VERIF, int_res, mem_map.at(POS_EMB_MEM), EMB_DEPTH, DOUBLE_WIDTH);
+                        current_inf_step = ENC_LAYERNORM_1_STEP;
+                        if (PRINT_INF_PROGRESS) { cout << "Positional embedding done" << endl; }
+                    } else {
+                        gen_cnt_7b_2.inc(); // New row
+                    }
+                } else {
+                    gen_cnt_7b.inc();
+                }
+            }
+            break;
+
+        case ENC_LAYERNORM_1_STEP:
             break;
 
         case INVALID_STEP:

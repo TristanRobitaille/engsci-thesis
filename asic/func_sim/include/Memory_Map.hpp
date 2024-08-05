@@ -155,6 +155,7 @@ const std::map<DATA, uint32_t> mem_map = {
     {EEG_INPUT_MEM,             0},
     {PATCH_MEM,                 SINGLE_WIDTH*NUM_PATCHES*PATCH_LEN + DOUBLE_WIDTH*PATCH_LEN},
     {CLASS_TOKEN_MEM,           SINGLE_WIDTH*NUM_PATCHES*PATCH_LEN},
+    {POS_EMB_MEM,               0},
     {PREV_SOFTMAX_OUTPUT_MEM,   99000}, //FIXME
 };
 

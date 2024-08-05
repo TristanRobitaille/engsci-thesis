@@ -94,7 +94,7 @@ void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, float* data, uint16_t 
     for (int i = 0; i < csv.GetRowCount(); i++) { // Row
         vector<float> ref_data = csv.GetRow<float>(i);
         for (int j = 0; j < csv.GetColumnCount(); j++) { // Colum
-            are_equal(ref_data[j], data[starting_addr+stride*(j+i*outside_dim_len)], starting_addr+stride*(j+i*EMB_DEPTH));
+            are_equal(ref_data[j], data[starting_addr+stride*(j+i*outside_dim_len)], starting_addr+stride*(j+i*outside_dim_len));
         }
     }
 }
