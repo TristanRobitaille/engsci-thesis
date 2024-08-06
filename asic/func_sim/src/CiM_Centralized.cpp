@@ -209,7 +209,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case INFERENCE_RUNNING:
-            if (current_inf_step == ENC_LAYERNORM_1_STEP) { system_state = EVERYTHING_FINISHED; }
+            if (current_inf_step == ENC_MHSA_Q_STEP) { system_state = EVERYTHING_FINISHED; }
             break;
 
         case INVALID_CIM:
@@ -287,7 +287,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                     if (gen_cnt_7b_2.get_cnt() == NUM_PATCHES) { // Done going through all rows
                         gen_cnt_7b_2.reset();
                         verify_layer_out(POS_EMB_VERIF, int_res, mem_map.at(POS_EMB_MEM), EMB_DEPTH, DOUBLE_WIDTH);
-                        current_inf_step = ENC_LAYERNORM_1_STEP;
+                        current_inf_step = ENC_LAYERNORM_1_1ST_HALF_STEP;
                         if (PRINT_INF_PROGRESS) { cout << "Positional embedding done" << endl; }
                     } else {
                         gen_cnt_7b_2.inc(); // New row
@@ -298,7 +298,46 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             }
             break;
 
-        case ENC_LAYERNORM_1_STEP:
+        case ENC_LAYERNORM_1_1ST_HALF_STEP:
+            /* gen_cnt_7b holds the current row to which we apply normalization */
+            if (compute_done || (gen_cnt_7b.get_cnt() == 0 && !compute_in_progress)) { // Start a new LAYERNORM
+                uint32_t input_starting_addr = mem_map.at(POS_EMB_MEM) + DOUBLE_WIDTH*EMB_DEPTH*gen_cnt_7b.get_cnt();
+                LAYERNORM_1ST_HALF<dw_fx_x_t>(input_starting_addr, DOUBLE_WIDTH);
+            }
+
+            if (compute_done) {
+                if (gen_cnt_7b.get_cnt() == NUM_PATCHES) { // Done going through all rows
+                    gen_cnt_7b.reset();
+                    current_inf_step = ENC_LAYERNORM_1_2ND_HALF_STEP;
+                } else {
+                    gen_cnt_7b.inc();
+                }
+            }
+            break;
+
+        case ENC_LAYERNORM_1_2ND_HALF_STEP:
+            /* gen_cnt_7b holds the current column to which we apply centering and scaling */
+            if (compute_done || (gen_cnt_7b.get_cnt() == 0 && !compute_in_progress)) { // Start a new LAYERNORM
+                uint32_t input_starting_addr = mem_map.at(POS_EMB_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt();
+                uint32_t output_starting_addr = mem_map.at(ENC_LN1_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt();
+                uint32_t gamma_addr = param_addr_map_bias[ENC_LAYERNORM_1_GAMMA_OFF].addr + gen_cnt_7b.get_cnt();
+                uint32_t beta_addr = param_addr_map_bias[ENC_LAYERNORM_1_BETA_OFF].addr + gen_cnt_7b.get_cnt();
+                LAYERNORM_2ND_HALF<dw_fx_x_t, params_fx_3_x_t>(input_starting_addr, output_starting_addr, gamma_addr, beta_addr, DOUBLE_WIDTH);
+            }
+
+            if (compute_done) {
+                if (gen_cnt_7b.get_cnt() == EMB_DEPTH-1) { // Done going through all rows
+                    gen_cnt_7b.reset();
+                    current_inf_step = ENC_MHSA_Q_STEP;
+                    verify_layer_out(ENC_LAYERNORM1_VERIF, int_res, mem_map.at(ENC_LN1_MEM), EMB_DEPTH, DOUBLE_WIDTH);
+                    if (PRINT_INF_PROGRESS) { cout << "Finished LayerNorm" << endl; }
+                } else {
+                    gen_cnt_7b.inc();
+                }
+            }
+            break;
+
+        case ENC_MHSA_Q_STEP:
             break;
 
         case INVALID_STEP:

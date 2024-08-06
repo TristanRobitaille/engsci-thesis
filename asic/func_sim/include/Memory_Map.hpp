@@ -16,9 +16,10 @@ enum PARAM_NAME { // Master goes through these layers sequentially, loading weig
     MLP_HEAD_DENSE_2_PARAMS,    
     SINGLE_PARAMS, // The 1-element parameters stored at the bottom of the storage
     PARAM_LOAD_FINISHED,
-    // Centralized architecture only
+#if CENTRALIZED_ARCH
     MLP_HEAD_DENSE_1_PARAMS,
     ENC_MLP_DENSE_1_PARAMS,
+#endif
 };
 
 enum SINGLE_PARAM_OFFSET {
@@ -38,9 +39,10 @@ enum SINGLE_PARAM_OFFSET {
     ENC_LAYERNORM_3_GAMMA_OFF,
     ENC_LAYERNORM_3_BETA_OFF,
     MLP_HEAD_DENSE_2_BIAS_OFF,
-    // Centralized architecture only
+#if CENTRALIZED_ARCH
     MLP_HEAD_DENSE_1_BIAS_OFF,
     ENC_MLP_DENSE_1_BIAS_OFF,
+#endif
 };
 
 enum DATA {
@@ -48,8 +50,16 @@ enum DATA {
     PATCH_MEM,
     CLASS_TOKEN_MEM,
     POS_EMB_MEM,
+#if DISTRIBUTED_ARCH
     ENC_LN1_1ST_HALF_MEM,
     ENC_LN1_2ND_HALF_MEM,
+    ENC_LN2_1ST_HALF_MEM,
+    ENC_LN2_2ND_HALF_MEM,
+    MLP_HEAD_LN_1ST_HALF_MEM,
+    MLP_HEAD_LN_2ND_HALF_MEM,
+#elif CENTRALIZED_ARCH
+    ENC_LN1_MEM,
+#endif
     ENC_QVK_IN_MEM,
     ENC_Q_MEM,
     ENC_K_MEM,
@@ -62,14 +72,10 @@ enum DATA {
     ENC_V_MULT_MEM,
     ENC_DENSE_IN_MEM,
     ENC_MHSA_OUT_MEM,
-    ENC_LN2_1ST_HALF_MEM,
-    ENC_LN2_2ND_HALF_MEM,
     ENC_MLP_IN_MEM,
     ENC_MLP_DENSE1_MEM,
     ENC_MLP_DENSE2_IN_MEM,
     ENC_MLP_OUT_MEM,
-    MLP_HEAD_LN_1ST_HALF_MEM,
-    MLP_HEAD_LN_2ND_HALF_MEM,
     MLP_HEAD_DENSE_1_IN_MEM,
     MLP_HEAD_DENSE_1_OUT_MEM,
     MLP_HEAD_DENSE_2_IN_MEM,
@@ -156,6 +162,7 @@ const std::map<DATA, uint32_t> mem_map = {
     {PATCH_MEM,                 SINGLE_WIDTH*NUM_PATCHES*PATCH_LEN + DOUBLE_WIDTH*PATCH_LEN},
     {CLASS_TOKEN_MEM,           SINGLE_WIDTH*NUM_PATCHES*PATCH_LEN},
     {POS_EMB_MEM,               0},
+    {ENC_LN1_MEM,               DOUBLE_WIDTH*(NUM_PATCHES+1)*EMB_DEPTH},
     {PREV_SOFTMAX_OUTPUT_MEM,   99000}, //FIXME
 };
 

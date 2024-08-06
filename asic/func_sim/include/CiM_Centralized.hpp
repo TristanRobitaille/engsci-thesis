@@ -19,7 +19,9 @@ class CiM_Centralized : public CiM_Compute {
             PATCH_PROJ_STEP,
             CLASS_TOKEN_CONCAT_STEP,
             POS_EMB_STEP,
-            ENC_LAYERNORM_1_STEP,
+            ENC_LAYERNORM_1_1ST_HALF_STEP,
+            ENC_LAYERNORM_1_2ND_HALF_STEP,
+            ENC_MHSA_Q_STEP,
             INVALID_STEP
         };
 
