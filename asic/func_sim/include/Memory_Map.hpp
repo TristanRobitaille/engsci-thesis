@@ -163,6 +163,9 @@ const std::map<DATA, uint32_t> mem_map = {
     {CLASS_TOKEN_MEM,           SINGLE_WIDTH*NUM_PATCHES*PATCH_LEN},
     {POS_EMB_MEM,               0},
     {ENC_LN1_MEM,               DOUBLE_WIDTH*(NUM_PATCHES+1)*EMB_DEPTH},
+    {ENC_Q_MEM,                 2*DOUBLE_WIDTH*(NUM_PATCHES+1)*EMB_DEPTH},
+    {ENC_K_MEM,                 2*DOUBLE_WIDTH*(NUM_PATCHES+1)*EMB_DEPTH+(NUM_PATCHES+1)*EMB_DEPTH},
+    {ENC_V_MEM,                 (NUM_PATCHES+1)*EMB_DEPTH}, // Need to protect positional embedding as we'll use it below
     {PREV_SOFTMAX_OUTPUT_MEM,   99000}, //FIXME
 };
 

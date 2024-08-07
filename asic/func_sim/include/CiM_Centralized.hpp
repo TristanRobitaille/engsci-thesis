@@ -21,7 +21,11 @@ class CiM_Centralized : public CiM_Compute {
             POS_EMB_STEP,
             ENC_LAYERNORM_1_1ST_HALF_STEP,
             ENC_LAYERNORM_1_2ND_HALF_STEP,
+            POS_EMB_COMPRESSION_STEP,
             ENC_MHSA_Q_STEP,
+            ENC_MHSA_K_STEP,
+            ENC_MHSA_V_STEP,
+            ENC_MHSA_QK_T_STEP,
             INVALID_STEP
         };
 

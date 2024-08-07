@@ -216,13 +216,13 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case POS_EMB_STEP:
             if ((compute_in_progress == false) && (gen_cnt_7b.get_cnt() < NUM_PATCHES+1)) { // Start computation
                 if (gen_reg_2b == 1) { // Save computation result from previous iteration (except for the first iteration)
-                    int_res_write(computation_result , DOUBLE_WIDTH*gen_cnt_7b.get_cnt() + mem_map.at(POS_EMB_MEM), DOUBLE_WIDTH);
+                    int_res_write(computation_result, DOUBLE_WIDTH*gen_cnt_7b.get_cnt() + mem_map.at(POS_EMB_MEM), DOUBLE_WIDTH);
                     gen_cnt_7b.inc();
                 }
                 ADD<dw_fx_x_t,params_fx_2_x_t>(mem_map.at(CLASS_TOKEN_MEM)+DOUBLE_WIDTH*gen_cnt_7b.get_cnt(), param_addr_map[POS_EMB_PARAMS].addr+gen_cnt_7b.get_cnt(), MODEL_PARAM);
                 gen_reg_2b = 1;
             } else if ((compute_in_progress == false) && (gen_cnt_7b.get_cnt() == NUM_PATCHES+1)) { // Done with positional embedding
-                int_res_write(computation_result , DOUBLE_WIDTH*gen_cnt_7b.get_cnt()+mem_map.at(POS_EMB_MEM), DOUBLE_WIDTH);
+                int_res_write(computation_result, DOUBLE_WIDTH*gen_cnt_7b.get_cnt() + mem_map.at(POS_EMB_MEM), DOUBLE_WIDTH);
                 current_inf_step = ENC_LAYERNORM_1_1ST_HALF_STEP;
                 if (id == 0 && PRINT_INF_PROGRESS) { cout << "CiM: Finished positional embedding" << endl; }
                 gen_cnt_7b.reset();

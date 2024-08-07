@@ -145,7 +145,7 @@ class CiM_Compute {
 #if DISTRIBUTED_ARCH
         void LAYERNORM_1ST_HALF(uint8_t id, uint16_t input_addr, DATA_WIDTH data_width) {
 #elif CENTRALIZED_ARCH
-        void LAYERNORM_1ST_HALF(uint16_t input_addr, DATA_WIDTH data_width) {
+        void LAYERNORM_1ST_HALF(uint32_t input_addr, uint32_t output_addr, DATA_WIDTH data_width) {
 #endif
             /* 1st half of Layer normalization of input. Input is in intermediate storage location. Note: All LayerNorms are done over a row of EMB_DEPTH length. */
             if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start LAYERNORM_1ST_HALF!"); }
@@ -185,17 +185,16 @@ class CiM_Compute {
             // Partial normalization (excludes gamma and beta, which are applied in LAYERNORM_2ND_HALF() since they need to be applied column-wise)
             for (uint16_t i = 0; i < stride*EMB_DEPTH; i += stride) {
                 float result = static_cast<float>((comp_fx_t { static_cast<storage_fx_t>(int_res[input_addr+i]) } - compute_temp_fp_1) * compute_temp_fp_3);
+#if DISTRIBUTED_ARCH
                 int_res_write(result, input_addr+i, data_width);
+#elif CENTRALIZED_ARCH
+                int_res_write(result, output_addr+i, data_width);
+#endif
             }
         }
 
         template <typename in1_storage_fx_t, typename in2_storage_fx_t>
-#if DISTRIBUTED_ARCH
         void LAYERNORM_2ND_HALF(uint16_t input_addr, uint16_t gamma_addr, uint16_t beta_addr, DATA_WIDTH data_width) {
-#elif CENTRALIZED_ARCH
-        void LAYERNORM_2ND_HALF(uint16_t input_addr, uint16_t output_addr, uint16_t gamma_addr, uint16_t beta_addr, DATA_WIDTH data_width) {
-#endif
-
             /* 2nd half of Layer normalization of input. This applies gamma and beta on each column. */
             if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start LAYERNORM_2ND_HALF!"); }
             compute_in_progress = true;
@@ -214,7 +213,7 @@ class CiM_Compute {
 #elif CENTRALIZED_ARCH
                 compute_temp_fp_1 = comp_fx_t { static_cast<in1_storage_fx_t>(int_res[input_addr + i*EMB_DEPTH]) }; // Go down a column
                 float result = static_cast<float>(compute_temp_fp_2 * compute_temp_fp_1 + compute_temp_fp_3);
-                int_res_write(result, output_addr + i*EMB_DEPTH, data_width);
+                int_res_write(result, input_addr + i*EMB_DEPTH, data_width);
 #endif
             }
         }

@@ -80,14 +80,15 @@ void CiM_Centralized::load_params_from_h5(const string params_filepath) {
     }
 
     // MHSA
+    // These are stored in column-major order!
     EncEmbDepthMat_t enc_mhsa_Q_kernel = enc.getGroup("mhsa_query_dense").getDataSet("kernel:0").read<EncEmbDepthMat_t>();
     EncEmbDepthMat_t enc_mhsa_K_kernel = enc.getGroup("mhsa_key_dense").getDataSet("kernel:0").read<EncEmbDepthMat_t>();
     EncEmbDepthMat_t enc_mhsa_V_kernel = enc.getGroup("mhsa_value_dense").getDataSet("kernel:0").read<EncEmbDepthMat_t>();
     for (int row=0; row<EMB_DEPTH; row++) {
         for (int col=0; col<EMB_DEPTH; col++) {
-            params[param_addr_map[ENC_Q_DENSE_PARAMS].addr + row*EMB_DEPTH + col] = enc_mhsa_Q_kernel[row][col];
-            params[param_addr_map[ENC_K_DENSE_PARAMS].addr + row*EMB_DEPTH + col] = enc_mhsa_K_kernel[row][col];
-            params[param_addr_map[ENC_V_DENSE_PARAMS].addr + row*EMB_DEPTH + col] = enc_mhsa_V_kernel[row][col];
+            params[param_addr_map[ENC_Q_DENSE_PARAMS].addr + row + EMB_DEPTH*col] = enc_mhsa_Q_kernel[row][col];
+            params[param_addr_map[ENC_K_DENSE_PARAMS].addr + row + EMB_DEPTH*col] = enc_mhsa_K_kernel[row][col];
+            params[param_addr_map[ENC_V_DENSE_PARAMS].addr + row + EMB_DEPTH*col] = enc_mhsa_V_kernel[row][col];
         }
     }
     EmbDepthVect_t enc_mhsa_Q_bias = enc.getGroup("mhsa_query_dense").getDataSet("bias:0").read<EmbDepthVect_t>();
@@ -209,7 +210,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case INFERENCE_RUNNING:
-            if (current_inf_step == ENC_MHSA_Q_STEP) { system_state = EVERYTHING_FINISHED; }
+            if (current_inf_step == ENC_MHSA_QK_T_STEP) { system_state = EVERYTHING_FINISHED; }
             break;
 
         case INVALID_CIM:
@@ -268,7 +269,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             /* gen_cnt_7b holds the column 
                gen_cnt_7b_2 holds the row */
 
-            // TODO: This step shares a lot fo control logic with PATCH_PROJ_STEP. Consider refactoring to reduce code duplication.
+            // TODO: This step shares a lot of control logic with PATCH_PROJ_STEP. Consider refactoring to reduce code duplication.
 
             if (compute_done || (gen_cnt_7b.get_cnt() == 0 && !compute_in_progress)) { // Start a new ADD
                 uint32_t int_res_addr = mem_map.at(CLASS_TOKEN_MEM) + DOUBLE_WIDTH*(gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_7b_2.get_cnt());
@@ -302,7 +303,8 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             /* gen_cnt_7b holds the current row to which we apply normalization */
             if (compute_done || (gen_cnt_7b.get_cnt() == 0 && !compute_in_progress)) { // Start a new LAYERNORM
                 uint32_t input_starting_addr = mem_map.at(POS_EMB_MEM) + DOUBLE_WIDTH*EMB_DEPTH*gen_cnt_7b.get_cnt();
-                LAYERNORM_1ST_HALF<dw_fx_x_t>(input_starting_addr, DOUBLE_WIDTH);
+                uint32_t output_starting_addr = mem_map.at(ENC_LN1_MEM) + DOUBLE_WIDTH*EMB_DEPTH*gen_cnt_7b.get_cnt();
+                LAYERNORM_1ST_HALF<dw_fx_x_t>(input_starting_addr, output_starting_addr, DOUBLE_WIDTH);
             }
 
             if (compute_done) {
@@ -318,17 +320,16 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
         case ENC_LAYERNORM_1_2ND_HALF_STEP:
             /* gen_cnt_7b holds the current column to which we apply centering and scaling */
             if (compute_done || (gen_cnt_7b.get_cnt() == 0 && !compute_in_progress)) { // Start a new LAYERNORM
-                uint32_t input_starting_addr = mem_map.at(POS_EMB_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt();
-                uint32_t output_starting_addr = mem_map.at(ENC_LN1_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt();
+                uint32_t input_starting_addr = mem_map.at(ENC_LN1_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt();
                 uint32_t gamma_addr = param_addr_map_bias[ENC_LAYERNORM_1_GAMMA_OFF].addr + gen_cnt_7b.get_cnt();
                 uint32_t beta_addr = param_addr_map_bias[ENC_LAYERNORM_1_BETA_OFF].addr + gen_cnt_7b.get_cnt();
-                LAYERNORM_2ND_HALF<dw_fx_x_t, params_fx_3_x_t>(input_starting_addr, output_starting_addr, gamma_addr, beta_addr, DOUBLE_WIDTH);
+                LAYERNORM_2ND_HALF<dw_fx_x_t, params_fx_3_x_t>(input_starting_addr, gamma_addr, beta_addr, DOUBLE_WIDTH);
             }
 
             if (compute_done) {
                 if (gen_cnt_7b.get_cnt() == EMB_DEPTH-1) { // Done going through all rows
                     gen_cnt_7b.reset();
-                    current_inf_step = ENC_MHSA_Q_STEP;
+                    current_inf_step = POS_EMB_COMPRESSION_STEP;
                     verify_layer_out(ENC_LAYERNORM1_VERIF, int_res, mem_map.at(ENC_LN1_MEM), EMB_DEPTH, DOUBLE_WIDTH);
                     if (PRINT_INF_PROGRESS) { cout << "Finished LayerNorm" << endl; }
                 } else {
@@ -337,7 +338,94 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             }
             break;
 
+        case POS_EMB_COMPRESSION_STEP: {
+            /* Compress the positional embedding to single width to save on storage
+            -gen_cnt_7b holds the current column
+            -gen_cnt_7b_2 holds the current row*/
+            uint32_t in_addr = mem_map.at(POS_EMB_MEM) + DOUBLE_WIDTH*(gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_7b_2.get_cnt());
+            uint32_t out_addr = mem_map.at(POS_EMB_MEM) + SINGLE_WIDTH*(gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_7b_2.get_cnt());
+            int_res_write(int_res[in_addr], out_addr, SINGLE_WIDTH);
+
+            if (gen_cnt_7b.get_cnt() == EMB_DEPTH-1) {
+                gen_cnt_7b.reset();
+                gen_cnt_7b_2.inc();
+            } else {
+                gen_cnt_7b.inc();
+            }
+
+            if (gen_cnt_7b_2.get_cnt() == NUM_PATCHES+1) {
+                gen_cnt_7b.reset();
+                gen_cnt_7b_2.reset();
+                current_inf_step = ENC_MHSA_Q_STEP;
+                if (PRINT_INF_PROGRESS) { cout << "Done compressing positional embedding from DOUBLE_WIDTH to SINGLE_WIDTH" << endl; }
+                verify_layer_out(POS_EMB_VERIF, int_res, mem_map.at(POS_EMB_MEM), EMB_DEPTH, SINGLE_WIDTH);
+            }
+            break;
+        }
         case ENC_MHSA_Q_STEP:
+        case ENC_MHSA_K_STEP:
+        case ENC_MHSA_V_STEP:
+            /* gen_cnt_7b holds current data row 
+               gen_cnt_7b_2 holds current parameter column */
+
+            if (compute_done || (gen_cnt_7b.get_cnt() == 0 && !compute_in_progress)) { // Start a new MAC
+                uint32_t param_addr;
+                uint32_t param_bias_addr;
+                uint32_t data_row_addr = mem_map.at(ENC_LN1_MEM) + DOUBLE_WIDTH*EMB_DEPTH*gen_cnt_7b.get_cnt();
+                if (current_inf_step == ENC_MHSA_Q_STEP) {
+                    param_addr = param_addr_map[ENC_Q_DENSE_PARAMS].addr + EMB_DEPTH*gen_cnt_7b_2.get_cnt();
+                    param_bias_addr = param_addr_map_bias[ENC_Q_DENSE_BIAS_0FF].addr + gen_cnt_7b_2.get_cnt();
+                } else if (current_inf_step == ENC_MHSA_K_STEP) {
+                    param_addr = param_addr_map[ENC_K_DENSE_PARAMS].addr + EMB_DEPTH*gen_cnt_7b_2.get_cnt();
+                    param_bias_addr = param_addr_map_bias[ENC_K_DENSE_BIAS_0FF].addr + gen_cnt_7b_2.get_cnt();
+                } else if (current_inf_step == ENC_MHSA_V_STEP) {
+                    param_addr = param_addr_map[ENC_V_DENSE_PARAMS].addr + EMB_DEPTH*gen_cnt_7b_2.get_cnt();
+                    param_bias_addr = param_addr_map_bias[ENC_V_DENSE_BIAS_0FF].addr + gen_cnt_7b_2.get_cnt();
+                }
+                MAC<dw_fx_x_t,params_fx_2_x_t>(data_row_addr, param_addr, EMB_DEPTH, param_bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, DOUBLE_WIDTH);
+            }
+
+            if (compute_done) {
+                // Save data
+                uint32_t addr;
+                if (current_inf_step == ENC_MHSA_Q_STEP) {
+                    addr = mem_map.at(ENC_Q_MEM) + EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_7b_2.get_cnt();
+                } else if (current_inf_step == ENC_MHSA_K_STEP) {
+                    addr = mem_map.at(ENC_K_MEM) + EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_7b_2.get_cnt();
+                } else if (current_inf_step == ENC_MHSA_V_STEP) {
+                    addr = mem_map.at(ENC_V_MEM) + EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_7b_2.get_cnt();
+                }
+                // cout << "res: " << computation_result << " addr: " << addr << endl;
+                int_res_write(computation_result, addr, SINGLE_WIDTH);
+
+                // Update index control
+                if (gen_cnt_7b.get_cnt() == NUM_PATCHES) { // Done going through all data rows with given parameter column
+                    gen_cnt_7b.reset();
+                    if (gen_cnt_7b_2.get_cnt() == EMB_DEPTH-1) { // Done going through all parameter columns
+                        gen_cnt_7b_2.reset();
+                        if (current_inf_step == ENC_MHSA_Q_STEP) {
+                            if (PRINT_INF_PROGRESS) { cout << "Encoder's Q matrix done" << endl; }
+                            verify_layer_out(ENC_MHSA_DENSE_Q_VERIF, int_res, mem_map.at(ENC_Q_MEM), EMB_DEPTH, SINGLE_WIDTH);
+                            current_inf_step = ENC_MHSA_K_STEP;
+                        } else if (current_inf_step == ENC_MHSA_K_STEP) {
+                            if (PRINT_INF_PROGRESS) { cout << "Encoder's K matrix done" << endl; }
+                            verify_layer_out(ENC_MHSA_DENSE_K_VERIF, int_res, mem_map.at(ENC_K_MEM), EMB_DEPTH, SINGLE_WIDTH);
+                            current_inf_step = ENC_MHSA_V_STEP;
+                        } else if (current_inf_step == ENC_MHSA_V_STEP) {
+                            if (PRINT_INF_PROGRESS) { cout << "Encoder's V matrix done" << endl; }
+                            verify_layer_out(ENC_MHSA_DENSE_V_VERIF, int_res, mem_map.at(ENC_V_MEM), EMB_DEPTH, SINGLE_WIDTH);
+                            current_inf_step = ENC_MHSA_QK_T_STEP;
+                        }
+                    } else {
+                        gen_cnt_7b_2.inc(); // New column
+                    }
+                } else {
+                    gen_cnt_7b.inc();
+                }
+            } 
+            break;
+
+        case ENC_MHSA_QK_T_STEP:
             break;
 
         case INVALID_STEP:
