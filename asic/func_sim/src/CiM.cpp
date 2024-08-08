@@ -419,7 +419,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 }
             } else if (compute_in_progress == false && gen_reg_2b == 1) { // Done with this MAC
                 gen_reg_2b = 0;
-                computation_result  = static_cast<float>(static_cast<comp_fx_t>(computation_result ) * static_cast<params_fx_4_x_t>(params[param_addr_map[SINGLE_PARAMS].addr+ENC_INV_SQRT_NUM_HEADS_OFF])); // Divide by sqrt(NUM_HEADS). Done in ASIC before writing to mem, so can be left cast as comp_fx_t
+                computation_result = static_cast<float>(static_cast<comp_fx_t>(computation_result ) * static_cast<params_fx_4_x_t>(params[param_addr_map[SINGLE_PARAMS].addr+ENC_INV_SQRT_NUM_HEADS_OFF])); // Divide by sqrt(NUM_HEADS). Done in ASIC before writing to mem, so can be left cast as comp_fx_t
                 int_res_write(computation_result , MAC_storage_addr, SINGLE_WIDTH);
                 gen_cnt_7b.inc();
                 if (gen_cnt_7b.get_cnt() == (NUM_PATCHES+1)) { // All MACs for one matrix are done

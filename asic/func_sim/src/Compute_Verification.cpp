@@ -15,9 +15,9 @@ uint32_t data_over_threshold_cnt = 0;
 
 /*----- DECLARATION -----*/
 #if DISTRIBUTED_ARCH
-bool are_equal(float a, float b, uint16_t index, uint8_t id) {
+bool are_equal(float a, float b, int32_t index, uint8_t id) {
 #elif CENTRALIZED_ARCH
-bool are_equal(float a, float b, uint16_t index) {
+bool are_equal(float a, float b, int32_t index) {
 #endif
     float diff = abs(a - b);
     min_val = (b < min_val) ? b : min_val;
@@ -86,15 +86,23 @@ void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, uint8_t id, float* dat
 #elif CENTRALIZED_ARCH
 void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, float* data, uint16_t starting_addr, uint16_t outside_dim_len, DATA_WIDTH data_width) {
     if (ENABLE_COMPUTATION_VERIFICATION == false) { return; }
-
-    rapidcsv::Document csv(step_verif_info[cim_step].csv_fp, rapidcsv::LabelParams(-1, -1));
-
     uint16_t stride = (data_width == SINGLE_WIDTH) ? 1 : 2;
 
-    for (int i = 0; i < csv.GetRowCount(); i++) { // Row
-        vector<float> ref_data = csv.GetRow<float>(i);
-        for (int j = 0; j < csv.GetColumnCount(); j++) { // Colum
-            are_equal(ref_data[j], data[starting_addr+stride*(j+i*outside_dim_len)], starting_addr+stride*(j+i*outside_dim_len));
+    uint8_t num_repeats;
+    if (cim_step == ENC_MHSA_DENSE_QK_T_VERIF) { num_repeats = NUM_HEADS; }
+    else { num_repeats = 1; }
+
+    for (int repeat=0; repeat<num_repeats; repeat++) {
+        string filename = step_verif_info[cim_step].csv_fp;
+        if (cim_step == ENC_MHSA_DENSE_QK_T_VERIF) { filename = filename + to_string(repeat) + ".csv"; }        
+        rapidcsv::Document csv(filename, rapidcsv::LabelParams(-1, -1));
+
+        for (int i = 0; i < csv.GetRowCount(); i++) { // Row
+            vector<float> ref_data = csv.GetRow<float>(i);
+            for (int j = 0; j < csv.GetColumnCount(); j++) { // Colum
+                int32_t addr = starting_addr + stride*(j + i*outside_dim_len + repeat*(NUM_PATCHES+1)*(NUM_PATCHES+1));
+                are_equal(ref_data[j], data[addr], addr);
+            }
         }
     }
 }
@@ -153,7 +161,7 @@ void verify_softmax_storage(float* intermediate_res, uint16_t prev_softmax_base_
             rapidcsv::Document csv_current(step_verif_info[MLP_HEAD_SOFTMAX_VERIF].csv_fp, rapidcsv::LabelParams(-1, -1));
             vector<float> ref_softmax = csv_current.GetColumn<float>(0);
 
-            uint16_t addr = prev_softmax_base_addr + DOUBLE_WIDTH*(j +(i+1)*NUM_SLEEP_STAGES);
+            int32_t addr = prev_softmax_base_addr + DOUBLE_WIDTH*(j +(i+1)*NUM_SLEEP_STAGES);
 #if DISTRIBUTED_ARCH
             are_equal(dummy_softmax[j]/NUM_SAMPLES_OUT_AVG, intermediate_res[addr], addr, 0);
             addr = prev_softmax_base_addr + DOUBLE_WIDTH*j;

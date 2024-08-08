@@ -166,7 +166,8 @@ const std::map<DATA, uint32_t> mem_map = {
     {ENC_Q_MEM,                 2*DOUBLE_WIDTH*(NUM_PATCHES+1)*EMB_DEPTH},
     {ENC_K_MEM,                 2*DOUBLE_WIDTH*(NUM_PATCHES+1)*EMB_DEPTH+(NUM_PATCHES+1)*EMB_DEPTH},
     {ENC_V_MEM,                 (NUM_PATCHES+1)*EMB_DEPTH}, // Need to protect positional embedding as we'll use it below
-    {PREV_SOFTMAX_OUTPUT_MEM,   99000}, //FIXME
+    {ENC_QK_T_MEM,              2*DOUBLE_WIDTH*(NUM_PATCHES+1)*EMB_DEPTH+2*(NUM_PATCHES+1)*EMB_DEPTH},
+    {PREV_SOFTMAX_OUTPUT_MEM,   99000}, // FIXME
 };
 
 /*----- STRUCT -----*/

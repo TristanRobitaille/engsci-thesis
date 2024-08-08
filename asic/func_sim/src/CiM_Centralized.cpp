@@ -6,7 +6,7 @@
 using namespace std;
 
 /*----- DEFINITION -----*/
-CiM_Centralized::CiM_Centralized(const string params_filepath) : gen_cnt_7b(7), gen_cnt_7b_2(7) {
+CiM_Centralized::CiM_Centralized(const string params_filepath) : gen_cnt_7b(7), gen_cnt_7b_2(7), gen_cnt_4b(4) {
     reset();
     load_params_from_h5(params_filepath);
 }
@@ -18,6 +18,8 @@ int CiM_Centralized::reset(){
     cim_state = IDLE_CIM;
     current_inf_step = INVALID_STEP;
     system_state = IDLE;
+    mac_or_div = MAC_OP;
+    div_done = false;
     return 0;
 }
 
@@ -210,7 +212,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case INFERENCE_RUNNING:
-            if (current_inf_step == ENC_MHSA_QK_T_STEP) { system_state = EVERYTHING_FINISHED; }
+            if (current_inf_step == ENC_MHSA_SOFTMAX_STEP) { system_state = EVERYTHING_FINISHED; }
             break;
 
         case INVALID_CIM:
@@ -271,7 +273,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
 
             // TODO: This step shares a lot of control logic with PATCH_PROJ_STEP. Consider refactoring to reduce code duplication.
 
-            if (compute_done || (gen_cnt_7b.get_cnt() == 0 && !compute_in_progress)) { // Start a new ADD
+            if (compute_done || (gen_cnt_7b.get_cnt() == 0 && gen_cnt_7b_2.get_cnt() == 0 && !compute_in_progress)) { // Start a new ADD
                 uint32_t int_res_addr = mem_map.at(CLASS_TOKEN_MEM) + DOUBLE_WIDTH*(gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_7b_2.get_cnt());
                 uint32_t params_addr = param_addr_map[POS_EMB_PARAMS].addr + gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_7b_2.get_cnt();
                 ADD<dw_fx_x_t,params_fx_2_x_t>(int_res_addr, params_addr, MODEL_PARAM);
@@ -368,7 +370,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             /* gen_cnt_7b holds current data row 
                gen_cnt_7b_2 holds current parameter column */
 
-            if (compute_done || (gen_cnt_7b.get_cnt() == 0 && !compute_in_progress)) { // Start a new MAC
+            if (compute_done || (gen_cnt_7b.get_cnt() == 0 && gen_cnt_7b_2.get_cnt() == 0 && !compute_in_progress)) { // Start a new MAC
                 uint32_t param_addr;
                 uint32_t param_bias_addr;
                 uint32_t data_row_addr = mem_map.at(ENC_LN1_MEM) + DOUBLE_WIDTH*EMB_DEPTH*gen_cnt_7b.get_cnt();
@@ -395,7 +397,6 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                 } else if (current_inf_step == ENC_MHSA_V_STEP) {
                     addr = mem_map.at(ENC_V_MEM) + EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_7b_2.get_cnt();
                 }
-                // cout << "res: " << computation_result << " addr: " << addr << endl;
                 int_res_write(computation_result, addr, SINGLE_WIDTH);
 
                 // Update index control
@@ -426,6 +427,57 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case ENC_MHSA_QK_T_STEP:
+            /* gen_cnt_7b holds x
+               gen_cnt_7b_2 holds y 
+               gen_cnt_4b holds z
+               
+            for z in 0...(NUM_HEADS-1):
+                for y in 0...(NUM_PATCHES):
+                    for x 0...(NUM_PATCHES):
+            */
+
+            if (compute_done || (gen_cnt_7b.get_cnt() == 0 && gen_cnt_7b_2.get_cnt() == 0 && gen_cnt_4b.get_cnt() == 0 && !compute_in_progress)) { // Start a new MAC
+                uint32_t Q_addr = mem_map.at(ENC_Q_MEM)     + /*x*/ 0*gen_cnt_7b.get_cnt()          + /*y*/ EMB_DEPTH*gen_cnt_7b_2.get_cnt()    + /*z*/ NUM_HEADS*gen_cnt_4b.get_cnt();
+                uint32_t K_T_addr = mem_map.at(ENC_K_MEM)   + /*x*/ EMB_DEPTH*gen_cnt_7b.get_cnt()  + /*y*/ 0*gen_cnt_7b_2.get_cnt()            + /*z*/ NUM_HEADS*gen_cnt_4b.get_cnt();
+                MAC<sw_fx_5_x_t,sw_fx_5_x_t>(Q_addr, K_T_addr, NUM_HEADS, 0, INTERMEDIATE_RES, NO_ACTIVATION, SINGLE_WIDTH);
+                mac_or_div = DIV_OP; // Next we do the division by sqrt(NUM_HEADS)
+            }
+
+            if (compute_done || div_done) {
+                // Save data
+                if (mac_or_div == DIV_OP) {
+                    computation_result = static_cast<float>(static_cast<comp_fx_t>(computation_result ) * static_cast<params_fx_4_x_t>(params[param_addr_map_bias[ENC_INV_SQRT_NUM_HEADS_OFF].addr])); // Divide by sqrt(NUM_HEADS). Done in ASIC before writing to mem, so can be left cast as comp_fx_t
+                    div_done = true;
+                    mac_or_div = MAC_OP;
+                } else if (mac_or_div == MAC_OP) {
+                    div_done = false;
+                    uint32_t output_addr = mem_map.at(ENC_QK_T_MEM) + gen_cnt_7b.get_cnt() + (NUM_PATCHES+1)*gen_cnt_7b_2.get_cnt() + (NUM_PATCHES+1)*(NUM_PATCHES+1)*gen_cnt_4b.get_cnt();
+                    int_res_write(computation_result, output_addr, SINGLE_WIDTH);
+                    
+                    // Update counters
+                    if (gen_cnt_7b.get_cnt() == NUM_PATCHES) {
+                        gen_cnt_7b.reset();
+                        if (gen_cnt_7b_2.get_cnt() == NUM_PATCHES) {
+                            gen_cnt_7b_2.reset();
+                            if (gen_cnt_4b.get_cnt() == (NUM_HEADS-1)) {
+                                gen_cnt_4b.reset();
+                                current_inf_step = ENC_MHSA_SOFTMAX_STEP;
+                                verify_layer_out(ENC_MHSA_DENSE_QK_T_VERIF, int_res, mem_map.at(ENC_QK_T_MEM), NUM_PATCHES+1, SINGLE_WIDTH);
+                                if (PRINT_INF_PROGRESS) { cout << "Finished Encoder MHSA's QK_T." << endl; }
+                            } else {
+                                gen_cnt_4b.inc(); // z++
+                            }
+                        } else {
+                            gen_cnt_7b_2.inc(); // y++
+                        }
+                    } else {
+                        gen_cnt_7b.inc(); // x++
+                    }
+                }
+            }
+            break;
+
+        case ENC_MHSA_SOFTMAX_STEP:
             break;
 
         case INVALID_STEP:
