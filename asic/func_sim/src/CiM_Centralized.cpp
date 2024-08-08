@@ -6,7 +6,7 @@
 using namespace std;
 
 /*----- DEFINITION -----*/
-CiM_Centralized::CiM_Centralized(const string params_filepath) : gen_cnt_7b(7), gen_cnt_7b_2(7), gen_cnt_4b(4) {
+CiM_Centralized::CiM_Centralized(const string params_filepath) : gen_cnt_7b(7), gen_cnt_9b(9), gen_cnt_4b(4) {
     reset();
     load_params_from_h5(params_filepath);
 }
@@ -14,7 +14,7 @@ CiM_Centralized::CiM_Centralized(const string params_filepath) : gen_cnt_7b(7), 
 int CiM_Centralized::reset(){
     fill(begin(int_res), end(int_res), 0);
     gen_cnt_7b.reset();
-    gen_cnt_7b_2.reset();
+    gen_cnt_9b.reset();
     cim_state = IDLE_CIM;
     current_inf_step = INVALID_STEP;
     system_state = IDLE;
@@ -212,7 +212,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case INFERENCE_RUNNING:
-            if (current_inf_step == ENC_MHSA_SOFTMAX_STEP) { system_state = EVERYTHING_FINISHED; }
+            if (current_inf_step == ENC_MHSA_MULT_V_STEP) { system_state = EVERYTHING_FINISHED; }
             break;
 
         case INVALID_CIM:
@@ -222,10 +222,10 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
     switch (current_inf_step){
         case PATCH_PROJ_STEP:
             /* gen_cnt_7b holds current parameters row 
-               gen_cnt_7b_2 holds current patch */
+               gen_cnt_9b holds current patch */
 
             if (compute_done || (gen_cnt_7b.get_cnt() == 0 && !compute_in_progress)) { // Start a new MAC
-                uint32_t patch_addr = mem_map.at(EEG_INPUT_MEM) + SINGLE_WIDTH*EMB_DEPTH*gen_cnt_7b_2.get_cnt();
+                uint32_t patch_addr = mem_map.at(EEG_INPUT_MEM) + SINGLE_WIDTH*EMB_DEPTH*gen_cnt_9b.get_cnt();
                 uint32_t param_addr = param_addr_map[PATCH_PROJ_KERNEL_PARAMS].addr + EMB_DEPTH*gen_cnt_7b.get_cnt();
                 uint32_t param_bias_addr = param_addr_map_bias[PATCH_PROJ_BIAS_OFF].addr + gen_cnt_7b.get_cnt();
                 MAC<dw_fx_x_t,params_fx_2_x_t>(patch_addr, param_addr, PATCH_LEN, param_bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, SINGLE_WIDTH);
@@ -233,19 +233,19 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
 
             if (compute_done) {
                 // Save data
-                uint32_t addr = mem_map.at(PATCH_MEM) + DOUBLE_WIDTH*(gen_cnt_7b.get_cnt() + gen_cnt_7b_2.get_cnt()*PATCH_LEN);
+                uint32_t addr = mem_map.at(PATCH_MEM) + DOUBLE_WIDTH*(gen_cnt_7b.get_cnt() + gen_cnt_9b.get_cnt()*PATCH_LEN);
                 int_res_write(computation_result, addr, DOUBLE_WIDTH);
 
                 // Update index control
                 if (gen_cnt_7b.get_cnt() == EMB_DEPTH-1) { // Done going through all parameters rows with given patch
                     gen_cnt_7b.reset();
-                    if (gen_cnt_7b_2.get_cnt() == NUM_PATCHES-1) { // Done going through all patches
-                        gen_cnt_7b_2.reset();
+                    if (gen_cnt_9b.get_cnt() == NUM_PATCHES-1) { // Done going through all patches
+                        gen_cnt_9b.reset();
                         verify_layer_out(PATCH_PROJECTION_VERIF, int_res, mem_map.at(PATCH_MEM), EMB_DEPTH, DOUBLE_WIDTH);
                         current_inf_step = CLASS_TOKEN_CONCAT_STEP;
                         if (PRINT_INF_PROGRESS) { cout << "Patch projection done" << endl; }
                     } else {
-                        gen_cnt_7b_2.inc(); // New patch
+                        gen_cnt_9b.inc(); // New patch
                     }
                     
                 } else {
@@ -269,31 +269,31 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
 
         case POS_EMB_STEP:
             /* gen_cnt_7b holds the column 
-               gen_cnt_7b_2 holds the row */
+               gen_cnt_9b holds the row */
 
             // TODO: This step shares a lot of control logic with PATCH_PROJ_STEP. Consider refactoring to reduce code duplication.
 
-            if (compute_done || (gen_cnt_7b.get_cnt() == 0 && gen_cnt_7b_2.get_cnt() == 0 && !compute_in_progress)) { // Start a new ADD
-                uint32_t int_res_addr = mem_map.at(CLASS_TOKEN_MEM) + DOUBLE_WIDTH*(gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_7b_2.get_cnt());
-                uint32_t params_addr = param_addr_map[POS_EMB_PARAMS].addr + gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_7b_2.get_cnt();
+            if (compute_done || (gen_cnt_7b.get_cnt() == 0 && gen_cnt_9b.get_cnt() == 0 && !compute_in_progress)) { // Start a new ADD
+                uint32_t int_res_addr = mem_map.at(CLASS_TOKEN_MEM) + DOUBLE_WIDTH*(gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_9b.get_cnt());
+                uint32_t params_addr = param_addr_map[POS_EMB_PARAMS].addr + gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_9b.get_cnt();
                 ADD<dw_fx_x_t,params_fx_2_x_t>(int_res_addr, params_addr, MODEL_PARAM);
             }
 
             if (compute_done) {
                 // Save data
-                uint32_t addr = mem_map.at(POS_EMB_MEM) + DOUBLE_WIDTH*(gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_7b_2.get_cnt());
+                uint32_t addr = mem_map.at(POS_EMB_MEM) + DOUBLE_WIDTH*(gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_9b.get_cnt());
                 int_res_write(computation_result, addr, DOUBLE_WIDTH);
 
                 // Update index control
                 if (gen_cnt_7b.get_cnt() == EMB_DEPTH-1) { // Done going through all columns of a given row
                     gen_cnt_7b.reset();
-                    if (gen_cnt_7b_2.get_cnt() == NUM_PATCHES) { // Done going through all rows
-                        gen_cnt_7b_2.reset();
+                    if (gen_cnt_9b.get_cnt() == NUM_PATCHES) { // Done going through all rows
+                        gen_cnt_9b.reset();
                         verify_layer_out(POS_EMB_VERIF, int_res, mem_map.at(POS_EMB_MEM), EMB_DEPTH, DOUBLE_WIDTH);
                         current_inf_step = ENC_LAYERNORM_1_1ST_HALF_STEP;
                         if (PRINT_INF_PROGRESS) { cout << "Positional embedding done" << endl; }
                     } else {
-                        gen_cnt_7b_2.inc(); // New row
+                        gen_cnt_9b.inc(); // New row
                     }
                 } else {
                     gen_cnt_7b.inc();
@@ -343,21 +343,21 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
         case POS_EMB_COMPRESSION_STEP: {
             /* Compress the positional embedding to single width to save on storage
             -gen_cnt_7b holds the current column
-            -gen_cnt_7b_2 holds the current row*/
-            uint32_t in_addr = mem_map.at(POS_EMB_MEM) + DOUBLE_WIDTH*(gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_7b_2.get_cnt());
-            uint32_t out_addr = mem_map.at(POS_EMB_MEM) + SINGLE_WIDTH*(gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_7b_2.get_cnt());
+            -gen_cnt_9b holds the current row*/
+            uint32_t in_addr = mem_map.at(POS_EMB_MEM) + DOUBLE_WIDTH*(gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_9b.get_cnt());
+            uint32_t out_addr = mem_map.at(POS_EMB_MEM) + SINGLE_WIDTH*(gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_9b.get_cnt());
             int_res_write(int_res[in_addr], out_addr, SINGLE_WIDTH);
 
             if (gen_cnt_7b.get_cnt() == EMB_DEPTH-1) {
                 gen_cnt_7b.reset();
-                gen_cnt_7b_2.inc();
+                gen_cnt_9b.inc();
             } else {
                 gen_cnt_7b.inc();
             }
 
-            if (gen_cnt_7b_2.get_cnt() == NUM_PATCHES+1) {
+            if (gen_cnt_9b.get_cnt() == NUM_PATCHES+1) {
                 gen_cnt_7b.reset();
-                gen_cnt_7b_2.reset();
+                gen_cnt_9b.reset();
                 current_inf_step = ENC_MHSA_Q_STEP;
                 if (PRINT_INF_PROGRESS) { cout << "Done compressing positional embedding from DOUBLE_WIDTH to SINGLE_WIDTH" << endl; }
                 verify_layer_out(POS_EMB_VERIF, int_res, mem_map.at(POS_EMB_MEM), EMB_DEPTH, SINGLE_WIDTH);
@@ -368,21 +368,21 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
         case ENC_MHSA_K_STEP:
         case ENC_MHSA_V_STEP:
             /* gen_cnt_7b holds current data row 
-               gen_cnt_7b_2 holds current parameter column */
+               gen_cnt_9b holds current parameter column */
 
-            if (compute_done || (gen_cnt_7b.get_cnt() == 0 && gen_cnt_7b_2.get_cnt() == 0 && !compute_in_progress)) { // Start a new MAC
+            if (compute_done || (gen_cnt_7b.get_cnt() == 0 && gen_cnt_9b.get_cnt() == 0 && !compute_in_progress)) { // Start a new MAC
                 uint32_t param_addr;
                 uint32_t param_bias_addr;
                 uint32_t data_row_addr = mem_map.at(ENC_LN1_MEM) + DOUBLE_WIDTH*EMB_DEPTH*gen_cnt_7b.get_cnt();
                 if (current_inf_step == ENC_MHSA_Q_STEP) {
-                    param_addr = param_addr_map[ENC_Q_DENSE_PARAMS].addr + EMB_DEPTH*gen_cnt_7b_2.get_cnt();
-                    param_bias_addr = param_addr_map_bias[ENC_Q_DENSE_BIAS_0FF].addr + gen_cnt_7b_2.get_cnt();
+                    param_addr = param_addr_map[ENC_Q_DENSE_PARAMS].addr + EMB_DEPTH*gen_cnt_9b.get_cnt();
+                    param_bias_addr = param_addr_map_bias[ENC_Q_DENSE_BIAS_0FF].addr + gen_cnt_9b.get_cnt();
                 } else if (current_inf_step == ENC_MHSA_K_STEP) {
-                    param_addr = param_addr_map[ENC_K_DENSE_PARAMS].addr + EMB_DEPTH*gen_cnt_7b_2.get_cnt();
-                    param_bias_addr = param_addr_map_bias[ENC_K_DENSE_BIAS_0FF].addr + gen_cnt_7b_2.get_cnt();
+                    param_addr = param_addr_map[ENC_K_DENSE_PARAMS].addr + EMB_DEPTH*gen_cnt_9b.get_cnt();
+                    param_bias_addr = param_addr_map_bias[ENC_K_DENSE_BIAS_0FF].addr + gen_cnt_9b.get_cnt();
                 } else if (current_inf_step == ENC_MHSA_V_STEP) {
-                    param_addr = param_addr_map[ENC_V_DENSE_PARAMS].addr + EMB_DEPTH*gen_cnt_7b_2.get_cnt();
-                    param_bias_addr = param_addr_map_bias[ENC_V_DENSE_BIAS_0FF].addr + gen_cnt_7b_2.get_cnt();
+                    param_addr = param_addr_map[ENC_V_DENSE_PARAMS].addr + EMB_DEPTH*gen_cnt_9b.get_cnt();
+                    param_bias_addr = param_addr_map_bias[ENC_V_DENSE_BIAS_0FF].addr + gen_cnt_9b.get_cnt();
                 }
                 MAC<dw_fx_x_t,params_fx_2_x_t>(data_row_addr, param_addr, EMB_DEPTH, param_bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, DOUBLE_WIDTH);
             }
@@ -391,19 +391,19 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                 // Save data
                 uint32_t addr;
                 if (current_inf_step == ENC_MHSA_Q_STEP) {
-                    addr = mem_map.at(ENC_Q_MEM) + EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_7b_2.get_cnt();
+                    addr = mem_map.at(ENC_Q_MEM) + EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_9b.get_cnt();
                 } else if (current_inf_step == ENC_MHSA_K_STEP) {
-                    addr = mem_map.at(ENC_K_MEM) + EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_7b_2.get_cnt();
+                    addr = mem_map.at(ENC_K_MEM) + EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_9b.get_cnt();
                 } else if (current_inf_step == ENC_MHSA_V_STEP) {
-                    addr = mem_map.at(ENC_V_MEM) + EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_7b_2.get_cnt();
+                    addr = mem_map.at(ENC_V_MEM) + EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_9b.get_cnt();
                 }
                 int_res_write(computation_result, addr, SINGLE_WIDTH);
 
                 // Update index control
                 if (gen_cnt_7b.get_cnt() == NUM_PATCHES) { // Done going through all data rows with given parameter column
                     gen_cnt_7b.reset();
-                    if (gen_cnt_7b_2.get_cnt() == EMB_DEPTH-1) { // Done going through all parameter columns
-                        gen_cnt_7b_2.reset();
+                    if (gen_cnt_9b.get_cnt() == EMB_DEPTH-1) { // Done going through all parameter columns
+                        gen_cnt_9b.reset();
                         if (current_inf_step == ENC_MHSA_Q_STEP) {
                             if (PRINT_INF_PROGRESS) { cout << "Encoder's Q matrix done" << endl; }
                             verify_layer_out(ENC_MHSA_DENSE_Q_VERIF, int_res, mem_map.at(ENC_Q_MEM), EMB_DEPTH, SINGLE_WIDTH);
@@ -418,7 +418,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                             current_inf_step = ENC_MHSA_QK_T_STEP;
                         }
                     } else {
-                        gen_cnt_7b_2.inc(); // New column
+                        gen_cnt_9b.inc(); // New column
                     }
                 } else {
                     gen_cnt_7b.inc();
@@ -428,7 +428,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
 
         case ENC_MHSA_QK_T_STEP:
             /* gen_cnt_7b holds x
-               gen_cnt_7b_2 holds y 
+               gen_cnt_9b holds y 
                gen_cnt_4b holds z
                
             for z in 0...(NUM_HEADS-1):
@@ -436,9 +436,9 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                     for x 0...(NUM_PATCHES):
             */
 
-            if (compute_done || (gen_cnt_7b.get_cnt() == 0 && gen_cnt_7b_2.get_cnt() == 0 && gen_cnt_4b.get_cnt() == 0 && !compute_in_progress)) { // Start a new MAC
-                uint32_t Q_addr = mem_map.at(ENC_Q_MEM)     + /*x*/ 0*gen_cnt_7b.get_cnt()          + /*y*/ EMB_DEPTH*gen_cnt_7b_2.get_cnt()    + /*z*/ NUM_HEADS*gen_cnt_4b.get_cnt();
-                uint32_t K_T_addr = mem_map.at(ENC_K_MEM)   + /*x*/ EMB_DEPTH*gen_cnt_7b.get_cnt()  + /*y*/ 0*gen_cnt_7b_2.get_cnt()            + /*z*/ NUM_HEADS*gen_cnt_4b.get_cnt();
+            if (compute_done || (gen_cnt_7b.get_cnt() == 0 && gen_cnt_9b.get_cnt() == 0 && gen_cnt_4b.get_cnt() == 0 && !compute_in_progress)) { // Start a new MAC
+                uint32_t Q_addr = mem_map.at(ENC_Q_MEM)     + /*x*/ 0*gen_cnt_7b.get_cnt()          + /*y*/ EMB_DEPTH*gen_cnt_9b.get_cnt()    + /*z*/ NUM_HEADS*gen_cnt_4b.get_cnt();
+                uint32_t K_T_addr = mem_map.at(ENC_K_MEM)   + /*x*/ EMB_DEPTH*gen_cnt_7b.get_cnt()  + /*y*/ 0*gen_cnt_9b.get_cnt()            + /*z*/ NUM_HEADS*gen_cnt_4b.get_cnt();
                 MAC<sw_fx_5_x_t,sw_fx_5_x_t>(Q_addr, K_T_addr, NUM_HEADS, 0, INTERMEDIATE_RES, NO_ACTIVATION, SINGLE_WIDTH);
                 mac_or_div = DIV_OP; // Next we do the division by sqrt(NUM_HEADS)
             }
@@ -451,14 +451,14 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                     mac_or_div = MAC_OP;
                 } else if (mac_or_div == MAC_OP) {
                     div_done = false;
-                    uint32_t output_addr = mem_map.at(ENC_QK_T_MEM) + gen_cnt_7b.get_cnt() + (NUM_PATCHES+1)*gen_cnt_7b_2.get_cnt() + (NUM_PATCHES+1)*(NUM_PATCHES+1)*gen_cnt_4b.get_cnt();
+                    uint32_t output_addr = mem_map.at(ENC_QK_T_MEM) + gen_cnt_7b.get_cnt() + (NUM_PATCHES+1)*gen_cnt_9b.get_cnt() + (NUM_PATCHES+1)*(NUM_PATCHES+1)*gen_cnt_4b.get_cnt();
                     int_res_write(computation_result, output_addr, SINGLE_WIDTH);
                     
                     // Update counters
                     if (gen_cnt_7b.get_cnt() == NUM_PATCHES) {
                         gen_cnt_7b.reset();
-                        if (gen_cnt_7b_2.get_cnt() == NUM_PATCHES) {
-                            gen_cnt_7b_2.reset();
+                        if (gen_cnt_9b.get_cnt() == NUM_PATCHES) {
+                            gen_cnt_9b.reset();
                             if (gen_cnt_4b.get_cnt() == (NUM_HEADS-1)) {
                                 gen_cnt_4b.reset();
                                 current_inf_step = ENC_MHSA_SOFTMAX_STEP;
@@ -468,7 +468,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                                 gen_cnt_4b.inc(); // z++
                             }
                         } else {
-                            gen_cnt_7b_2.inc(); // y++
+                            gen_cnt_9b.inc(); // y++
                         }
                     } else {
                         gen_cnt_7b.inc(); // x++
@@ -478,6 +478,24 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case ENC_MHSA_SOFTMAX_STEP:
+            /* gen_cnt_9b holds row over which to do softmax */
+            if (compute_done || (gen_cnt_9b.get_cnt() == 0 && !compute_in_progress)) { // Start a new MAC
+                uint32_t MAC_storage_addr = mem_map.at(ENC_QK_T_MEM) + (NUM_PATCHES+1)*gen_cnt_9b.get_cnt();
+                SOFTMAX<sw_fx_6_x_t>(MAC_storage_addr, NUM_PATCHES+1, SINGLE_WIDTH);
+            }
+
+            if (compute_done) {
+                if (gen_cnt_9b.get_cnt() == NUM_HEADS*(NUM_PATCHES+1)-1) {
+                    current_inf_step = ENC_MHSA_MULT_V_STEP;
+                    if (PRINT_INF_PROGRESS) { cout << "Finished encoder's MHSA softmax" << endl; }
+                    verify_layer_out(ENC_SOFTMAX_VERIF, int_res, mem_map.at(ENC_QK_T_MEM), NUM_PATCHES+1, SINGLE_WIDTH);
+                } else {
+                    gen_cnt_9b.inc();
+                }
+            }
+            break;
+
+        case ENC_MHSA_MULT_V_STEP:
             break;
 
         case INVALID_STEP:

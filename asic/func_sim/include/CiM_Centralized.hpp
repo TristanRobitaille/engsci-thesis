@@ -32,6 +32,7 @@ class CiM_Centralized : public CiM_Compute {
             ENC_MHSA_V_STEP,
             ENC_MHSA_QK_T_STEP,
             ENC_MHSA_SOFTMAX_STEP,
+            ENC_MHSA_MULT_V_STEP,
             INVALID_STEP
         };
 
@@ -42,7 +43,7 @@ class CiM_Centralized : public CiM_Compute {
         SYSTEM_STATE system_state;
         Counter gen_cnt_4b;
         Counter gen_cnt_7b;
-        Counter gen_cnt_7b_2;
+        Counter gen_cnt_9b;
         MACORDIV mac_or_div;
 
         void load_params_from_h5(const std::string params_filepath);

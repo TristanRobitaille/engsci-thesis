@@ -553,7 +553,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     gen_reg_2b = 0;
                 } else if (compute_in_progress == false) {
                     uint16_t MAC_storage_addr = mem_map.at(ENC_PRE_SOFTMAX_MEM) + gen_cnt_7b_2.get_cnt()*(NUM_PATCHES+1); // Storage location of MAC result
-                    SOFTMAX<sw_fx_6_x_t>(MAC_storage_addr,  NUM_PATCHES+1, SINGLE_WIDTH);
+                    SOFTMAX<sw_fx_6_x_t>(MAC_storage_addr, NUM_PATCHES+1, SINGLE_WIDTH);
                     gen_reg_2b = 1; // Just a signal to avoid coming here every time FSM runs
                 }
             } else { is_ready = true; }
