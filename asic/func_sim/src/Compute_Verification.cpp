@@ -94,7 +94,7 @@ void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, float* data, uint16_t 
 
     for (int repeat=0; repeat<num_repeats; repeat++) {
         string filename = step_verif_info[cim_step].csv_fp;
-        if (cim_step == ENC_MHSA_DENSE_QK_T_VERIF || cim_step == ENC_SOFTMAX_VERIF) { filename = filename + to_string(repeat) + ".csv"; }        
+        if (num_repeats == NUM_HEADS) { filename = filename + to_string(repeat) + ".csv"; }        
         rapidcsv::Document csv(filename, rapidcsv::LabelParams(-1, -1));
 
         for (int i = 0; i < csv.GetRowCount(); i++) { // Row

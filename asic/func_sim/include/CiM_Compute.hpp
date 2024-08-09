@@ -34,6 +34,11 @@ class CiM_Compute {
             SWISH_ACTIVATION
         };
 
+        enum DIRECTION { // Use in MAC to decide indexing direction for the dot-product
+            VERTICAL,
+            HORIZONTAL
+        };
+
         /*----- VARIABLES ----*/
         float computation_result;
         bool compute_in_progress;
@@ -63,8 +68,8 @@ class CiM_Compute {
         }
 
         template <typename in1_storage_fx_t, typename in2_storage_fx_t>
-        void MAC(uint32_t in1_start_addr, uint32_t in2_start_addr, uint16_t len, uint32_t bias_addr, INPUT_TYPE param_type, ACTIVATION activation, DATA_WIDTH data_width) {
-            /* Dot-product between two vectors with selectable activation function. data_width only applies to intermediate results. */
+        void MAC(uint32_t in1_start_addr, uint32_t in2_start_addr, uint16_t len, uint32_t bias_addr, INPUT_TYPE param_type, ACTIVATION activation, DATA_WIDTH data_width, DIRECTION dir_in2=HORIZONTAL, uint16_t width=1) {
+            /* Dot-product between two vectors with selectable activation function. data_width only applies to intermediate results. width is used when dir_in2 is VERTICAL.*/
             if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start MAC!"); }
             if (param_type != INTERMEDIATE_RES && param_type != MODEL_PARAM) { throw runtime_error("Invalid parameter type for MAC!"); }
 
@@ -78,8 +83,18 @@ class CiM_Compute {
             // MAC
             uint16_t params_cnt = 0;
             for (uint16_t i = 0; i < stride*len; i += stride) {
-                if (param_type == INTERMEDIATE_RES) { compute_temp_fp_1 += comp_fx_t { static_cast<in2_storage_fx_t>(int_res[in2_start_addr+i]) } * comp_fx_t { static_cast<in1_storage_fx_t>(int_res[in1_start_addr+i]) }; }
-                else if (param_type == MODEL_PARAM) { compute_temp_fp_1 += comp_fx_t { static_cast<in2_storage_fx_t>(params[in2_start_addr+params_cnt]) } * comp_fx_t { static_cast<in1_storage_fx_t>(int_res[in1_start_addr+i]) }; }
+                uint32_t in1_addr = in1_start_addr + i;
+                comp_fx_t input1 = comp_fx_t { static_cast<in1_storage_fx_t>(int_res[in1_addr]) };
+                comp_fx_t input2;
+
+                if (param_type == INTERMEDIATE_RES) {
+                    uint32_t in2_addr = (dir_in2 == HORIZONTAL) ? in2_start_addr + i : in2_start_addr + i*width;
+                    input2 = comp_fx_t { static_cast<in2_storage_fx_t>(int_res[in2_addr]) };
+                } else if (param_type == MODEL_PARAM) {
+                    uint32_t in2_addr = (dir_in2 == HORIZONTAL) ? (in2_start_addr + params_cnt) : (in2_start_addr + params_cnt*width);
+                    input2 = comp_fx_t { static_cast<in2_storage_fx_t>(params[in2_addr]) };
+                }
+                compute_temp_fp_1 += input1 * input2;
                 params_cnt++;
             }
 

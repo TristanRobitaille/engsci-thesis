@@ -212,7 +212,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case INFERENCE_RUNNING:
-            if (current_inf_step == ENC_MHSA_MULT_V_STEP) { system_state = EVERYTHING_FINISHED; }
+            if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) { system_state = EVERYTHING_FINISHED; }
             break;
 
         case INVALID_CIM:
@@ -437,8 +437,8 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             */
 
             if (compute_done || (gen_cnt_7b.get_cnt() == 0 && gen_cnt_9b.get_cnt() == 0 && gen_cnt_4b.get_cnt() == 0 && !compute_in_progress)) { // Start a new MAC
-                uint32_t Q_addr = mem_map.at(ENC_Q_MEM)     + /*x*/ 0*gen_cnt_7b.get_cnt()          + /*y*/ EMB_DEPTH*gen_cnt_9b.get_cnt()    + /*z*/ NUM_HEADS*gen_cnt_4b.get_cnt();
-                uint32_t K_T_addr = mem_map.at(ENC_K_MEM)   + /*x*/ EMB_DEPTH*gen_cnt_7b.get_cnt()  + /*y*/ 0*gen_cnt_9b.get_cnt()            + /*z*/ NUM_HEADS*gen_cnt_4b.get_cnt();
+                uint32_t Q_addr     = mem_map.at(ENC_Q_MEM) + /*x*/ 0*gen_cnt_7b.get_cnt()          + /*y*/ EMB_DEPTH*gen_cnt_9b.get_cnt()  + /*z*/ NUM_HEADS*gen_cnt_4b.get_cnt();
+                uint32_t K_T_addr   = mem_map.at(ENC_K_MEM) + /*x*/ EMB_DEPTH*gen_cnt_7b.get_cnt()  + /*y*/ 0*gen_cnt_9b.get_cnt()          + /*z*/ NUM_HEADS*gen_cnt_4b.get_cnt();
                 MAC<sw_fx_5_x_t,sw_fx_5_x_t>(Q_addr, K_T_addr, NUM_HEADS, 0, INTERMEDIATE_RES, NO_ACTIVATION, SINGLE_WIDTH);
                 mac_or_div = DIV_OP; // Next we do the division by sqrt(NUM_HEADS)
             }
@@ -464,15 +464,9 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                                 current_inf_step = ENC_MHSA_SOFTMAX_STEP;
                                 verify_layer_out(ENC_MHSA_DENSE_QK_T_VERIF, int_res, mem_map.at(ENC_QK_T_MEM), NUM_PATCHES+1, SINGLE_WIDTH);
                                 if (PRINT_INF_PROGRESS) { cout << "Finished Encoder MHSA's QK_T." << endl; }
-                            } else {
-                                gen_cnt_4b.inc(); // z++
-                            }
-                        } else {
-                            gen_cnt_9b.inc(); // y++
-                        }
-                    } else {
-                        gen_cnt_7b.inc(); // x++
-                    }
+                            } else { gen_cnt_4b.inc(); } // z++
+                        } else { gen_cnt_9b.inc(); } // y++
+                    } else { gen_cnt_7b.inc(); } // x++
                 }
             }
             break;
@@ -496,6 +490,43 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case ENC_MHSA_MULT_V_STEP:
+            /* gen_cnt_7b holds x
+               gen_cnt_9b holds y 
+               gen_cnt_4b holds z
+               
+            for z in 0...(NUM_HEADS-1):
+                for y in 0...(NUM_PATCHES):
+                    for x 0...(EMB_DEPTH/NUM_HEADS-1):
+            */
+
+            if (compute_done || (gen_cnt_7b.get_cnt() == 0 && gen_cnt_9b.get_cnt() == 0 && gen_cnt_4b.get_cnt() == 0 && !compute_in_progress)) { // Start a new MAC
+                uint32_t QK_T_addr  = mem_map.at(ENC_QK_T_MEM)  + /*x*/ 0*gen_cnt_7b.get_cnt()  + /*y*/ (NUM_PATCHES+1)*gen_cnt_9b.get_cnt()    + /*z*/ (NUM_PATCHES+1)*(NUM_PATCHES+1)*gen_cnt_4b.get_cnt();
+                uint32_t V_addr     = mem_map.at(ENC_V_MEM)     + /*x*/ gen_cnt_7b.get_cnt()    + /*y*/ 0*gen_cnt_9b.get_cnt()                  + /*z*/ NUM_HEADS*gen_cnt_4b.get_cnt();
+                MAC<sw_fx_5_x_t,sw_fx_5_x_t>(QK_T_addr, V_addr, NUM_PATCHES+1, 0, INTERMEDIATE_RES, NO_ACTIVATION, SINGLE_WIDTH, VERTICAL, EMB_DEPTH);
+            }
+
+            if (compute_done) {
+                // Save data
+                uint32_t output_addr = mem_map.at(ENC_V_MULT_MEM) + gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_9b.get_cnt() + (EMB_DEPTH/NUM_HEADS)*gen_cnt_4b.get_cnt();
+                int_res_write(computation_result, output_addr, SINGLE_WIDTH);
+                
+                // Update counters
+                if (gen_cnt_7b.get_cnt() == (EMB_DEPTH/NUM_HEADS-1)) {
+                    gen_cnt_7b.reset();
+                    if (gen_cnt_9b.get_cnt() == NUM_PATCHES) {
+                        gen_cnt_9b.reset();
+                        if (gen_cnt_4b.get_cnt() == (NUM_HEADS-1)) {
+                            gen_cnt_4b.reset();
+                            current_inf_step = ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP;
+                            if (PRINT_INF_PROGRESS) { cout << "Finished encoder's MHSA mult V" << endl; }
+                            verify_layer_out(ENC_MULT_V_VERIF, int_res, mem_map.at(ENC_V_MULT_MEM), EMB_DEPTH, SINGLE_WIDTH);
+                        } else { gen_cnt_4b.inc(); }// z++
+                    } else { gen_cnt_9b.inc(); } // y++
+                } else { gen_cnt_7b.inc(); } // x++
+            }
+            break;
+
+        case ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP:
             break;
 
         case INVALID_STEP:
