@@ -19,7 +19,8 @@ int CiM_Centralized::reset(){
     current_inf_step = INVALID_STEP;
     system_state = IDLE;
     mac_or_div = MAC_OP;
-    div_done = false;
+    mac_or_add = ADD_OP;
+    generic_done = false;
     return 0;
 }
 
@@ -102,11 +103,12 @@ void CiM_Centralized::load_params_from_h5(const string params_filepath) {
         params[param_addr_map_bias[ENC_V_DENSE_BIAS_0FF].addr + col] = enc_mhsa_V_bias[col];
     }
     
+    // Stored in column-major order!
     EncEmbDepthMat_t enc_mhsa_combine_kernel = enc.getGroup("mhsa_combine_head_dense").getDataSet("kernel:0").read<EncEmbDepthMat_t>();
     EmbDepthVect_t enc_mhsa_combine_bias = enc.getGroup("mhsa_combine_head_dense").getDataSet("bias:0").read<EmbDepthVect_t>();
     for (int row=0; row<EMB_DEPTH; row++) {
         for (int col=0; col<EMB_DEPTH; col++) {
-            params[param_addr_map[ENC_COMB_HEAD_PARAMS].addr + row*EMB_DEPTH + col] = enc_mhsa_combine_kernel[row][col];
+            params[param_addr_map[ENC_COMB_HEAD_PARAMS].addr + row + EMB_DEPTH*col] = enc_mhsa_combine_kernel[row][col];
         }
     }
     for (int col=0; col<param_addr_map_bias[ENC_COMB_HEAD_BIAS_OFF].len; col++) {
@@ -212,7 +214,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case INFERENCE_RUNNING:
-            if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) { system_state = EVERYTHING_FINISHED; }
+            if (current_inf_step == MLP_DENSE_1_STEP) { system_state = EVERYTHING_FINISHED; }
             break;
 
         case INVALID_CIM:
@@ -244,13 +246,8 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                         verify_layer_out(PATCH_PROJECTION_VERIF, int_res, mem_map.at(PATCH_MEM), EMB_DEPTH, DOUBLE_WIDTH);
                         current_inf_step = CLASS_TOKEN_CONCAT_STEP;
                         if (PRINT_INF_PROGRESS) { cout << "Patch projection done" << endl; }
-                    } else {
-                        gen_cnt_9b.inc(); // New patch
-                    }
-                    
-                } else {
-                    gen_cnt_7b.inc();
-                }
+                    } else { gen_cnt_9b.inc(); } // New patch
+                } else { gen_cnt_7b.inc(); }
             }
             break;
 
@@ -292,12 +289,8 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                         verify_layer_out(POS_EMB_VERIF, int_res, mem_map.at(POS_EMB_MEM), EMB_DEPTH, DOUBLE_WIDTH);
                         current_inf_step = ENC_LAYERNORM_1_1ST_HALF_STEP;
                         if (PRINT_INF_PROGRESS) { cout << "Positional embedding done" << endl; }
-                    } else {
-                        gen_cnt_9b.inc(); // New row
-                    }
-                } else {
-                    gen_cnt_7b.inc();
-                }
+                    } else { gen_cnt_9b.inc(); }// New row
+                } else { gen_cnt_7b.inc(); }
             }
             break;
 
@@ -313,9 +306,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                 if (gen_cnt_7b.get_cnt() == NUM_PATCHES) { // Done going through all rows
                     gen_cnt_7b.reset();
                     current_inf_step = ENC_LAYERNORM_1_2ND_HALF_STEP;
-                } else {
-                    gen_cnt_7b.inc();
-                }
+                } else { gen_cnt_7b.inc(); }
             }
             break;
 
@@ -334,9 +325,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                     current_inf_step = POS_EMB_COMPRESSION_STEP;
                     verify_layer_out(ENC_LAYERNORM1_VERIF, int_res, mem_map.at(ENC_LN1_MEM), EMB_DEPTH, DOUBLE_WIDTH);
                     if (PRINT_INF_PROGRESS) { cout << "Finished LayerNorm" << endl; }
-                } else {
-                    gen_cnt_7b.inc();
-                }
+                } else { gen_cnt_7b.inc(); }
             }
             break;
 
@@ -351,9 +340,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             if (gen_cnt_7b.get_cnt() == EMB_DEPTH-1) {
                 gen_cnt_7b.reset();
                 gen_cnt_9b.inc();
-            } else {
-                gen_cnt_7b.inc();
-            }
+            } else { gen_cnt_7b.inc(); }
 
             if (gen_cnt_9b.get_cnt() == NUM_PATCHES+1) {
                 gen_cnt_7b.reset();
@@ -417,12 +404,8 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                             verify_layer_out(ENC_MHSA_DENSE_V_VERIF, int_res, mem_map.at(ENC_V_MEM), EMB_DEPTH, SINGLE_WIDTH);
                             current_inf_step = ENC_MHSA_QK_T_STEP;
                         }
-                    } else {
-                        gen_cnt_9b.inc(); // New column
-                    }
-                } else {
-                    gen_cnt_7b.inc();
-                }
+                    } else { gen_cnt_9b.inc(); } // New column
+                } else { gen_cnt_7b.inc(); }
             } 
             break;
 
@@ -443,14 +426,14 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                 mac_or_div = DIV_OP; // Next we do the division by sqrt(NUM_HEADS)
             }
 
-            if (compute_done || div_done) {
+            if (compute_done || generic_done) {
                 // Save data
                 if (mac_or_div == DIV_OP) {
                     computation_result = static_cast<float>(static_cast<comp_fx_t>(computation_result ) * static_cast<params_fx_4_x_t>(params[param_addr_map_bias[ENC_INV_SQRT_NUM_HEADS_OFF].addr])); // Divide by sqrt(NUM_HEADS). Done in ASIC before writing to mem, so can be left cast as comp_fx_t
-                    div_done = true;
+                    generic_done = true;
                     mac_or_div = MAC_OP;
-                } else if (mac_or_div == MAC_OP) {
-                    div_done = false;
+                } else {
+                    generic_done = false;
                     uint32_t output_addr = mem_map.at(ENC_QK_T_MEM) + gen_cnt_7b.get_cnt() + (NUM_PATCHES+1)*gen_cnt_9b.get_cnt() + (NUM_PATCHES+1)*(NUM_PATCHES+1)*gen_cnt_4b.get_cnt();
                     int_res_write(computation_result, output_addr, SINGLE_WIDTH);
                     
@@ -480,12 +463,11 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
 
             if (compute_done) {
                 if (gen_cnt_9b.get_cnt() == NUM_HEADS*(NUM_PATCHES+1)-1) {
+                    gen_cnt_9b.reset();
                     current_inf_step = ENC_MHSA_MULT_V_STEP;
                     if (PRINT_INF_PROGRESS) { cout << "Finished encoder's MHSA softmax" << endl; }
                     verify_layer_out(ENC_SOFTMAX_VERIF, int_res, mem_map.at(ENC_QK_T_MEM), NUM_PATCHES+1, SINGLE_WIDTH);
-                } else {
-                    gen_cnt_9b.inc();
-                }
+                } else { gen_cnt_9b.inc(); }
             }
             break;
 
@@ -502,7 +484,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             if (compute_done || (gen_cnt_7b.get_cnt() == 0 && gen_cnt_9b.get_cnt() == 0 && gen_cnt_4b.get_cnt() == 0 && !compute_in_progress)) { // Start a new MAC
                 uint32_t QK_T_addr  = mem_map.at(ENC_QK_T_MEM)  + /*x*/ 0*gen_cnt_7b.get_cnt()  + /*y*/ (NUM_PATCHES+1)*gen_cnt_9b.get_cnt()    + /*z*/ (NUM_PATCHES+1)*(NUM_PATCHES+1)*gen_cnt_4b.get_cnt();
                 uint32_t V_addr     = mem_map.at(ENC_V_MEM)     + /*x*/ gen_cnt_7b.get_cnt()    + /*y*/ 0*gen_cnt_9b.get_cnt()                  + /*z*/ NUM_HEADS*gen_cnt_4b.get_cnt();
-                MAC<sw_fx_5_x_t,sw_fx_5_x_t>(QK_T_addr, V_addr, NUM_PATCHES+1, 0, INTERMEDIATE_RES, NO_ACTIVATION, SINGLE_WIDTH, VERTICAL, EMB_DEPTH);
+                MAC<sw_fx_2_x_t,sw_fx_5_x_t>(QK_T_addr, V_addr, NUM_PATCHES+1, 0, INTERMEDIATE_RES, NO_ACTIVATION, SINGLE_WIDTH, VERTICAL, EMB_DEPTH);
             }
 
             if (compute_done) {
@@ -527,6 +509,46 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP:
+            /* gen_cnt_7b holds x
+               gen_cnt_9b holds y 
+               
+            for y in 0...(NUM_PATCHES):
+                for x 0...(EMB_DEPTH-1):
+            */
+
+            if (compute_done || (gen_cnt_7b.get_cnt() == 0 && gen_cnt_9b.get_cnt() == 0 && !compute_in_progress)) { // Start a new MAC
+                uint32_t input_addr = mem_map.at(ENC_V_MULT_MEM) + EMB_DEPTH*gen_cnt_9b.get_cnt();
+                uint32_t kernel_addr = param_addr_map[ENC_COMB_HEAD_PARAMS].addr + EMB_DEPTH*gen_cnt_7b.get_cnt();
+                uint32_t bias_addr = param_addr_map_bias[ENC_COMB_HEAD_BIAS_OFF].addr + gen_cnt_7b.get_cnt();
+                MAC<dw_fx_x_t,params_fx_2_x_t>(input_addr, kernel_addr, EMB_DEPTH, bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, SINGLE_WIDTH);
+                mac_or_add = ADD_OP;
+            }
+
+            if (compute_done || generic_done) {
+                if (mac_or_add == ADD_OP) {
+                    uint32_t pos_emb_addr = mem_map.at(POS_EMB_MEM) + gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_9b.get_cnt();
+                    computation_result += int_res[pos_emb_addr];
+                    mac_or_add = MAC_OP;
+                    generic_done = true;
+                } else {
+                    uint32_t output_addr = mem_map.at(ENC_MHSA_OUT_MEM) + DOUBLE_WIDTH*(gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_9b.get_cnt());
+                    int_res_write(computation_result, output_addr, DOUBLE_WIDTH);
+                    generic_done = false;
+
+                    if (gen_cnt_7b.get_cnt() == EMB_DEPTH-1) {
+                        gen_cnt_7b.reset();
+                        if (gen_cnt_9b.get_cnt() == NUM_PATCHES) {
+                            gen_cnt_9b.reset();
+                            current_inf_step = MLP_DENSE_1_STEP;
+                            if (PRINT_INF_PROGRESS) { cout << "Finished encoder's MHSA dense and input step" << endl; }
+                            verify_layer_out(ENC_RES_SUM_1_VERIF, int_res, mem_map.at(ENC_MHSA_OUT_MEM), EMB_DEPTH, DOUBLE_WIDTH);
+                        } else { gen_cnt_9b.inc(); }
+                    } else { gen_cnt_7b.inc(); }
+                }
+            }
+            break;
+
+        case MLP_DENSE_1_STEP:
             break;
 
         case INVALID_STEP:

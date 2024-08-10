@@ -90,8 +90,8 @@ class CiM_Compute {
                 if (param_type == INTERMEDIATE_RES) {
                     uint32_t in2_addr = (dir_in2 == HORIZONTAL) ? in2_start_addr + i : in2_start_addr + i*width;
                     input2 = comp_fx_t { static_cast<in2_storage_fx_t>(int_res[in2_addr]) };
-                } else if (param_type == MODEL_PARAM) {
-                    uint32_t in2_addr = (dir_in2 == HORIZONTAL) ? (in2_start_addr + params_cnt) : (in2_start_addr + params_cnt*width);
+                } else if (param_type == MODEL_PARAM) { // Params are always stored in single-width
+                    uint32_t in2_addr = in2_start_addr + params_cnt;
                     input2 = comp_fx_t { static_cast<in2_storage_fx_t>(params[in2_addr]) };
                 }
                 compute_temp_fp_1 += input1 * input2;

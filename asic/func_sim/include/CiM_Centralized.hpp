@@ -15,9 +15,10 @@ class CiM_Centralized : public CiM_Compute {
             INVALID_CIM
         };
 
-        enum MACORDIV {
+        enum MACOROP {
             MAC_OP,
-            DIV_OP
+            DIV_OP,
+            ADD_OP
         };
 
         enum INFERENCE_STEP {
@@ -34,18 +35,20 @@ class CiM_Centralized : public CiM_Compute {
             ENC_MHSA_SOFTMAX_STEP,
             ENC_MHSA_MULT_V_STEP,
             ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP,
+            MLP_DENSE_1_STEP,
             INVALID_STEP
         };
 
         /*----- PRIVATE VARIABLES -----*/
-        bool div_done;
+        bool generic_done;
         STATE cim_state = INVALID_CIM;
         INFERENCE_STEP current_inf_step = INVALID_STEP;
         SYSTEM_STATE system_state;
         Counter gen_cnt_4b;
         Counter gen_cnt_7b;
         Counter gen_cnt_9b;
-        MACORDIV mac_or_div;
+        MACOROP mac_or_div;
+        MACOROP mac_or_add;
 
         void load_params_from_h5(const std::string params_filepath);
         void load_eeg_from_h5(const std::string eeg_filepath, uint16_t clip_index);
