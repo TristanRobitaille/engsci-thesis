@@ -35,6 +35,8 @@ class CiM_Centralized : public CiM_Compute {
             ENC_MHSA_SOFTMAX_STEP,
             ENC_MHSA_MULT_V_STEP,
             ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP,
+            ENC_LAYERNORM_2_1ST_HALF_STEP,
+            ENC_LAYERNORM_2_2ND_HALF_STEP,
             MLP_DENSE_1_STEP,
             INVALID_STEP
         };

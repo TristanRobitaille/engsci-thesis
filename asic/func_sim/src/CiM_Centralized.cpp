@@ -295,35 +295,54 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case ENC_LAYERNORM_1_1ST_HALF_STEP:
+        case ENC_LAYERNORM_2_1ST_HALF_STEP:
             /* gen_cnt_7b holds the current row to which we apply normalization */
             if (compute_done || (gen_cnt_7b.get_cnt() == 0 && !compute_in_progress)) { // Start a new LAYERNORM
-                uint32_t input_starting_addr = mem_map.at(POS_EMB_MEM) + DOUBLE_WIDTH*EMB_DEPTH*gen_cnt_7b.get_cnt();
-                uint32_t output_starting_addr = mem_map.at(ENC_LN1_MEM) + DOUBLE_WIDTH*EMB_DEPTH*gen_cnt_7b.get_cnt();
+                uint32_t input_starting_addr, output_starting_addr;
+                if (current_inf_step == ENC_LAYERNORM_1_1ST_HALF_STEP) {
+                    input_starting_addr = mem_map.at(POS_EMB_MEM) + DOUBLE_WIDTH*EMB_DEPTH*gen_cnt_7b.get_cnt();
+                    output_starting_addr = mem_map.at(ENC_LN1_MEM) + DOUBLE_WIDTH*EMB_DEPTH*gen_cnt_7b.get_cnt();
+                } else if (current_inf_step == ENC_LAYERNORM_2_1ST_HALF_STEP) {
+                    input_starting_addr = mem_map.at(ENC_MHSA_OUT_MEM) + DOUBLE_WIDTH*EMB_DEPTH*gen_cnt_7b.get_cnt();
+                    output_starting_addr = mem_map.at(ENC_LN2_MEM) + DOUBLE_WIDTH*EMB_DEPTH*gen_cnt_7b.get_cnt();
+                }
                 LAYERNORM_1ST_HALF<dw_fx_x_t>(input_starting_addr, output_starting_addr, DOUBLE_WIDTH);
             }
 
             if (compute_done) {
                 if (gen_cnt_7b.get_cnt() == NUM_PATCHES) { // Done going through all rows
                     gen_cnt_7b.reset();
-                    current_inf_step = ENC_LAYERNORM_1_2ND_HALF_STEP;
+                    current_inf_step = static_cast<INFERENCE_STEP> (static_cast<int> (current_inf_step) + 1);
                 } else { gen_cnt_7b.inc(); }
             }
             break;
 
         case ENC_LAYERNORM_1_2ND_HALF_STEP:
+        case ENC_LAYERNORM_2_2ND_HALF_STEP:
             /* gen_cnt_7b holds the current column to which we apply centering and scaling */
             if (compute_done || (gen_cnt_7b.get_cnt() == 0 && !compute_in_progress)) { // Start a new LAYERNORM
-                uint32_t input_starting_addr = mem_map.at(ENC_LN1_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt();
-                uint32_t gamma_addr = param_addr_map_bias[ENC_LAYERNORM_1_GAMMA_OFF].addr + gen_cnt_7b.get_cnt();
-                uint32_t beta_addr = param_addr_map_bias[ENC_LAYERNORM_1_BETA_OFF].addr + gen_cnt_7b.get_cnt();
+            uint32_t input_starting_addr, gamma_addr, beta_addr;
+                if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) {
+                    input_starting_addr = mem_map.at(ENC_LN1_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt();
+                    gamma_addr = param_addr_map_bias[ENC_LAYERNORM_1_GAMMA_OFF].addr + gen_cnt_7b.get_cnt();
+                    beta_addr = param_addr_map_bias[ENC_LAYERNORM_1_BETA_OFF].addr + gen_cnt_7b.get_cnt();
+                } else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) {
+                    input_starting_addr = mem_map.at(ENC_LN2_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt();
+                    gamma_addr = param_addr_map_bias[ENC_LAYERNORM_2_GAMMA_OFF].addr + gen_cnt_7b.get_cnt();
+                    beta_addr = param_addr_map_bias[ENC_LAYERNORM_2_BETA_OFF].addr + gen_cnt_7b.get_cnt();
+                }
                 LAYERNORM_2ND_HALF<dw_fx_x_t, params_fx_3_x_t>(input_starting_addr, gamma_addr, beta_addr, DOUBLE_WIDTH);
             }
 
             if (compute_done) {
                 if (gen_cnt_7b.get_cnt() == EMB_DEPTH-1) { // Done going through all rows
                     gen_cnt_7b.reset();
-                    current_inf_step = POS_EMB_COMPRESSION_STEP;
-                    verify_layer_out(ENC_LAYERNORM1_VERIF, int_res, mem_map.at(ENC_LN1_MEM), EMB_DEPTH, DOUBLE_WIDTH);
+                    if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) {
+                        verify_layer_out(ENC_LAYERNORM1_VERIF, int_res, mem_map.at(ENC_LN1_MEM), EMB_DEPTH, DOUBLE_WIDTH);                   
+                    } else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) {
+                        verify_layer_out(ENC_LAYERNORM2_VERIF, int_res, mem_map.at(ENC_LN2_MEM), EMB_DEPTH, DOUBLE_WIDTH);                        
+                    }
+                    current_inf_step = static_cast<INFERENCE_STEP> (static_cast<int> (current_inf_step) + 1);
                     if (PRINT_INF_PROGRESS) { cout << "Finished LayerNorm" << endl; }
                 } else { gen_cnt_7b.inc(); }
             }
@@ -539,7 +558,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                         gen_cnt_7b.reset();
                         if (gen_cnt_9b.get_cnt() == NUM_PATCHES) {
                             gen_cnt_9b.reset();
-                            current_inf_step = MLP_DENSE_1_STEP;
+                            current_inf_step = ENC_LAYERNORM_2_1ST_HALF_STEP;
                             if (PRINT_INF_PROGRESS) { cout << "Finished encoder's MHSA dense and input step" << endl; }
                             verify_layer_out(ENC_RES_SUM_1_VERIF, int_res, mem_map.at(ENC_MHSA_OUT_MEM), EMB_DEPTH, DOUBLE_WIDTH);
                         } else { gen_cnt_9b.inc(); }
