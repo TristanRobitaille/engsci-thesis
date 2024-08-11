@@ -97,7 +97,11 @@ void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, float* data, uint16_t 
         if (num_repeats == NUM_HEADS) { filename = filename + to_string(repeat) + ".csv"; }        
         rapidcsv::Document csv(filename, rapidcsv::LabelParams(-1, -1));
 
-        for (int i = 0; i < csv.GetRowCount(); i++) { // Row
+        uint16_t row_cnt;
+        if (cim_step == ENC_OUT_VERIF) { row_cnt = 1; } // Only computed first row
+        else { row_cnt = csv.GetRowCount(); }
+
+        for (int i = 0; i < row_cnt; i++) { // Row
             vector<float> ref_data = csv.GetRow<float>(i);
             for (int j = 0; j < csv.GetColumnCount(); j++) { // Colum
                 int32_t addr = starting_addr + stride*(j + i*outside_dim_len + repeat*(NUM_PATCHES+1)*(NUM_PATCHES+1));

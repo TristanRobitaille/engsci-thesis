@@ -118,13 +118,14 @@ void CiM_Centralized::load_params_from_h5(const string params_filepath) {
     params[param_addr_map_bias[ENC_INV_SQRT_NUM_HEADS_OFF].addr] = enc_mhsa_inv_sqrt_num_heads;
 
     // MLP
+    // These are stored in column-major order!
     EmbDepthxMlpDimMat_t enc_mlp_dense_1_kernel = enc.getGroup(transformer_name).getGroup("Encoder_1").getGroup("mlp_dense1_encoder").getDataSet("kernel:0").read<EmbDepthxMlpDimMat_t>();
     MlpDimVect_t enc_mlp_dense_1_bias = enc.getGroup(transformer_name).getGroup("Encoder_1").getGroup("mlp_dense1_encoder").getDataSet("bias:0").read<MlpDimVect_t>();
     EncMlpDimxEmbDepthMat_t enc_mlp_dense_2_kernel = enc.getGroup(transformer_name).getGroup("Encoder_1").getGroup("mlp_dense2_encoder").getDataSet("kernel:0").read<EncMlpDimxEmbDepthMat_t>();
     EmbDepthVect_t enc_mlp_dense_2_bias = enc.getGroup(transformer_name).getGroup("Encoder_1").getGroup("mlp_dense2_encoder").getDataSet("bias:0").read<EmbDepthVect_t>();
     for (int row=0; row<EMB_DEPTH; row++) {
         for (int col=0; col<MLP_DIM; col++) {
-            params[param_addr_map[ENC_MLP_DENSE_1_PARAMS].addr + row*MLP_DIM + col] = enc_mlp_dense_1_kernel[row][col];
+            params[param_addr_map[ENC_MLP_DENSE_1_PARAMS].addr + row + col*EMB_DEPTH] = enc_mlp_dense_1_kernel[row][col];
         }
     }
     for (int col=0; col<param_addr_map_bias[ENC_MLP_DENSE_1_BIAS_OFF].len; col++) {
@@ -132,7 +133,7 @@ void CiM_Centralized::load_params_from_h5(const string params_filepath) {
     }
     for (int row=0; row<MLP_DIM; row++) {
         for (int col=0; col<EMB_DEPTH; col++) {
-            params[param_addr_map[ENC_MLP_DENSE_2_PARAMS].addr + row*EMB_DEPTH + col] = enc_mlp_dense_2_kernel[row][col];
+            params[param_addr_map[ENC_MLP_DENSE_2_PARAMS].addr + row + col*MLP_DIM] = enc_mlp_dense_2_kernel[row][col];
         }
     }
     for (int col=0; col<param_addr_map_bias[ENC_MLP_DENSE_2_BIAS_OFF].len; col++) {
@@ -214,7 +215,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case INFERENCE_RUNNING:
-            if (current_inf_step == MLP_DENSE_1_STEP) { system_state = EVERYTHING_FINISHED; }
+            if (current_inf_step == MLP_HEAD_SOFTMAX_STEP) { system_state = EVERYTHING_FINISHED; }
             break;
 
         case INVALID_CIM:
@@ -373,42 +374,61 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
         case ENC_MHSA_Q_STEP:
         case ENC_MHSA_K_STEP:
         case ENC_MHSA_V_STEP:
+        case MLP_DENSE_1_STEP: {
             /* gen_cnt_7b holds current data row 
-               gen_cnt_9b holds current parameter column */
+               gen_cnt_9b holds current parameter column (assumes kernel is stored in column-major order)*/
+            
+            uint16_t input_height, kernel_width;
+            DATA_WIDTH output_data_width;
+
+            if (current_inf_step == MLP_DENSE_1_STEP) {
+                kernel_width = MLP_DIM;
+                input_height = NUM_PATCHES + 1;
+                output_data_width = DOUBLE_WIDTH;
+            } else {
+                kernel_width = EMB_DEPTH;
+                input_height = NUM_PATCHES + 1;
+                output_data_width = SINGLE_WIDTH;
+            }
 
             if (compute_done || (gen_cnt_7b.get_cnt() == 0 && gen_cnt_9b.get_cnt() == 0 && !compute_in_progress)) { // Start a new MAC
-                uint32_t param_addr;
-                uint32_t param_bias_addr;
-                uint32_t data_row_addr = mem_map.at(ENC_LN1_MEM) + DOUBLE_WIDTH*EMB_DEPTH*gen_cnt_7b.get_cnt();
+                uint32_t kernel_col_addr, bias_addr, data_row_addr;
                 if (current_inf_step == ENC_MHSA_Q_STEP) {
-                    param_addr = param_addr_map[ENC_Q_DENSE_PARAMS].addr + EMB_DEPTH*gen_cnt_9b.get_cnt();
-                    param_bias_addr = param_addr_map_bias[ENC_Q_DENSE_BIAS_0FF].addr + gen_cnt_9b.get_cnt();
+                    kernel_col_addr = param_addr_map[ENC_Q_DENSE_PARAMS].addr + EMB_DEPTH*gen_cnt_9b.get_cnt();
+                    bias_addr = param_addr_map_bias[ENC_Q_DENSE_BIAS_0FF].addr + gen_cnt_9b.get_cnt();
+                    data_row_addr = mem_map.at(ENC_LN1_MEM) + DOUBLE_WIDTH*EMB_DEPTH*gen_cnt_7b.get_cnt();
                 } else if (current_inf_step == ENC_MHSA_K_STEP) {
-                    param_addr = param_addr_map[ENC_K_DENSE_PARAMS].addr + EMB_DEPTH*gen_cnt_9b.get_cnt();
-                    param_bias_addr = param_addr_map_bias[ENC_K_DENSE_BIAS_0FF].addr + gen_cnt_9b.get_cnt();
+                    kernel_col_addr = param_addr_map[ENC_K_DENSE_PARAMS].addr + EMB_DEPTH*gen_cnt_9b.get_cnt();
+                    bias_addr = param_addr_map_bias[ENC_K_DENSE_BIAS_0FF].addr + gen_cnt_9b.get_cnt();
+                    data_row_addr = mem_map.at(ENC_LN1_MEM) + DOUBLE_WIDTH*EMB_DEPTH*gen_cnt_7b.get_cnt();
                 } else if (current_inf_step == ENC_MHSA_V_STEP) {
-                    param_addr = param_addr_map[ENC_V_DENSE_PARAMS].addr + EMB_DEPTH*gen_cnt_9b.get_cnt();
-                    param_bias_addr = param_addr_map_bias[ENC_V_DENSE_BIAS_0FF].addr + gen_cnt_9b.get_cnt();
+                    kernel_col_addr = param_addr_map[ENC_V_DENSE_PARAMS].addr + EMB_DEPTH*gen_cnt_9b.get_cnt();
+                    bias_addr = param_addr_map_bias[ENC_V_DENSE_BIAS_0FF].addr + gen_cnt_9b.get_cnt();
+                    data_row_addr = mem_map.at(ENC_LN1_MEM) + DOUBLE_WIDTH*EMB_DEPTH*gen_cnt_7b.get_cnt();
+                } else if (current_inf_step == MLP_DENSE_1_STEP) {
+                    kernel_col_addr = param_addr_map[ENC_MLP_DENSE_1_PARAMS].addr + EMB_DEPTH*gen_cnt_9b.get_cnt();
+                    bias_addr = param_addr_map_bias[ENC_MLP_DENSE_1_BIAS_OFF].addr + gen_cnt_9b.get_cnt();
+                    data_row_addr = mem_map.at(ENC_LN2_MEM) + DOUBLE_WIDTH*EMB_DEPTH*gen_cnt_7b.get_cnt();
                 }
-                MAC<dw_fx_x_t,params_fx_2_x_t>(data_row_addr, param_addr, EMB_DEPTH, param_bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, DOUBLE_WIDTH);
+
+                if (current_inf_step == MLP_DENSE_1_STEP) { MAC<dw_fx_x_t,params_fx_2_x_t>(data_row_addr, kernel_col_addr, EMB_DEPTH, bias_addr, MODEL_PARAM, SWISH_ACTIVATION, DOUBLE_WIDTH); }
+                else { MAC<dw_fx_x_t,params_fx_2_x_t>(data_row_addr, kernel_col_addr, EMB_DEPTH, bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, DOUBLE_WIDTH); }
             }
 
             if (compute_done) {
                 // Save data
                 uint32_t addr;
-                if (current_inf_step == ENC_MHSA_Q_STEP) {
-                    addr = mem_map.at(ENC_Q_MEM) + EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_9b.get_cnt();
-                } else if (current_inf_step == ENC_MHSA_K_STEP) {
-                    addr = mem_map.at(ENC_K_MEM) + EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_9b.get_cnt();
-                } else if (current_inf_step == ENC_MHSA_V_STEP) {
-                    addr = mem_map.at(ENC_V_MEM) + EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_9b.get_cnt();
-                }
-                int_res_write(computation_result, addr, SINGLE_WIDTH);
+                if (current_inf_step == ENC_MHSA_Q_STEP) { addr = mem_map.at(ENC_Q_MEM) + output_data_width*(EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_9b.get_cnt()); }
+                else if (current_inf_step == ENC_MHSA_V_STEP) { addr = mem_map.at(ENC_V_MEM) + output_data_width*(EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_9b.get_cnt()); }
+                else if (current_inf_step == ENC_MHSA_K_STEP) { addr = mem_map.at(ENC_K_MEM) + output_data_width*(EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_9b.get_cnt()); }
+                else if (current_inf_step == MLP_DENSE_1_STEP) { addr = mem_map.at(ENC_MLP_DENSE1_MEM) + output_data_width*(MLP_DIM*gen_cnt_7b.get_cnt() + gen_cnt_9b.get_cnt()); }
+
+                int_res_write(computation_result, addr, output_data_width);
 
                 // Update index control
-                if (gen_cnt_7b.get_cnt() == NUM_PATCHES) { // Done going through all data rows with given parameter column
+                if (gen_cnt_7b.get_cnt() == input_height-1) { // Done going through all data rows with given parameter column
                     gen_cnt_7b.reset();
-                    if (gen_cnt_9b.get_cnt() == EMB_DEPTH-1) { // Done going through all parameter columns
+                    if (gen_cnt_9b.get_cnt() == kernel_width-1) { // Done going through all parameter columns
                         gen_cnt_9b.reset();
                         if (current_inf_step == ENC_MHSA_Q_STEP) {
                             if (PRINT_INF_PROGRESS) { cout << "Encoder's Q matrix done" << endl; }
@@ -422,11 +442,16 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                             if (PRINT_INF_PROGRESS) { cout << "Encoder's V matrix done" << endl; }
                             verify_layer_out(ENC_MHSA_DENSE_V_VERIF, int_res, mem_map.at(ENC_V_MEM), EMB_DEPTH, SINGLE_WIDTH);
                             current_inf_step = ENC_MHSA_QK_T_STEP;
+                        } else if (current_inf_step == MLP_DENSE_1_STEP) {
+                            if (PRINT_INF_PROGRESS) { cout << "MLP dense 1 done" << endl; }
+                            verify_layer_out(ENC_MLP_DENSE1_VERIF, int_res, mem_map.at(ENC_MLP_DENSE1_MEM), MLP_DIM, DOUBLE_WIDTH);
+                            current_inf_step = MLP_DENSE_2_AND_SUM_STEP;
                         }
                     } else { gen_cnt_9b.inc(); } // New column
                 } else { gen_cnt_7b.inc(); }
             } 
             break;
+        }
 
         case ENC_MHSA_QK_T_STEP:
             /* gen_cnt_7b holds x
@@ -528,6 +553,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP:
+        case MLP_DENSE_2_AND_SUM_STEP: {
             /* gen_cnt_7b holds x
                gen_cnt_9b holds y 
                
@@ -535,40 +561,67 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                 for x 0...(EMB_DEPTH-1):
             */
 
+            uint16_t input_height;
+            DATA_WIDTH input_data_width;
+
+            if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) {
+                input_height = NUM_PATCHES+1;
+                input_data_width = SINGLE_WIDTH;
+            } else if (current_inf_step == MLP_DENSE_2_AND_SUM_STEP) {
+                input_height = 1; // We only compute the first row of the output
+                input_data_width = DOUBLE_WIDTH;
+            }
+
             if (compute_done || (gen_cnt_7b.get_cnt() == 0 && gen_cnt_9b.get_cnt() == 0 && !compute_in_progress)) { // Start a new MAC
-                uint32_t input_addr = mem_map.at(ENC_V_MULT_MEM) + EMB_DEPTH*gen_cnt_9b.get_cnt();
-                uint32_t kernel_addr = param_addr_map[ENC_COMB_HEAD_PARAMS].addr + EMB_DEPTH*gen_cnt_7b.get_cnt();
-                uint32_t bias_addr = param_addr_map_bias[ENC_COMB_HEAD_BIAS_OFF].addr + gen_cnt_7b.get_cnt();
-                MAC<dw_fx_x_t,params_fx_2_x_t>(input_addr, kernel_addr, EMB_DEPTH, bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, SINGLE_WIDTH);
+                if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) {
+                    uint32_t input_addr = mem_map.at(ENC_V_MULT_MEM) + EMB_DEPTH*gen_cnt_9b.get_cnt();
+                    uint32_t kernel_addr = param_addr_map[ENC_COMB_HEAD_PARAMS].addr + EMB_DEPTH*gen_cnt_7b.get_cnt();
+                    uint32_t bias_addr = param_addr_map_bias[ENC_COMB_HEAD_BIAS_OFF].addr + gen_cnt_7b.get_cnt();
+                    MAC<dw_fx_x_t,params_fx_2_x_t>(input_addr, kernel_addr, EMB_DEPTH, bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, input_data_width);
+                } else if (current_inf_step == MLP_DENSE_2_AND_SUM_STEP) {
+                    uint32_t input_addr = mem_map.at(ENC_MLP_DENSE1_MEM); // Only one row
+                    uint32_t kernel_addr = param_addr_map[ENC_MLP_DENSE_2_PARAMS].addr + MLP_DIM*gen_cnt_7b.get_cnt();
+                    uint32_t bias_addr = param_addr_map_bias[ENC_MLP_DENSE_2_BIAS_OFF].addr + gen_cnt_7b.get_cnt();
+                    MAC<dw_fx_x_t,params_fx_2_x_t>(input_addr, kernel_addr, MLP_DIM, bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, input_data_width);
+                }
                 mac_or_add = ADD_OP;
             }
 
             if (compute_done || generic_done) {
                 if (mac_or_add == ADD_OP) {
-                    uint32_t pos_emb_addr = mem_map.at(POS_EMB_MEM) + gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_9b.get_cnt();
-                    computation_result += int_res[pos_emb_addr];
+                    uint32_t add_addr;
+                    if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) { add_addr = mem_map.at(POS_EMB_MEM) + gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_9b.get_cnt(); }
+                    else { add_addr = mem_map.at(ENC_MHSA_OUT_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt(); }
+                    computation_result += int_res[add_addr];
                     mac_or_add = MAC_OP;
                     generic_done = true;
                 } else {
-                    uint32_t output_addr = mem_map.at(ENC_MHSA_OUT_MEM) + DOUBLE_WIDTH*(gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_9b.get_cnt());
+                    uint32_t output_addr;
+                    if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) { output_addr = mem_map.at(ENC_MHSA_OUT_MEM) + DOUBLE_WIDTH*(gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_9b.get_cnt()); }
+                    else if (current_inf_step == MLP_DENSE_2_AND_SUM_STEP) { output_addr = mem_map.at(ENC_MLP_OUT_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt(); }
                     int_res_write(computation_result, output_addr, DOUBLE_WIDTH);
                     generic_done = false;
 
                     if (gen_cnt_7b.get_cnt() == EMB_DEPTH-1) {
                         gen_cnt_7b.reset();
-                        if (gen_cnt_9b.get_cnt() == NUM_PATCHES) {
+                        if (gen_cnt_9b.get_cnt() == input_height-1) {
                             gen_cnt_9b.reset();
-                            current_inf_step = ENC_LAYERNORM_2_1ST_HALF_STEP;
-                            if (PRINT_INF_PROGRESS) { cout << "Finished encoder's MHSA dense and input step" << endl; }
-                            verify_layer_out(ENC_RES_SUM_1_VERIF, int_res, mem_map.at(ENC_MHSA_OUT_MEM), EMB_DEPTH, DOUBLE_WIDTH);
+
+                            if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) {
+                                current_inf_step = ENC_LAYERNORM_2_1ST_HALF_STEP;
+                                if (PRINT_INF_PROGRESS) { cout << "Finished encoder's MHSA dense and input step" << endl; }
+                                verify_layer_out(ENC_RES_SUM_1_VERIF, int_res, mem_map.at(ENC_MHSA_OUT_MEM), EMB_DEPTH, DOUBLE_WIDTH);
+                            } else if (current_inf_step == MLP_DENSE_2_AND_SUM_STEP) {
+                                current_inf_step = MLP_HEAD_SOFTMAX_STEP;
+                                if (PRINT_INF_PROGRESS) { cout << "Finished MLP's dense 2 and input sum step" << endl; }
+                                verify_layer_out(ENC_OUT_VERIF, int_res, mem_map.at(ENC_MLP_OUT_MEM), EMB_DEPTH, DOUBLE_WIDTH);
+                            }
                         } else { gen_cnt_9b.inc(); }
                     } else { gen_cnt_7b.inc(); }
                 }
             }
             break;
-
-        case MLP_DENSE_1_STEP:
-            break;
+        }
 
         case INVALID_STEP:
             break;
