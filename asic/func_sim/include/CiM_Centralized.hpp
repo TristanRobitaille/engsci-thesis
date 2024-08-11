@@ -40,6 +40,9 @@ class CiM_Centralized : public CiM_Compute {
             MLP_DENSE_1_STEP,
             MLP_DENSE_2_AND_SUM_STEP,
             MLP_HEAD_SOFTMAX_STEP,
+            ENC_LAYERNORM_3_1ST_HALF_STEP,
+            ENC_LAYERNORM_3_2ND_HALF_STEP,
+            MLP_HEAD_DENSE_1_STEP,
             INVALID_STEP
         };
 

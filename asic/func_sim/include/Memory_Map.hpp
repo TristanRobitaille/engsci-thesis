@@ -60,6 +60,7 @@ enum DATA {
 #elif CENTRALIZED_ARCH
     ENC_LN1_MEM,
     ENC_LN2_MEM,
+    ENC_LN3_MEM,
 #endif
     ENC_QVK_IN_MEM,
     ENC_Q_MEM,
@@ -173,6 +174,7 @@ const std::map<DATA, uint32_t> mem_map = {
     {ENC_LN2_MEM,               DOUBLE_WIDTH*2*(NUM_PATCHES+1)*EMB_DEPTH},
     {ENC_MLP_DENSE1_MEM,        DOUBLE_WIDTH*3*(NUM_PATCHES+1)*EMB_DEPTH},
     {ENC_MLP_OUT_MEM,           DOUBLE_WIDTH*4*(NUM_PATCHES+1)*EMB_DEPTH},
+    {ENC_LN3_MEM,               DOUBLE_WIDTH*4*(NUM_PATCHES+2)*EMB_DEPTH},
     {PREV_SOFTMAX_OUTPUT_MEM,   99000}, // FIXME
 };
 
