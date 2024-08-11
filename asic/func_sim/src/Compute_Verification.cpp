@@ -97,15 +97,16 @@ void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, float* data, uint16_t 
         if (num_repeats == NUM_HEADS) { filename = filename + to_string(repeat) + ".csv"; }        
         rapidcsv::Document csv(filename, rapidcsv::LabelParams(-1, -1));
 
-        uint16_t row_cnt;
-        if (cim_step == ENC_OUT_VERIF) { row_cnt = 1; } // Only computed first row
-        else { row_cnt = csv.GetRowCount(); }
+        uint16_t num_rows;
+        if (cim_step == ENC_OUT_VERIF) { num_rows = 1; } // Only compute one row so don't check other
+        else { num_rows = csv.GetRowCount(); }
 
-        for (int i = 0; i < row_cnt; i++) { // Row
+        for (int i = 0; i < num_rows; i++) { // Row
             vector<float> ref_data = csv.GetRow<float>(i);
             for (int j = 0; j < csv.GetColumnCount(); j++) { // Colum
                 int32_t addr = starting_addr + stride*(j + i*outside_dim_len + repeat*(NUM_PATCHES+1)*(NUM_PATCHES+1));
-                are_equal(ref_data[j], data[addr], addr);
+                if (cim_step == MLP_HEAD_SOFTMAX_DIV_VERIF) { are_equal(ref_data[j]/NUM_SAMPLES_OUT_AVG, data[addr], addr); }
+                else { are_equal(ref_data[j], data[addr], addr); }
             }
         }
     }

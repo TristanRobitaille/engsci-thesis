@@ -236,9 +236,9 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case ENC_LAYERNORM_2_1ST_HALF_STEP:
         case ENC_LAYERNORM_3_1ST_HALF_STEP:
             if (word_rec_cnt.get_cnt() == EMB_DEPTH && compute_in_progress == false) { // No more data to receive, start LayerNorm
-                if (current_inf_step == ENC_LAYERNORM_1_1ST_HALF_STEP) { LAYERNORM_1ST_HALF<dw_fx_x_t>(id, mem_map.at(ENC_LN1_1ST_HALF_MEM), DOUBLE_WIDTH); }
-                else if (current_inf_step == ENC_LAYERNORM_2_1ST_HALF_STEP) { LAYERNORM_1ST_HALF<dw_fx_x_t>(id, mem_map.at(ENC_LN2_1ST_HALF_MEM), DOUBLE_WIDTH); }
-                else if (current_inf_step == ENC_LAYERNORM_3_1ST_HALF_STEP) { LAYERNORM_1ST_HALF<dw_fx_x_t>(id, mem_map.at(MLP_HEAD_LN_1ST_HALF_MEM), DOUBLE_WIDTH); }
+                if (current_inf_step == ENC_LAYERNORM_1_1ST_HALF_STEP) { LAYERNORM_1ST_HALF<dw_fx_x_t>(id, mem_map.at(ENC_LN1_1ST_HALF_MEM)); }
+                else if (current_inf_step == ENC_LAYERNORM_2_1ST_HALF_STEP) { LAYERNORM_1ST_HALF<dw_fx_x_t>(id, mem_map.at(ENC_LN2_1ST_HALF_MEM)); }
+                else if (current_inf_step == ENC_LAYERNORM_3_1ST_HALF_STEP) { LAYERNORM_1ST_HALF<dw_fx_x_t>(id, mem_map.at(MLP_HEAD_LN_1ST_HALF_MEM)); }
                 word_rec_cnt.reset();
             }
 
@@ -254,14 +254,14 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             if (((word_rec_cnt.get_cnt() == 1) && (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP)) || (word_rec_cnt.get_cnt() == NUM_PATCHES+1)) { // No more data to receive, start LayerNorm
                 if (compute_in_progress == false) {
                     if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) {
-                        LAYERNORM_2ND_HALF<dw_fx_x_t, params_fx_3_x_t>(mem_map.at(ENC_LN1_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_BETA_OFF, DOUBLE_WIDTH);
+                        LAYERNORM_2ND_HALF<dw_fx_x_t, params_fx_3_x_t>(mem_map.at(ENC_LN1_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_BETA_OFF);
                         for (int i=0; i<NUM_PATCHES+1; i++){ // Compress the positional embedding to single width to save on storage
                             int_res_write(int_res[mem_map.at(POS_EMB_MEM)+DOUBLE_WIDTH*i], mem_map.at(POS_EMB_MEM)+SINGLE_WIDTH*i, SINGLE_WIDTH);
                         }
                     } else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) {
-                        LAYERNORM_2ND_HALF<dw_fx_x_t, params_fx_3_x_t>(mem_map.at(ENC_LN2_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_BETA_OFF, DOUBLE_WIDTH);
+                        LAYERNORM_2ND_HALF<dw_fx_x_t, params_fx_3_x_t>(mem_map.at(ENC_LN2_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_BETA_OFF);
                     } else if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) {
-                        LAYERNORM_2ND_HALF<dw_fx_x_t, params_fx_3_x_t>(mem_map.at(MLP_HEAD_LN_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_BETA_OFF, DOUBLE_WIDTH);
+                        LAYERNORM_2ND_HALF<dw_fx_x_t, params_fx_3_x_t>(mem_map.at(MLP_HEAD_LN_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_BETA_OFF);
                     }
                     word_rec_cnt.reset();
                 }

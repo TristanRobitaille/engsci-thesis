@@ -158,9 +158,9 @@ class CiM_Compute {
 
         template <typename storage_fx_t>
 #if DISTRIBUTED_ARCH
-        void LAYERNORM_1ST_HALF(uint8_t id, uint16_t input_addr, DATA_WIDTH data_width) {
+        void LAYERNORM_1ST_HALF(uint8_t id, uint16_t input_addr) {
 #elif CENTRALIZED_ARCH
-        void LAYERNORM_1ST_HALF(uint32_t input_addr, uint32_t output_addr, DATA_WIDTH data_width) {
+        void LAYERNORM_1ST_HALF(uint32_t input_addr, uint32_t output_addr) {
 #endif
             /* 1st half of Layer normalization of input. Input is in intermediate storage location. Note: All LayerNorms are done over a row of EMB_DEPTH length. */
             if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start LAYERNORM_1ST_HALF!"); }
@@ -170,10 +170,8 @@ class CiM_Compute {
             compute_temp_fp_2 = comp_fx_t { 0.0f }; // Variance
             compute_temp_fp_3 = comp_fx_t { 0.0f }; // Variance
 
-            uint16_t stride = (data_width == SINGLE_WIDTH) ? 1 : 2;
-
             // Mean
-            for (uint16_t i = 0; i < stride*EMB_DEPTH; i += stride) { compute_temp_fp_1 += comp_fx_t { static_cast<storage_fx_t>(int_res[input_addr+i]) }; }
+            for (uint16_t i = 0; i < DOUBLE_WIDTH*EMB_DEPTH; i += DOUBLE_WIDTH) { compute_temp_fp_1 += comp_fx_t { static_cast<storage_fx_t>(int_res[input_addr+i]) }; }
             compute_temp_fp_1 /= EMB_DEPTH;
 #if DISTRIBUTED_ARCH
             verify_result(MEAN, static_cast<float>(compute_temp_fp_1), int_res, input_addr, EMB_DEPTH, id, DOUBLE_WIDTH);
@@ -181,7 +179,7 @@ class CiM_Compute {
             verify_result(MEAN, static_cast<float>(compute_temp_fp_1), int_res, input_addr, EMB_DEPTH, DOUBLE_WIDTH);
 #endif
             // Variance
-            for (uint16_t i = 0; i < stride*EMB_DEPTH; i += stride) {
+            for (uint16_t i = 0; i < DOUBLE_WIDTH*EMB_DEPTH; i += DOUBLE_WIDTH) {
                 compute_temp_fp_3 = comp_fx_t { static_cast<storage_fx_t>(int_res[input_addr+i]) } - compute_temp_fp_1; // Subtract
                 compute_temp_fp_3 *= compute_temp_fp_3; // Square
                 compute_temp_fp_2 += compute_temp_fp_3; // Sum
@@ -198,18 +196,22 @@ class CiM_Compute {
             else { compute_temp_fp_3 = comp_fx_t {1.0f} / compute_temp_fp_2; } // Inverse standard deviation (so we can simply multiply instead of divide in the next step)
 
             // Partial normalization (excludes gamma and beta, which are applied in LAYERNORM_2ND_HALF() since they need to be applied column-wise)
-            for (uint16_t i = 0; i < stride*EMB_DEPTH; i += stride) {
+            for (uint16_t i = 0; i < DOUBLE_WIDTH*EMB_DEPTH; i += DOUBLE_WIDTH) {
                 float result = static_cast<float>((comp_fx_t { static_cast<storage_fx_t>(int_res[input_addr+i]) } - compute_temp_fp_1) * compute_temp_fp_3);
 #if DISTRIBUTED_ARCH
-                int_res_write(result, input_addr+i, data_width);
+                int_res_write(result, input_addr+i, DOUBLE_WIDTH);
 #elif CENTRALIZED_ARCH
-                int_res_write(result, output_addr+i, data_width);
+                int_res_write(result, output_addr+i, DOUBLE_WIDTH);
 #endif
             }
         }
 
         template <typename in1_storage_fx_t, typename in2_storage_fx_t>
-        void LAYERNORM_2ND_HALF(uint16_t input_addr, uint16_t gamma_addr, uint16_t beta_addr, DATA_WIDTH data_width) {
+#if DISTRIBUTED_ARCH
+        void LAYERNORM_2ND_HALF(uint16_t input_addr, uint16_t gamma_addr, uint16_t beta_addr) {
+#elif CENTRALIZED_ARCH
+        void LAYERNORM_2ND_HALF(uint32_t input_addr, uint32_t gamma_addr, uint32_t beta_addr, uint16_t num_rows) {
+#endif
             /* 2nd half of Layer normalization of input. This applies gamma and beta on each column. */
             if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start LAYERNORM_2ND_HALF!"); }
             compute_in_progress = true;
@@ -217,20 +219,20 @@ class CiM_Compute {
             compute_temp_fp_2 = comp_fx_t { static_cast<in2_storage_fx_t>(params[gamma_addr]) }; // Gamma
             compute_temp_fp_3 = comp_fx_t { static_cast<in2_storage_fx_t>(params[beta_addr]) }; // Beta
 
-            uint16_t stride = (data_width == SINGLE_WIDTH) ? 1 : 2;
-
-            // Normalize
-            for (uint16_t i = 0; i < stride*(NUM_PATCHES+1); i += stride) {
+            // Scale and center
 #if DISTRIBUTED_ARCH
-                compute_temp_fp_1 = comp_fx_t { static_cast<in1_storage_fx_t>(int_res[input_addr + i]) };
+            for (uint16_t i = 0; i < NUM_PATCHES+1; i++) { // Go through each rows in given column
+                compute_temp_fp_1 = comp_fx_t { static_cast<in1_storage_fx_t>(int_res[input_addr + DOUBLE_WIDTH*i]) };
                 float result = static_cast<float>(compute_temp_fp_2 * compute_temp_fp_1 + compute_temp_fp_3);
-                int_res_write(result, input_addr+i, data_width);
-#elif CENTRALIZED_ARCH
-                compute_temp_fp_1 = comp_fx_t { static_cast<in1_storage_fx_t>(int_res[input_addr + i*EMB_DEPTH]) }; // Go down a column
-                float result = static_cast<float>(compute_temp_fp_2 * compute_temp_fp_1 + compute_temp_fp_3);
-                int_res_write(result, input_addr + i*EMB_DEPTH, data_width);
-#endif
+                int_res_write(result, input_addr + DOUBLE_WIDTH*i, DOUBLE_WIDTH);
             }
+#elif CENTRALIZED_ARCH
+            for (uint16_t i = 0; i < num_rows; i++) { // Go through each rows in given column
+                compute_temp_fp_1 = comp_fx_t { static_cast<in1_storage_fx_t>(int_res[input_addr + i*DOUBLE_WIDTH*EMB_DEPTH]) }; // Go down column
+                float result = static_cast<float>(compute_temp_fp_2 * compute_temp_fp_1 + compute_temp_fp_3);
+                int_res_write(result, input_addr + i*DOUBLE_WIDTH*EMB_DEPTH, DOUBLE_WIDTH);
+            }
+#endif
         }
 
         template <typename storage_fx_t>
