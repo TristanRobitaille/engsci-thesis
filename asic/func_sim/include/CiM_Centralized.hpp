@@ -39,16 +39,17 @@ class CiM_Centralized : public CiM_Compute {
             ENC_LAYERNORM_2_2ND_HALF_STEP,
             MLP_DENSE_1_STEP,
             MLP_DENSE_2_AND_SUM_STEP,
-            MLP_HEAD_SOFTMAX_STEP,
             ENC_LAYERNORM_3_1ST_HALF_STEP,
             ENC_LAYERNORM_3_2ND_HALF_STEP,
             MLP_HEAD_DENSE_1_STEP,
             MLP_HEAD_DENSE_2_STEP,
+            MLP_HEAD_SOFTMAX_STEP,
+            SOFTMAX_DIVIDE_STEP,
             INVALID_STEP
         };
 
         /*----- PRIVATE VARIABLES -----*/
-        bool generic_done;
+        bool generic_done, first_iteration_started;
         STATE cim_state = INVALID_CIM;
         INFERENCE_STEP current_inf_step = INVALID_STEP;
         SYSTEM_STATE system_state;

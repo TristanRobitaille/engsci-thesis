@@ -9,7 +9,7 @@
 
 /*----- DEFINE -----*/
 #define ENABLE_COMPUTATION_VERIFICATION true
-#define REL_TOLERANCE 0.01f //3% tolerance
+#define REL_TOLERANCE 0.01f //1% tolerance
 #define ABS_TOLERANCE 0.001f
 
 /*----- ENUM -----*/

@@ -327,7 +327,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                         word_rec_cnt.reset();
                     }
                 } else if ((compute_in_progress == false) && (current_inf_step == MLP_HEAD_DENSE_2_STEP) && (id < NUM_SLEEP_STAGES)) {
-                    MAC<dw_fx_x_t,params_fx_3_x_t>(mem_map.at(MLP_HEAD_DENSE_2_IN_MEM), param_addr_map[MLP_HEAD_DENSE_2_PARAMS].addr, MLP_DIM, param_addr_map[SINGLE_PARAMS].addr+MLP_HEAD_DENSE_2_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION, DOUBLE_WIDTH);
+                    MAC<dw_fx_x_t,params_fx_5_x_t>(mem_map.at(MLP_HEAD_DENSE_2_IN_MEM), param_addr_map[MLP_HEAD_DENSE_2_PARAMS].addr, MLP_DIM, param_addr_map[SINGLE_PARAMS].addr+MLP_HEAD_DENSE_2_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION, DOUBLE_WIDTH);
                     gen_reg_2b = 3;
                     word_rec_cnt.reset();
                 }

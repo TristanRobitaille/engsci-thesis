@@ -40,11 +40,12 @@ using softmax_exp_fx_t  = ap_fixed<N_COMP, N_COMP-Q_COMP, AP_RND_CONV, AP_SAT_SY
 using params_fx_2_x_t   = ap_fixed<N_STO_PARAMS, 2, AP_RND_CONV, AP_SAT_SYM>; // ]-2, 2[
 using params_fx_3_x_t   = ap_fixed<N_STO_PARAMS, 3, AP_RND_CONV, AP_SAT_SYM>; // ]-4, 4[
 using params_fx_4_x_t   = ap_fixed<N_STO_PARAMS, 4, AP_RND_CONV, AP_SAT_SYM>; // ]-8, 8[
+using params_fx_5_x_t   = ap_fixed<N_STO_PARAMS, 5, AP_RND_CONV, AP_SAT_SYM>; // ]-16, 16[
 
 using sw_fx_1_x_t       = ap_fixed<N_STO_INT_RES, 1, AP_RND_CONV, AP_SAT_SYM>; // ]-1, 1[
 using sw_fx_2_x_t       = ap_fixed<N_STO_INT_RES, 2, AP_RND_CONV, AP_SAT_SYM>; // ]-2, 2[
-using sw_fx_5_x_t       = ap_fixed<N_STO_INT_RES, 5, AP_RND_CONV, AP_SAT_SYM>; // ]-4, 4[
-using sw_fx_6_x_t       = ap_fixed<N_STO_INT_RES, 6, AP_RND_CONV, AP_SAT_SYM>; // ]-8, 8[
+using sw_fx_5_x_t       = ap_fixed<N_STO_INT_RES, 5, AP_RND_CONV, AP_SAT_SYM>; // ]-16, 16[
+using sw_fx_6_x_t       = ap_fixed<N_STO_INT_RES, 6, AP_RND_CONV, AP_SAT_SYM>; // ]-32, 32[
 using dw_fx_x_t         = ap_fixed<2*N_STO_INT_RES, 8, AP_RND_CONV, AP_SAT_SYM>; // TODO: Reduce num integer bits
 
 /*----- MACROS -----*/
