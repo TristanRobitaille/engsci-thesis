@@ -217,7 +217,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case INFERENCE_RUNNING:
-            if (current_inf_step == SOFTMAX_AVERAGING_STEP) { system_state = EVERYTHING_FINISHED; }
+            if (current_inf_step == SOFTMAX_AVERAGE_ARGMAX_STEP) { system_state = EVERYTHING_FINISHED; }
             break;
 
         case INVALID_CIM:
@@ -694,35 +694,62 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
         }
 
         case SOFTMAX_DIVIDE_STEP:
-            /* gen_cnt_7b holds an internal step
-               gen_cnt_9b holds the sleep stage
+            /* gen_cnt_4b holds internal step
+               gen_cnt_7b holds the sleep stage
             */
 
-            if (gen_cnt_7b.get_cnt() == 0) { // Grab from memory
-                computation_result = comp_fx_t { int_res[mem_map.at(MLP_HEAD_DENSE_2_OUT_MEM) + DOUBLE_WIDTH*gen_cnt_9b.get_cnt()] };
-                gen_cnt_7b.inc();
-            } else if (gen_cnt_7b.get_cnt() == 1) {
+            if (gen_cnt_4b.get_cnt() == 0) { // Grab from memory
+                computation_result = comp_fx_t { int_res[mem_map.at(MLP_HEAD_DENSE_2_OUT_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt()] };
+            } else if (gen_cnt_4b.get_cnt() == 1) {
                 computation_result *= static_cast<float> ( comp_fx_t { 1.0f / NUM_SAMPLES_OUT_AVG } ); // Multiply by 1/NUM_SAMPLES_OUT_AVG saves cycles on the ASIC vs dividing by NUM_SAMPLES_OUT_AVG
-                gen_cnt_7b.inc();
-            } else if (gen_cnt_7b.get_cnt() == 2) {
-                int_res_write(computation_result, mem_map.at(MLP_HEAD_DENSE_2_OUT_MEM) + DOUBLE_WIDTH*gen_cnt_9b.get_cnt(), DOUBLE_WIDTH);
-                gen_cnt_7b.inc();
-            } else if (gen_cnt_7b.get_cnt() == 3) {
-                int_res_write(computation_result, mem_map.at(SOFTMAX_AVG_SUM_MEM) + DOUBLE_WIDTH*gen_cnt_9b.get_cnt(), DOUBLE_WIDTH);
+            } else if (gen_cnt_4b.get_cnt() == 2) {
+                int_res_write(computation_result, mem_map.at(MLP_HEAD_DENSE_2_OUT_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt(), DOUBLE_WIDTH);
+            } else if (gen_cnt_4b.get_cnt() == 3) {
+                int_res_write(computation_result, mem_map.at(SOFTMAX_AVG_SUM_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt(), DOUBLE_WIDTH);
             }
 
-            if (gen_cnt_7b.get_cnt() == 3) {
-                gen_cnt_7b.reset();
-                if (gen_cnt_9b.get_cnt() == NUM_SLEEP_STAGES-1) {
-                    gen_cnt_9b.reset();
+            if (gen_cnt_4b.get_cnt() == 3) {
+                gen_cnt_4b.reset();
+                if (gen_cnt_7b.get_cnt() == NUM_SLEEP_STAGES-1) {
+                    gen_cnt_7b.reset();
                     if (PRINT_INF_PROGRESS) { cout << "Finished MLP head's Softmax averaging divide" << endl; }
-                    verify_layer_out(MLP_HEAD_SOFTMAX_DIV_VERIF, int_res, mem_map.at(MLP_HEAD_DENSE_2_OUT_MEM), 1, DOUBLE_WIDTH);
+                    verify_layer_out(MLP_HEAD_SOFTMAX_DIV_VERIF, int_res, mem_map.at(SOFTMAX_AVG_SUM_MEM), 1, DOUBLE_WIDTH);
                     current_inf_step = SOFTMAX_AVERAGING_STEP;                   
-                } else { gen_cnt_9b.inc(); } // Next sleep stage
-            }
+                } else { gen_cnt_7b.inc(); } // Next sleep stage
+            } else { gen_cnt_4b.inc(); }
             break;
         
-        case SOFTMAX_AVERAGING_STEP:
+        case SOFTMAX_AVERAGING_STEP: {
+            /* gen_cnt_7b holds the current sleep stage within an epoch's softmax
+               gen_cnt_9b holds the epoch
+               gen_cnt_4b holds internal step
+            */
+
+            uint32_t addr_prev_softmax = mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + DOUBLE_WIDTH*(gen_cnt_7b.get_cnt() + gen_cnt_9b.get_cnt()*NUM_SLEEP_STAGES);
+            uint32_t addr_softmax_divide_sum = mem_map.at(SOFTMAX_AVG_SUM_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt();
+
+            if (gen_cnt_4b.get_cnt() == 0) {
+                computation_result = int_res[addr_prev_softmax]; // Prev softmax
+            } else if (gen_cnt_4b.get_cnt() == 1) {
+                computation_result += int_res[addr_softmax_divide_sum]; // Current accumulator
+            } else if (gen_cnt_4b.get_cnt() == 2) {
+                int_res_write(computation_result, addr_softmax_divide_sum, DOUBLE_WIDTH); // Update accumulator
+            }
+
+            if (gen_cnt_4b.get_cnt() == 2) {
+                gen_cnt_4b.reset();
+                if (gen_cnt_7b.get_cnt() == NUM_SLEEP_STAGES-1) {
+                    gen_cnt_7b.reset();
+                    if (gen_cnt_9b.get_cnt() == NUM_SAMPLES_OUT_AVG-2) {
+                        gen_cnt_9b.reset();
+                        current_inf_step = SOFTMAX_AVERAGE_ARGMAX_STEP;
+                    } else { gen_cnt_9b.inc(); }
+                } else { gen_cnt_7b.inc(); }
+            } else { gen_cnt_4b.inc(); }
+            break;
+        }
+
+        case SOFTMAX_AVERAGE_ARGMAX_STEP:
             break;
 
         case INVALID_STEP:
