@@ -467,9 +467,9 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
         case POST_SOFTMAX_DIVIDE_STEP:
             if ((compute_in_progress == false) && (gen_cnt_7b.get_cnt() < NUM_SLEEP_STAGES)) { // Divide all elements by NUM_SAMPLES_OUT_AVG
-                computation_result  = static_cast<float> (comp_fx_t { int_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt()] } * comp_fx_t { 1.0f / NUM_SAMPLES_OUT_AVG }); // Multiply by 1/NUM_SAMPLES_OUT_AVG saves cycles on the ASIC vs dividing by NUM_SAMPLES_OUT_AVG
-                int_res_write(computation_result , mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt(), DOUBLE_WIDTH);
-                int_res_write(computation_result , mem_map.at(SOFTMAX_AVG_SUM_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt(), DOUBLE_WIDTH); // Copy there for averaging sum step
+                computation_result = static_cast<float> (comp_fx_t { int_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt()] } * comp_fx_t { 1.0f / NUM_SAMPLES_OUT_AVG }); // Multiply by 1/NUM_SAMPLES_OUT_AVG saves cycles on the ASIC vs dividing by NUM_SAMPLES_OUT_AVG
+                int_res_write(computation_result, mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt(), DOUBLE_WIDTH);
+                int_res_write(computation_result, mem_map.at(SOFTMAX_AVG_SUM_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt(), DOUBLE_WIDTH); // Copy there for averaging sum step
                 gen_cnt_7b.inc();
             } else if ((gen_cnt_7b.get_cnt() == NUM_SLEEP_STAGES) && (compute_in_progress == false)) {
                 if (PRINT_INF_PROGRESS) { cout << "CiM #0: Finished MLP head's Softmax averaging divide" << endl; }

@@ -217,7 +217,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case INFERENCE_RUNNING:
-            if (current_inf_step == SOFTMAX_DIVIDE_STEP) { system_state = EVERYTHING_FINISHED; }
+            if (current_inf_step == SOFTMAX_AVERAGING_STEP) { system_state = EVERYTHING_FINISHED; }
             break;
 
         case INVALID_CIM:
@@ -566,6 +566,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                     MAC_storage_addr = mem_map.at(ENC_QK_T_MEM) + (NUM_PATCHES+1)*gen_cnt_9b.get_cnt();
                     SOFTMAX<sw_fx_6_x_t>(MAC_storage_addr, NUM_PATCHES+1, SINGLE_WIDTH);
                 } else { SOFTMAX<dw_fx_x_t>(mem_map.at(MLP_HEAD_DENSE_2_OUT_MEM), NUM_SLEEP_STAGES, DOUBLE_WIDTH); }
+            }
 
             if (compute_done) {
                 if (gen_cnt_9b.get_cnt() == num_rows-1) {
