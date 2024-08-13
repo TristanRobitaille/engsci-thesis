@@ -512,7 +512,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 gen_reg_2b = 1;
             } else if ((compute_in_progress == false) && (gen_reg_2b == 1)) {
                 current_inf_step = RETIRE_SOFTMAX_STEP;
-                if (PRINT_INF_PROGRESS) { cout << "CiM #0: Finished averaging softmax with previous epochs." << endl; }
+                if (PRINT_INF_PROGRESS) { cout << "CiM #0: Finished softmax argmax." << endl; }
                 verify_layer_out(POST_SOFTMAX_AVG_VERIF, id, int_res, mem_map.at(SOFTMAX_AVG_SUM_MEM), DOUBLE_WIDTH);
             }
             break;

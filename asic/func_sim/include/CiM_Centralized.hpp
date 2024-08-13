@@ -47,6 +47,7 @@ class CiM_Centralized : public CiM_Compute {
             SOFTMAX_DIVIDE_STEP,
             SOFTMAX_AVERAGING_STEP,
             SOFTMAX_AVERAGE_ARGMAX_STEP,
+            SOFTMAX_RETIRE_STEP,
             INVALID_STEP
         };
 

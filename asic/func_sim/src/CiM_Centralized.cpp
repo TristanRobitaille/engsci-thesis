@@ -217,7 +217,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case INFERENCE_RUNNING:
-            if (current_inf_step == SOFTMAX_AVERAGE_ARGMAX_STEP) { system_state = EVERYTHING_FINISHED; }
+            if (current_inf_step == SOFTMAX_RETIRE_STEP) { system_state = EVERYTHING_FINISHED; }
             break;
 
         case INVALID_CIM:
@@ -750,6 +750,14 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
         }
 
         case SOFTMAX_AVERAGE_ARGMAX_STEP:
+            if (compute_done) {
+                current_inf_step = SOFTMAX_RETIRE_STEP;
+                if (PRINT_INF_PROGRESS) { cout << "Finished softmax argmax." << endl; }
+                verify_layer_out(POST_SOFTMAX_AVG_VERIF, int_res, mem_map.at(SOFTMAX_AVG_SUM_MEM), 1, DOUBLE_WIDTH);            
+            } else if (!compute_in_progress) { ARGMAX(mem_map.at(SOFTMAX_AVG_SUM_MEM), NUM_SLEEP_STAGES, DOUBLE_WIDTH); } // Start a ARGMAX in the background
+            break;
+
+        case SOFTMAX_RETIRE_STEP:
             break;
 
         case INVALID_STEP:
