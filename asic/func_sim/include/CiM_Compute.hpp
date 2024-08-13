@@ -273,8 +273,8 @@ class CiM_Compute {
 
             uint16_t stride = (data_width == SINGLE_WIDTH) ? 1 : 2;
 
-            for (uint16_t i = 1; i < stride*len; i += stride) {
-                compute_temp_fp_2 = comp_fx_t { int_res[input_addr+i] };
+            for (uint16_t i = 1; i < len; i++) {
+                compute_temp_fp_2 = comp_fx_t { int_res[input_addr+stride*i] };
                 if (compute_temp_fp_2 > compute_temp_fp_1) {
                     compute_temp_fp_3 = comp_fx_t { i };
                     compute_temp_fp_1 = compute_temp_fp_2;
@@ -330,6 +330,21 @@ class CiM_Compute {
         comp_fx_t FLOOR(comp_fx_t input) {
             // Performs floor() on fixed-point input
             return comp_fx_t { floor(static_cast<float>(input)) };
+        }
+
+        uint16_t find_softmax_argmax(uint32_t base_addr) {
+            uint16_t argmax_index = 0;
+            float softmax_max = 0;
+            cout << "Softmax (not averaged): ";
+            for (uint32_t i=0; i<NUM_SLEEP_STAGES; i++) {
+                cout << int_res[base_addr + DOUBLE_WIDTH*i] << " ";
+                if (int_res[base_addr + DOUBLE_WIDTH*i] > softmax_max) {
+                    softmax_max = int_res[base_addr + DOUBLE_WIDTH*i];
+                    argmax_index = i;
+                }
+            }
+            cout << "--> Argmax index: " << argmax_index << endl;
+            return argmax_index;
         }
 
         void int_res_write(float data, uint32_t index, DATA_WIDTH data_width) {

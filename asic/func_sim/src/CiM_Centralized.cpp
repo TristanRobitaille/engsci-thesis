@@ -21,6 +21,8 @@ int CiM_Centralized::reset(){
     mac_or_div = MAC_OP;
     mac_or_add = ADD_OP;
     generic_done = false;
+    _softmax_max_index = 0;
+    _inferred_sleep_stage = -1;
     return 0;
 }
 
@@ -197,6 +199,10 @@ void CiM_Centralized::load_previous_softmax(const string prev_softmax_base_filep
     }
 }
 
+uint16_t CiM_Centralized::get_softmax_max_index() {
+    return _softmax_max_index;
+}
+
 SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_base_filepath, string eeg_filepath, uint16_t clip_index) {
     /* Run the CiM FSM */
     if (ext_sigs->master_nrst == false) {
@@ -217,7 +223,10 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
             break;
 
         case INFERENCE_RUNNING:
-            if (current_inf_step == SOFTMAX_RETIRE_STEP) { system_state = EVERYTHING_FINISHED; }
+            if (current_inf_step == INFERENCE_COMPLETE) {
+                cim_state = IDLE_CIM;
+                system_state = EVERYTHING_FINISHED;
+            }
             break;
 
         case INVALID_CIM:
@@ -501,7 +510,6 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                             if (PRINT_INF_PROGRESS) { cout << "MLP head dense 2 done" << endl; }
                             current_inf_step = MLP_HEAD_SOFTMAX_STEP;
                         }
-
                     } else { gen_cnt_9b.inc(); } // New kernel column
                 } else { gen_cnt_7b.inc(); } // New input row
             }
@@ -579,6 +587,8 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                         current_inf_step = SOFTMAX_DIVIDE_STEP;
                         if (PRINT_INF_PROGRESS) { cout << "Finished MLP head softmax" << endl; }
                         verify_layer_out(MLP_HEAD_SOFTMAX_VERIF, int_res, mem_map.at(MLP_HEAD_DENSE_2_OUT_MEM), 1, DOUBLE_WIDTH);
+                        _softmax_max_index = find_softmax_argmax(mem_map.at(MLP_HEAD_DENSE_2_OUT_MEM));
+                        print_softmax_error(int_res, mem_map.at(MLP_HEAD_DENSE_2_OUT_MEM), DOUBLE_WIDTH);
                     }
                 } else { gen_cnt_9b.inc(); }
             }
@@ -714,11 +724,11 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
                     gen_cnt_7b.reset();
                     if (PRINT_INF_PROGRESS) { cout << "Finished MLP head's Softmax averaging divide" << endl; }
                     verify_layer_out(MLP_HEAD_SOFTMAX_DIV_VERIF, int_res, mem_map.at(SOFTMAX_AVG_SUM_MEM), 1, DOUBLE_WIDTH);
-                    current_inf_step = SOFTMAX_AVERAGING_STEP;                   
+                    current_inf_step = SOFTMAX_AVERAGING_STEP;
                 } else { gen_cnt_7b.inc(); } // Next sleep stage
             } else { gen_cnt_4b.inc(); }
             break;
-        
+
         case SOFTMAX_AVERAGING_STEP: {
             /* gen_cnt_7b holds the current sleep stage within an epoch's softmax
                gen_cnt_9b holds the epoch
@@ -752,12 +762,49 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
         case SOFTMAX_AVERAGE_ARGMAX_STEP:
             if (compute_done) {
                 current_inf_step = SOFTMAX_RETIRE_STEP;
+                _inferred_sleep_stage = static_cast<int16_t> (computation_result);
                 if (PRINT_INF_PROGRESS) { cout << "Finished softmax argmax." << endl; }
-                verify_layer_out(POST_SOFTMAX_AVG_VERIF, int_res, mem_map.at(SOFTMAX_AVG_SUM_MEM), 1, DOUBLE_WIDTH);            
-            } else if (!compute_in_progress) { ARGMAX(mem_map.at(SOFTMAX_AVG_SUM_MEM), NUM_SLEEP_STAGES, DOUBLE_WIDTH); } // Start a ARGMAX in the background
+                verify_layer_out(POST_SOFTMAX_AVG_VERIF, int_res, mem_map.at(SOFTMAX_AVG_SUM_MEM), 1, DOUBLE_WIDTH);
+            } else if (!compute_in_progress) { ARGMAX(mem_map.at(SOFTMAX_AVG_SUM_MEM), NUM_SLEEP_STAGES, DOUBLE_WIDTH); } // Start a ARGMAX in the background. Result will be in computation_result.
             break;
 
         case SOFTMAX_RETIRE_STEP:
+            /* Move dummy #0 into dummy #1's position and current softmax into dummy #0
+               gen_cnt_7b holds the current sleep stage within an epoch's softmax
+               gen_cnt_4b holds internal step
+            */
+
+            if (gen_cnt_4b.get_cnt() == 0) { // Grab dummy #0
+                uint32_t addr = mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt();
+                computation_result = int_res[addr];
+            } else if (gen_cnt_4b.get_cnt() == 1) { // Write to dummy #1
+                uint32_t addr = mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + DOUBLE_WIDTH*(gen_cnt_7b.get_cnt() + NUM_SLEEP_STAGES);
+                int_res_write(computation_result, addr, DOUBLE_WIDTH);
+            } else if (gen_cnt_4b.get_cnt() == 2) { // Grab current epoch
+                uint32_t addr = mem_map.at(MLP_HEAD_DENSE_2_OUT_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt();
+                computation_result = int_res[addr];
+            } else if (gen_cnt_4b.get_cnt() == 3) { // Write to dummy #0
+                uint32_t addr = mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt();
+                int_res_write(computation_result, addr, DOUBLE_WIDTH);
+            }
+
+            if (gen_cnt_4b.get_cnt() == 3) {
+                gen_cnt_4b.reset();
+                if (gen_cnt_7b.get_cnt() == NUM_SLEEP_STAGES-1) {
+                    gen_cnt_7b.reset();
+                    current_inf_step = INFERENCE_COMPLETE;
+                    verify_softmax_storage(int_res, mem_map.at(PREV_SOFTMAX_OUTPUT_MEM));
+                    cout << ">----- STATS -----<" << endl;
+                    cout << "Inference complete. Inferred sleep stage: " << _inferred_sleep_stage  << endl;
+                    cout << "Number of exponent operations with negative argument = " << _neg_exp_cnt << "/" << _total_exp_cnt << " (" << 100*_neg_exp_cnt/_total_exp_cnt  << "%)" << endl;
+                    cout << "Min./Max. inputs to exponential = " << static_cast<float>(_min_exp_input_arg) << " and " << static_cast<float>(_max_exp_input_arg) << endl;
+                } else { gen_cnt_7b.inc(); }
+            } else { gen_cnt_4b.inc(); }
+            break;
+
+            break;
+
+        case INFERENCE_COMPLETE:
             break;
 
         case INVALID_STEP:

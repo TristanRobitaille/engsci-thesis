@@ -130,9 +130,11 @@ void run_sim(uint32_t clip_num, string results_csv_fp) {
     
     cout << "Total number of epochs: " << epoch_cnt << endl;
     cout << ">----- SIMULATION FINISHED -----<" << endl;
-#if DISTRIBUTED_ARCH //FIXME: Temporary fix to avoid fault while centralized architecture is brought up
+#if DISTRIBUTED_ARCH
     softmax_max_indices.emplace_back(ctrl.get_softmax_max_index());
-#endif //DISTRIBUTED_ARCH
+#elif CENTRALIZED_ARCH
+    softmax_max_indices.emplace_back(cim.get_softmax_max_index());
+#endif
     reset_stats();
 }
 

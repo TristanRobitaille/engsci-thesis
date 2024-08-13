@@ -67,7 +67,7 @@ class CiM : public CiM_Compute {
         uint16_t rx_addr_reg; // Record the address of the data received on the bus
         uint16_t sender_id; // Record the id of an instruction's sender at a start of broadcast
         uint16_t data_len_reg; // General-purpose register used to record len of data sent/received on the bus
-        uint32_t softmax_max_index;
+        uint16_t _softmax_max_index;
         DATA_WIDTH data_width;
 
         STATE cim_state;

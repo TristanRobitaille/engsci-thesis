@@ -48,11 +48,14 @@ class CiM_Centralized : public CiM_Compute {
             SOFTMAX_AVERAGING_STEP,
             SOFTMAX_AVERAGE_ARGMAX_STEP,
             SOFTMAX_RETIRE_STEP,
+            INFERENCE_COMPLETE,
             INVALID_STEP
         };
 
         /*----- PRIVATE VARIABLES -----*/
         bool generic_done, first_iteration_started;
+        int16_t _inferred_sleep_stage;
+        uint16_t _softmax_max_index;
         STATE cim_state = INVALID_CIM;
         INFERENCE_STEP current_inf_step = INVALID_STEP;
         SYSTEM_STATE system_state;
@@ -70,6 +73,7 @@ class CiM_Centralized : public CiM_Compute {
         CiM_Centralized(const std::string params_filepath);
         int reset();
         SYSTEM_STATE run(struct ext_signals* ext_sigs, string softmax_base_filepath, string eeg_filepath, uint16_t clip_index);
+        uint16_t get_softmax_max_index();
 };
 
 #endif //CIM_CENTRALIZED_H

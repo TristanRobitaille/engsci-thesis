@@ -444,17 +444,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 if (id == 0) {
                     if (PRINT_INF_PROGRESS) { cout << "CiM #0: Finished MLP head's Softmax" << endl; }
                     verify_layer_out(MLP_HEAD_SOFTMAX_VERIF, id, int_res, mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM), DOUBLE_WIDTH);
-                    // Find the argmax of the softmax for fixed-point accuracy study as it doesn't use the post-averaging softmax
-                    float softmax_max = 0;
-                    cout << "Softmax: ";
-                    for (uint32_t i=0; i<NUM_SLEEP_STAGES; i++) {
-                        cout << int_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + DOUBLE_WIDTH*i] << " ";
-                        if (int_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + DOUBLE_WIDTH*i] > softmax_max) {
-                            softmax_max = int_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + DOUBLE_WIDTH*i];
-                            softmax_max_index = i;
-                        }
-                    }
-                    cout << "--> Argmax: " << softmax_max_index << endl;
+                    _softmax_max_index = find_softmax_argmax(mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM));
                     print_softmax_error(int_res, mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM), DOUBLE_WIDTH);
                 }
                 is_ready = false;
@@ -659,7 +649,7 @@ void CiM::overflow_check() {
 }
 
 uint32_t CiM::get_softmax_max_index() {
-    return softmax_max_index;
+    return _softmax_max_index;
 }
 
 #endif // DISTRIBUTED_ARCH
