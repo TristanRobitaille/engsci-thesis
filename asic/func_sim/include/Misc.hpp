@@ -6,19 +6,29 @@
 #include <ap_fixed.h>
 
 /*----- DEFINE -----*/
-#define NUM_CIM             64
-#define PATCH_LEN           64
-#define NUM_PATCHES         60
-#define EMB_DEPTH           64
-#define MLP_DIM             32
-#define NUM_HEADS           8
-#define NUM_SLEEP_STAGES    5
-#define NUM_SAMPLES_OUT_AVG 3     // Number of samples in output averaging filter
-#define EEG_SCALE_FACTOR    65535 // Normalize from 16b
-#define DATA_BASE_DIR       "../fixed_point_accuracy_study/reference_data/"
-#define N_COMP 		        38             
-#define Q_COMP              21
-#define PRINT_INF_PROGRESS  false
+#define NUM_CIM                     64
+#define PATCH_LEN                   64
+#define NUM_PATCHES                 60
+#define EMB_DEPTH                   64
+#define MLP_DIM                     32
+#define NUM_HEADS                   8
+#define NUM_SLEEP_STAGES            5
+#define NUM_SAMPLES_OUT_AVG         3     // Number of samples in output averaging filter
+#define EEG_SCALE_FACTOR            65535 // Normalize from 16b
+#define DATA_BASE_DIR               "../fixed_point_accuracy_study/reference_data/"
+#define N_COMP 		                38             
+#define Q_COMP                      21
+#define NUM_TERMS_EXP_TAYLOR_APPROX 6
+#define PRINT_INF_PROGRESS          false
+
+#if DISTRIBUTED_ARCH
+#define CIM_PARAMS_STORAGE_SIZE_NUM_ELEM 528
+#define CIM_INT_RES_SIZE_NUM_ELEM 886
+#elif CENTRALIZED_ARCH
+#define CIM_PARAMS_STORAGE_SIZE_NUM_ELEM 31648
+#define CIM_INT_RES_SIZE_NUM_ELEM 57116
+#endif
+
 
 /*----- TYPEDEFS -----*/
 // All fixed-point types are signed and all except for comp_fx_t have the same number of bits. We adjust the fix point format on each layer.
@@ -30,17 +40,21 @@ using softmax_exp_fx_t  = ap_fixed<N_COMP, N_COMP-Q_COMP, AP_RND_CONV, AP_SAT_SY
 using params_fx_2_x_t   = ap_fixed<N_STO_PARAMS, 2, AP_RND_CONV, AP_SAT_SYM>; // ]-2, 2[
 using params_fx_3_x_t   = ap_fixed<N_STO_PARAMS, 3, AP_RND_CONV, AP_SAT_SYM>; // ]-4, 4[
 using params_fx_4_x_t   = ap_fixed<N_STO_PARAMS, 4, AP_RND_CONV, AP_SAT_SYM>; // ]-8, 8[
+using params_fx_5_x_t   = ap_fixed<N_STO_PARAMS, 5, AP_RND_CONV, AP_SAT_SYM>; // ]-16, 16[
 
 using sw_fx_1_x_t       = ap_fixed<N_STO_INT_RES, 1, AP_RND_CONV, AP_SAT_SYM>; // ]-1, 1[
 using sw_fx_2_x_t       = ap_fixed<N_STO_INT_RES, 2, AP_RND_CONV, AP_SAT_SYM>; // ]-2, 2[
-using sw_fx_5_x_t       = ap_fixed<N_STO_INT_RES, 5, AP_RND_CONV, AP_SAT_SYM>; // ]-4, 4[
-using sw_fx_6_x_t       = ap_fixed<N_STO_INT_RES, 6, AP_RND_CONV, AP_SAT_SYM>; // ]-8, 8[
+using sw_fx_5_x_t       = ap_fixed<N_STO_INT_RES, 5, AP_RND_CONV, AP_SAT_SYM>; // ]-16, 16[
+using sw_fx_6_x_t       = ap_fixed<N_STO_INT_RES, 6, AP_RND_CONV, AP_SAT_SYM>; // ]-32, 32[
 using dw_fx_x_t         = ap_fixed<2*N_STO_INT_RES, 8, AP_RND_CONV, AP_SAT_SYM>; // TODO: Reduce num integer bits
 
 /*----- MACROS -----*/
+#if DISTRIBUTED_ARCH
 #define NUM_TRANS(x) ceil((x)/3.0f) // Returns the number of transactions each CiM will send (3 elements per transaction)
+#endif //DISTRIBUTED_ARCH
 
 /*----- ENUM -----*/
+#if DISTRIBUTED_ARCH
 enum OP {
     NOP, // Represents the no tranmission
     PATCH_LOAD_BROADCAST_START_OP, // Broadcast the start of a new patch to all CiM
@@ -54,8 +68,10 @@ enum OP {
     PISTOL_START_OP, // Used to instruct CiMs to move to their next step in the inference pipeline
     INFERENCE_RESULT_OP // Sent from CiM #0 to master. Contains inference result.
 };
+#endif //DISTRIBUTED_ARCH
 
 enum SYSTEM_STATE {
+    IDLE,
     RUNNING,
     EVERYTHING_FINISHED
 };
@@ -71,6 +87,7 @@ enum DIRECTION {
 };
 
 /*----- STRUCT -----*/
+#if DISTRIBUTED_ARCH
 struct instruction {
     /* Instructions between master controller and CiM */
     OP op;
@@ -78,12 +95,13 @@ struct instruction {
     std::array<float, 3> data; // 3 words in ASIC
     DATA_WIDTH data_width;
 };
+#endif //DISTRIBUTED_ARCH
 
 struct ext_signals {
     /* Signals external to the master controller and CiM, coming from peripherals or the RISC-V processor */
     bool master_nrst;
-    bool new_sleep_epoch;
     bool start_param_load;
+    bool new_sleep_epoch;
 };
 
 /*----- CLASS -----*/
@@ -117,6 +135,7 @@ class Counter {
 };
 
 /* Bus */
+#if DISTRIBUTED_ARCH
 class Bus {
     private:
         bool hold_on_bus = false; // Allows instruction to remain on bus until next instruction is pushed
@@ -157,5 +176,6 @@ class Bus {
             return 0;
         };
 };
+#endif //DISTRIBUTED_ARCH
 
 #endif //MISC_H

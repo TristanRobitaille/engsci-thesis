@@ -4,14 +4,18 @@
 using namespace std;
 
 /*----- GLOBAL -----*/
-uint32_t epoch_cnt;
-map<int, FcnPtr> event_schedule;
+uint64_t epoch_cnt;
+map<uint64_t, FcnPtr> event_schedule;
 struct ext_signals ext_sigs;
 vector<uint32_t> softmax_max_indices;
 
+#if DISTRIBUTED_ARCH
 Bus bus;
 vector<CiM> cims;
-Master_Ctrl ctrl((string(DATA_BASE_DIR)+"eeg.h5"), (string(DATA_BASE_DIR)+"model_weights.h5"));
+Master_Ctrl ctrl(string(DATA_BASE_DIR)+"eeg.h5", string(DATA_BASE_DIR)+"model_weights.h5");
+#elif CENTRALIZED_ARCH
+CiM_Centralized cim(string(DATA_BASE_DIR)+"model_weights.h5");
+#endif
 
 /*----- DEFINITION -----*/
 int init(){
@@ -19,21 +23,41 @@ int init(){
     cout << "N_STO_PARAMS: " << N_STO_PARAMS << endl;
     cout << "NUM. TERMS TAYLOR EXPANSION EXP APPROX: " << NUM_TERMS_EXP_TAYLOR_APPROX << endl;
     ext_sigs.master_nrst = false;
+    ext_sigs.start_param_load = false;
     ext_sigs.new_sleep_epoch = false;
 
-    // Define schedule for external events (triggered by the RISC-V processor)
-    event_schedule[0] = master_nrst;
-    event_schedule[2] = master_nrst_reset;
-    event_schedule[4] = master_param_load;
-    event_schedule[6] = master_param_load_reset;
-    event_schedule[40000] = epoch_start;
-    event_schedule[40002] = epoch_start_reset;
-
+#if DISTRIBUTED_ARCH
     // Construct CiMs
     for (int16_t i = 0; i < NUM_CIM; ++i) {
         cims.emplace_back(i);
     }
+#endif //DISTRIBUTED_ARCH
     return 0;
+}
+
+void check_event_schedule(uint64_t epoch_index) {
+    switch (epoch_index){
+    case 0:
+        master_nrst(&ext_sigs);
+        break;
+    case 1:
+        master_nrst_reset(&ext_sigs);
+        break;
+    case 4:
+        param_load(&ext_sigs);
+        break;
+    case 5:
+        param_load_reset(&ext_sigs);
+        break;
+    case 40000:
+        epoch_start(&ext_sigs);
+        break;
+    case 40001:
+        epoch_start_reset(&ext_sigs);
+        break;
+    default:
+        break;
+    }
 }
 
 void copy_file(const char *src, const char *dst) {
@@ -86,18 +110,31 @@ void run_sim(uint32_t clip_num, string results_csv_fp) {
     cout << ">----- STARTING SIMULATION -----<" << endl;
     uint64_t epoch_cnt = 0;
     while (1) {
+#if DISTRIBUTED_ARCH
         if ((epoch_cnt == 7) && (ctrl.get_are_params_loaded() == true)) { epoch_cnt = 12500; } // Fast forward if params don't need to be loaded
-        if (event_schedule.count(epoch_cnt) > 0) { event_schedule[epoch_cnt](&ext_sigs); } // Update external signals if needed
+        check_event_schedule(epoch_cnt);
         for (auto& cim: cims) { cim.run(&ext_sigs, &bus); } // Run CiMs
         if (ctrl.run(&ext_sigs, &bus, cims, clip_num) == EVERYTHING_FINISHED) { break; }; // Run Master Controller
         bus.run(); // Run bus
         epoch_cnt++;
+#elif CENTRALIZED_ARCH
+        check_event_schedule(epoch_cnt);
+        if (cim.run(&ext_sigs, string(DATA_BASE_DIR)+"dummy_softmax_", string(DATA_BASE_DIR)+"eeg.h5", clip_num) == EVERYTHING_FINISHED) { break; }; // Run CiM
+        epoch_cnt++;
+#else 
+        throw invalid_argument("Please define either DISTRIBUTED_ARCH or CENTRALIZED_ARCH!");
+#endif
     }
 
     print_intermediate_value_stats();
+    
     cout << "Total number of epochs: " << epoch_cnt << endl;
     cout << ">----- SIMULATION FINISHED -----<" << endl;
+#if DISTRIBUTED_ARCH
     softmax_max_indices.emplace_back(ctrl.get_softmax_max_index());
+#elif CENTRALIZED_ARCH
+    softmax_max_indices.emplace_back(cim.get_softmax_max_index());
+#endif
     reset_stats();
 }
 

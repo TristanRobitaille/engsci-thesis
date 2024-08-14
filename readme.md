@@ -35,6 +35,7 @@ You will also need `graphviz`; install it with `brew install graphviz`.\
 
 ### ASIC Function Simulation
 The extra libraries with use are `hdf5`, `boost` and `armadillo`. These are installed when building the Docker container.\
+To debug using VSCode, you'll need to instal `C/C++ Runner` extension.\
 To generate the Makefile, run `cmake CMakeLists.txt` from `/asic/func_sim`. Compile with `make -j12`. Run with `./build/Func_Sim`.
 
 ### RTL

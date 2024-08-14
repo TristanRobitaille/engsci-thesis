@@ -9,7 +9,7 @@
 
 /*----- DEFINE -----*/
 #define ENABLE_COMPUTATION_VERIFICATION true
-#define REL_TOLERANCE 0.01f //3% tolerance
+#define REL_TOLERANCE 0.01f //1% tolerance
 #define ABS_TOLERANCE 0.001f
 
 /*----- ENUM -----*/
@@ -24,6 +24,7 @@ enum COMPUTE_VERIFICATION_STEP {
     ENC_MHSA_DENSE_QK_T_VERIF,
     ENC_SOFTMAX_VERIF,
     ENC_MULT_V_VERIF,
+    ENC_MHSA_DENSE_OUT_VERIF,
     ENC_RES_SUM_1_VERIF,
     ENC_LAYERNORM2_VERIF,
     ENC_MLP_DENSE1_VERIF,
@@ -32,6 +33,7 @@ enum COMPUTE_VERIFICATION_STEP {
     MLP_HEAD_DENSE_1_VERIF,
     MLP_HEAD_SOFTMAX_VERIF,
     MLP_HEAD_SOFTMAX_DIV_VERIF,
+    ENC_LAYERNORM3_VERIF,
     POST_SOFTMAX_AVG_VERIF
 };
 
@@ -57,6 +59,7 @@ static std::map<COMPUTE_VERIFICATION_STEP, StepVerifInfo> step_verif_info = {
     {ENC_MHSA_DENSE_QK_T_VERIF, {std::string(DATA_BASE_DIR)+"enc_mhsa_scaled_score_"}},
     {ENC_SOFTMAX_VERIF,         {std::string(DATA_BASE_DIR)+"enc_mhsa_softmax_"}},
     {ENC_MULT_V_VERIF,          {std::string(DATA_BASE_DIR)+"enc_mhsa_softmax_mult_V.csv"}},
+    {ENC_MHSA_DENSE_OUT_VERIF,  {std::string(DATA_BASE_DIR)+"enc_mhsa_output.csv"}},
     {ENC_RES_SUM_1_VERIF,       {std::string(DATA_BASE_DIR)+"enc_res_sum_1.csv"}},
     {ENC_LAYERNORM2_VERIF,      {std::string(DATA_BASE_DIR)+"enc_layernorm2.csv"}},
     {ENC_MLP_DENSE1_VERIF,      {std::string(DATA_BASE_DIR)+"enc_mlp_dense1.csv"}},
@@ -69,11 +72,17 @@ static std::map<COMPUTE_VERIFICATION_STEP, StepVerifInfo> step_verif_info = {
 };
 
 /*----- FUNCTION -----*/
-bool are_equal(float a, float b, uint16_t index, uint8_t id);
-void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_state, uint8_t id, float* data, uint16_t starting_addr, DATA_WIDTH data_width);
+#if DISTRIBUTED_ARCH
+bool are_equal(float a, float b, int32_t index, uint8_t id);
 void verify_result(RESULT_TYPE type, float result, float* input_data, uint16_t starting_addr, uint16_t len, uint8_t id, DATA_WIDTH data_width);
-void print_softmax_error(float* data, uint16_t starting_addr, DATA_WIDTH data_width);
-void verify_softmax_storage(float* intermediate_res, uint16_t prev_softmax_base_addr);
+void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_state, uint8_t id, float* data, uint16_t starting_addr, DATA_WIDTH data_width);
+#elif CENTRALIZED_ARCH
+bool are_equal(float a, float b, int32_t index);
+void verify_result(RESULT_TYPE type, float result, float* input_data, uint32_t starting_addr, uint16_t len, DATA_WIDTH data_width);
+void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_state, float* data, uint32_t starting_addr, uint16_t outside_dim_len, DATA_WIDTH data_width);
+#endif
+void print_softmax_error(float* data, uint32_t starting_addr, DATA_WIDTH data_width);
+void verify_softmax_storage(float* intermediate_res, uint32_t prev_softmax_base_addr);
 void print_intermediate_value_stats();
 void reset_stats();
 

@@ -7,7 +7,7 @@
 
 #include <CiM.hpp>
 #include <Misc.hpp>
-#include <Param_Layer_Mapping.hpp>
+#include <Memory_Map.hpp>
 
 /*----- CLASS -----*/
 class Counter;

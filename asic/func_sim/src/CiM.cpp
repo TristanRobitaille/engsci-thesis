@@ -1,3 +1,4 @@
+#if DISTRIBUTED_ARCH
 #include <CiM.hpp>
 
 /*----- NAMESPACE -----*/
@@ -12,7 +13,7 @@ CiM::CiM(const int16_t cim_id) : id(cim_id), gen_cnt_7b(7), gen_cnt_7b_2(7), wor
 void CiM::load_previous_softmax() {
     if (id == 0) {
         for (int i = 0; i < (NUM_SAMPLES_OUT_AVG-1); i++) { // Softmax for previous dummy epochs
-            std::string filename = std::string(DATA_BASE_DIR)+"/dummy_softmax_" + std::to_string(i) + ".csv";
+            std::string filename = std::string(DATA_BASE_DIR)+"dummy_softmax_" + std::to_string(i) + ".csv";
             rapidcsv::Document csv(filename, rapidcsv::LabelParams(-1, -1));
             std::vector<float> dummy_softmax = csv.GetRow<float>(0);
             for (int j = 0; j < NUM_SLEEP_STAGES; j++) { int_res_write((dummy_softmax[j] / NUM_SAMPLES_OUT_AVG), mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + i*NUM_SLEEP_STAGES*DOUBLE_WIDTH + DOUBLE_WIDTH*j, DOUBLE_WIDTH); }
@@ -34,12 +35,6 @@ int CiM::reset(){
     gen_cnt_7b_2.reset();
     word_rec_cnt.reset();
     word_snt_cnt.reset();
-    _neg_exp_cnt = 0;
-    _total_exp_cnt = 0;
-    _max_exp_input_arg = comp_fx_t(0);
-    _min_exp_input_arg = comp_fx_t(0);
-    _compute_process_cnt = 0;
-    _num_compute_done = 0;
     load_previous_softmax(); // Load in dummy softmax data of previous epochs for verification
     update_state(IDLE_CIM);
     return 0;
@@ -64,7 +59,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         break;
 
     case PATCH_LOAD_BROADCAST_OP:
-        int_res_write(inst.data[0], word_rec_cnt.get_cnt(), SINGLE_WIDTH);
+        int_res_write(inst.data[0], mem_map.at(EEG_INPUT_MEM) + SINGLE_WIDTH*word_rec_cnt.get_cnt(), SINGLE_WIDTH);
         word_rec_cnt.inc();
         break;
 
@@ -191,7 +186,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
     case PATCH_LOAD_CIM:
         if ((compute_in_progress == false) && (word_rec_cnt.get_cnt() == PATCH_LEN) && (gen_reg_2b == 0)) { // Received my complete patch, perform part of Dense layer
-            MAC<dw_fx_x_t,params_fx_2_x_t>(0, 0, PATCH_LEN, param_addr_map[SINGLE_PARAMS].addr+PATCH_PROJ_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION, SINGLE_WIDTH);
+            MAC<dw_fx_x_t,params_fx_2_x_t>(mem_map.at(EEG_INPUT_MEM), param_addr_map[PATCH_PROJ_KERNEL_PARAMS].addr, PATCH_LEN, param_addr_map[SINGLE_PARAMS].addr+PATCH_PROJ_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION, SINGLE_WIDTH);
             gen_reg_2b = 1;
             word_rec_cnt.reset();
         } else if ((compute_in_progress == false) && (gen_reg_2b == 1)) { // Done computation
@@ -221,13 +216,13 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case POS_EMB_STEP:
             if ((compute_in_progress == false) && (gen_cnt_7b.get_cnt() < NUM_PATCHES+1)) { // Start computation
                 if (gen_reg_2b == 1) { // Save computation result from previous iteration (except for the first iteration)
-                    int_res_write(computation_result , DOUBLE_WIDTH*gen_cnt_7b.get_cnt() + mem_map.at(POS_EMB_MEM), DOUBLE_WIDTH);
+                    int_res_write(computation_result, DOUBLE_WIDTH*gen_cnt_7b.get_cnt() + mem_map.at(POS_EMB_MEM), DOUBLE_WIDTH);
                     gen_cnt_7b.inc();
                 }
                 ADD<dw_fx_x_t,params_fx_2_x_t>(mem_map.at(CLASS_TOKEN_MEM)+DOUBLE_WIDTH*gen_cnt_7b.get_cnt(), param_addr_map[POS_EMB_PARAMS].addr+gen_cnt_7b.get_cnt(), MODEL_PARAM);
                 gen_reg_2b = 1;
             } else if ((compute_in_progress == false) && (gen_cnt_7b.get_cnt() == NUM_PATCHES+1)) { // Done with positional embedding
-                int_res_write(computation_result , DOUBLE_WIDTH*gen_cnt_7b.get_cnt()+mem_map.at(POS_EMB_MEM), DOUBLE_WIDTH);
+                int_res_write(computation_result, DOUBLE_WIDTH*gen_cnt_7b.get_cnt() + mem_map.at(POS_EMB_MEM), DOUBLE_WIDTH);
                 current_inf_step = ENC_LAYERNORM_1_1ST_HALF_STEP;
                 if (id == 0 && PRINT_INF_PROGRESS) { cout << "CiM: Finished positional embedding" << endl; }
                 gen_cnt_7b.reset();
@@ -241,9 +236,9 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
         case ENC_LAYERNORM_2_1ST_HALF_STEP:
         case ENC_LAYERNORM_3_1ST_HALF_STEP:
             if (word_rec_cnt.get_cnt() == EMB_DEPTH && compute_in_progress == false) { // No more data to receive, start LayerNorm
-                if (current_inf_step == ENC_LAYERNORM_1_1ST_HALF_STEP) { LAYERNORM_1ST_HALF<dw_fx_x_t>(id, mem_map.at(ENC_LN1_1ST_HALF_MEM), DOUBLE_WIDTH); }
-                else if (current_inf_step == ENC_LAYERNORM_2_1ST_HALF_STEP) { LAYERNORM_1ST_HALF<dw_fx_x_t>(id, mem_map.at(ENC_LN2_1ST_HALF_MEM), DOUBLE_WIDTH); }
-                else if (current_inf_step == ENC_LAYERNORM_3_1ST_HALF_STEP) { LAYERNORM_1ST_HALF<dw_fx_x_t>(id, mem_map.at(MLP_HEAD_LN_1ST_HALF_MEM), DOUBLE_WIDTH); }
+                if (current_inf_step == ENC_LAYERNORM_1_1ST_HALF_STEP) { LAYERNORM_1ST_HALF<dw_fx_x_t>(id, mem_map.at(ENC_LN1_1ST_HALF_MEM)); }
+                else if (current_inf_step == ENC_LAYERNORM_2_1ST_HALF_STEP) { LAYERNORM_1ST_HALF<dw_fx_x_t>(id, mem_map.at(ENC_LN2_1ST_HALF_MEM)); }
+                else if (current_inf_step == ENC_LAYERNORM_3_1ST_HALF_STEP) { LAYERNORM_1ST_HALF<dw_fx_x_t>(id, mem_map.at(MLP_HEAD_LN_1ST_HALF_MEM)); }
                 word_rec_cnt.reset();
             }
 
@@ -259,14 +254,14 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
             if (((word_rec_cnt.get_cnt() == 1) && (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP)) || (word_rec_cnt.get_cnt() == NUM_PATCHES+1)) { // No more data to receive, start LayerNorm
                 if (compute_in_progress == false) {
                     if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) {
-                        LAYERNORM_2ND_HALF<dw_fx_x_t, params_fx_3_x_t>(mem_map.at(ENC_LN1_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_BETA_OFF, DOUBLE_WIDTH);
+                        LAYERNORM_2ND_HALF<dw_fx_x_t, params_fx_3_x_t>(mem_map.at(ENC_LN1_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_1_BETA_OFF);
                         for (int i=0; i<NUM_PATCHES+1; i++){ // Compress the positional embedding to single width to save on storage
                             int_res_write(int_res[mem_map.at(POS_EMB_MEM)+DOUBLE_WIDTH*i], mem_map.at(POS_EMB_MEM)+SINGLE_WIDTH*i, SINGLE_WIDTH);
                         }
                     } else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) {
-                        LAYERNORM_2ND_HALF<dw_fx_x_t, params_fx_3_x_t>(mem_map.at(ENC_LN2_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_BETA_OFF, DOUBLE_WIDTH);
+                        LAYERNORM_2ND_HALF<dw_fx_x_t, params_fx_3_x_t>(mem_map.at(ENC_LN2_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_2_BETA_OFF);
                     } else if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) {
-                        LAYERNORM_2ND_HALF<dw_fx_x_t, params_fx_3_x_t>(mem_map.at(MLP_HEAD_LN_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_BETA_OFF, DOUBLE_WIDTH);
+                        LAYERNORM_2ND_HALF<dw_fx_x_t, params_fx_3_x_t>(mem_map.at(MLP_HEAD_LN_2ND_HALF_MEM), param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_GAMMA_OFF, param_addr_map[SINGLE_PARAMS].addr+ENC_LAYERNORM_3_BETA_OFF);
                     }
                     word_rec_cnt.reset();
                 }
@@ -332,7 +327,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                         word_rec_cnt.reset();
                     }
                 } else if ((compute_in_progress == false) && (current_inf_step == MLP_HEAD_DENSE_2_STEP) && (id < NUM_SLEEP_STAGES)) {
-                    MAC<dw_fx_x_t,params_fx_3_x_t>(mem_map.at(MLP_HEAD_DENSE_2_IN_MEM), param_addr_map[MLP_HEAD_DENSE_2_PARAMS].addr, MLP_DIM, param_addr_map[SINGLE_PARAMS].addr+MLP_HEAD_DENSE_2_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION, DOUBLE_WIDTH);
+                    MAC<dw_fx_x_t,params_fx_5_x_t>(mem_map.at(MLP_HEAD_DENSE_2_IN_MEM), param_addr_map[MLP_HEAD_DENSE_2_PARAMS].addr, MLP_DIM, param_addr_map[SINGLE_PARAMS].addr+MLP_HEAD_DENSE_2_BIAS_OFF, MODEL_PARAM, LINEAR_ACTIVATION, DOUBLE_WIDTH);
                     gen_reg_2b = 3;
                     word_rec_cnt.reset();
                 }
@@ -424,7 +419,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 }
             } else if (compute_in_progress == false && gen_reg_2b == 1) { // Done with this MAC
                 gen_reg_2b = 0;
-                computation_result  = static_cast<float>(static_cast<comp_fx_t>(computation_result ) * static_cast<params_fx_4_x_t>(params[param_addr_map[SINGLE_PARAMS].addr+ENC_INV_SQRT_NUM_HEADS_OFF])); // Divide by sqrt(NUM_HEADS). Done in ASIC before writing to mem, so can be left cast as comp_fx_t
+                computation_result = static_cast<float>(static_cast<comp_fx_t>(computation_result ) * static_cast<params_fx_4_x_t>(params[param_addr_map[SINGLE_PARAMS].addr+ENC_INV_SQRT_NUM_HEADS_OFF])); // Divide by sqrt(NUM_HEADS). Done in ASIC before writing to mem, so can be left cast as comp_fx_t
                 int_res_write(computation_result , MAC_storage_addr, SINGLE_WIDTH);
                 gen_cnt_7b.inc();
                 if (gen_cnt_7b.get_cnt() == (NUM_PATCHES+1)) { // All MACs for one matrix are done
@@ -449,17 +444,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 if (id == 0) {
                     if (PRINT_INF_PROGRESS) { cout << "CiM #0: Finished MLP head's Softmax" << endl; }
                     verify_layer_out(MLP_HEAD_SOFTMAX_VERIF, id, int_res, mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM), DOUBLE_WIDTH);
-                    // Find the argmax of the softmax for fixed-point accuracy study as it doesn't use the post-averaging softmax
-                    float softmax_max = 0;
-                    cout << "Softmax: ";
-                    for (uint32_t i=0; i<NUM_SLEEP_STAGES; i++) {
-                        cout << int_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + DOUBLE_WIDTH*i] << " ";
-                        if (int_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + DOUBLE_WIDTH*i] > softmax_max) {
-                            softmax_max = int_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + DOUBLE_WIDTH*i];
-                            softmax_max_index = i;
-                        }
-                    }
-                    cout << "--> Argmax: " << softmax_max_index << endl;
+                    _softmax_max_index = find_softmax_argmax(mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM));
                     print_softmax_error(int_res, mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM), DOUBLE_WIDTH);
                 }
                 is_ready = false;
@@ -472,9 +457,9 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
 
         case POST_SOFTMAX_DIVIDE_STEP:
             if ((compute_in_progress == false) && (gen_cnt_7b.get_cnt() < NUM_SLEEP_STAGES)) { // Divide all elements by NUM_SAMPLES_OUT_AVG
-                computation_result  = static_cast<float> (comp_fx_t { int_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt()] } * comp_fx_t { 1.0f / NUM_SAMPLES_OUT_AVG }); // Multiply by 1/NUM_SAMPLES_OUT_AVG saves cycles on the ASIC vs dividing by NUM_SAMPLES_OUT_AVG
-                int_res_write(computation_result , mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt(), DOUBLE_WIDTH);
-                int_res_write(computation_result , mem_map.at(SOFTMAX_AVG_SUM_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt(), DOUBLE_WIDTH); // Copy there for averaging sum step
+                computation_result = static_cast<float> (comp_fx_t { int_res[mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt()] } * comp_fx_t { 1.0f / NUM_SAMPLES_OUT_AVG }); // Multiply by 1/NUM_SAMPLES_OUT_AVG saves cycles on the ASIC vs dividing by NUM_SAMPLES_OUT_AVG
+                int_res_write(computation_result, mem_map.at(MLP_HEAD_SOFTMAX_IN_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt(), DOUBLE_WIDTH);
+                int_res_write(computation_result, mem_map.at(SOFTMAX_AVG_SUM_MEM) + DOUBLE_WIDTH*gen_cnt_7b.get_cnt(), DOUBLE_WIDTH); // Copy there for averaging sum step
                 gen_cnt_7b.inc();
             } else if ((gen_cnt_7b.get_cnt() == NUM_SLEEP_STAGES) && (compute_in_progress == false)) {
                 if (PRINT_INF_PROGRESS) { cout << "CiM #0: Finished MLP head's Softmax averaging divide" << endl; }
@@ -517,7 +502,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                 gen_reg_2b = 1;
             } else if ((compute_in_progress == false) && (gen_reg_2b == 1)) {
                 current_inf_step = RETIRE_SOFTMAX_STEP;
-                if (PRINT_INF_PROGRESS) { cout << "CiM #0: Finished averaging softmax with previous epochs." << endl; }
+                if (PRINT_INF_PROGRESS) { cout << "CiM #0: Finished softmax argmax." << endl; }
                 verify_layer_out(POST_SOFTMAX_AVG_VERIF, id, int_res, mem_map.at(SOFTMAX_AVG_SUM_MEM), DOUBLE_WIDTH);
             }
             break;
@@ -558,7 +543,7 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
                     gen_reg_2b = 0;
                 } else if (compute_in_progress == false) {
                     uint16_t MAC_storage_addr = mem_map.at(ENC_PRE_SOFTMAX_MEM) + gen_cnt_7b_2.get_cnt()*(NUM_PATCHES+1); // Storage location of MAC result
-                    SOFTMAX<sw_fx_6_x_t>(MAC_storage_addr,  NUM_PATCHES+1, SINGLE_WIDTH);
+                    SOFTMAX<sw_fx_6_x_t>(MAC_storage_addr, NUM_PATCHES+1, SINGLE_WIDTH);
                     gen_reg_2b = 1; // Just a signal to avoid coming here every time FSM runs
                 }
             } else { is_ready = true; }
@@ -650,15 +635,6 @@ int CiM::run(struct ext_signals* ext_sigs, Bus* bus){
     return 0;
 }
 
-void CiM::update_compute_process_cnt() {
-    if (compute_in_progress == true) { _compute_process_cnt++; }
-    if (_compute_process_cnt == COMPUTE_CNT_THRESHOLD) {
-        _compute_process_cnt = 0;
-        compute_in_progress = false;
-        _num_compute_done++;
-    }
-}
-
 bool CiM::get_is_ready() {
     return (is_ready & !compute_in_progress);
 }
@@ -673,5 +649,7 @@ void CiM::overflow_check() {
 }
 
 uint32_t CiM::get_softmax_max_index() {
-    return softmax_max_index;
+    return _softmax_max_index;
 }
+
+#endif // DISTRIBUTED_ARCH
