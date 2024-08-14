@@ -9,6 +9,7 @@ each instruction along with the fields on the bus.
     \renewcommand{\arraystretch}{1.2} % Vertical spacing
     \setlength{\arrayrulewidth}{1.5pt} % Thickness of vertical lines
     \caption{Bus operations and their fields}
+    \scriptsize
     \begin{tabular}{@{} p{6.5cm}lllllll @{}}
         \toprule
         Opcode                                      & Description                       & Sender        & \texttt{ID}   & \texttt{Data[0]}  & \texttt{Data[1]}  & \texttt{Data[2]} \\\midrule
@@ -24,6 +25,7 @@ each instruction along with the fields on the bus.
         \texttt{PISTOL\_START\_OP}                  & \ac{cim} to execute next step     & Master        & -             & -                 & -                 & - \\
         \texttt{INFERENCE\_RESULT\_OP}              & Contains inferred sleep stage     & \ac{cim} \#0  & 0             & Sleep stage       & -                 & - \\
     \end{tabular}
+    \normalsize
     \label{tab:bus_ops}
 \end{sidewaystable}
 

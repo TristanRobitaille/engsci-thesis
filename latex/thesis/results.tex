@@ -20,7 +20,7 @@ Section \ref{sec:arch}.
 With an inference latency of 6.97\si{\milli\second} and a sleep epoch duration of 30\si{\second}, the ASIC accelerator only runs for 0.0232\% of the time, meaning
 that the effective leakage power is reduced by up to 94.98\%, reducing the effective leakage power to 2.947\si{\milli\watt}. The accelerator consumes a total of
 63.07\si{\milli\watt} during inference, which brings the effective power consumption to 3.046\si{\milli\watt} with power gating. The energy per inference is
-433.29\si{\micro\joule}. The $f_{max}$ is 758\si{\mega\hertz}, which is above the target of 200\si{\mega\hertz}. This gives us ample leeway to modify the design to reduce
+433.29\si{\mu\joule}. The $f_{max}$ is 758\si{\mega\hertz}, which is above the target of 200\si{\mega\hertz}. This gives us ample leeway to modify the design to reduce
 power consumption or area further. The $f_{max}$ is limited by the multiplier module as shown in Table \ref{tab:compute_modules}.
 
 \begin{table}[ht]
@@ -41,7 +41,7 @@ power consumption or area further. The $f_{max}$ is limited by the multiplier mo
         Leakage power               & 56.48\si{\milli\watt}         & N/A   \\
         Average dynamic power       & 6.59\si{\milli\watt}          & N/A   \\
         Effective total power       & 3.046\si{\milli\watt}         & Yes   \\
-        Energy/inference            & 433.29\si{\micro\joule}       & N/A   \\
+        Energy/inference            & 433.29\si{\mu\joule}          & N/A   \\
         $f_{Max}$                   & 758\si{\mega\hertz}           & Yes   \\ \bottomrule
     \end{tabularx}
     \label{tab:high_level_results}

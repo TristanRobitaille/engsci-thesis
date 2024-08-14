@@ -50,6 +50,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     texlive-latex-extra \
     texlive-science \
     texlive-bibtex-extra \
+    texlive-font-utils \
     cm-super \
     dvipng \
     && rm -rf /var/lib/apt/lists/*

@@ -39,14 +39,14 @@ this model.
     \begin{tabular}{@{} *5l @{}}
         Hyperparameter                  & Value &&&     \\\toprule
         Learning rate schedule          & $\sqrt{d_{model}}*min(\sqrt{step}, step/4000^{1.5})$ \\
-        Initial learning rate           & 0.001        \\
+        Initial learning rate           & 0.001         \\
         Batch size                      & 16            \\
         \# of epochs                    & 100           \\
         Dropout rate                    & 30\%          \\
         Class weights                   & 1.0 $\forall$ \{Wake, REM, N1/N2, N3/N4\} \\
         Optimizer                       & Adam          \\
-        Data downsampling               & 256Hz → 128Hz \\
-        Data filtering                  & 60Hz notch → 0.3-100Hz bandpass → 16b quantization \\            
+        Data downsampling               & 256Hz \rightarrow 128Hz \\
+        Data filtering                  & 60Hz notch \rightarrow 0.3-100Hz bandpass \rightarrow 16b quantization \\            
         \hline
     \end{tabular}
     \label{tab:training_hyperparameters}

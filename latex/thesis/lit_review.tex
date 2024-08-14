@@ -32,7 +32,7 @@ pipelined ``processing tiles'' that can be reconfigured in $\sim$$10^4$-$10^5$ p
 Another area of research is concerned with the software-hardware co-design opportunities afforded by tight integration between the model and the hardware running its inference. Ding and team
 describe an impressive design where both the training backpropagation and inference hardware are modified. By ensuring that weight matrices consist of an array of circulant matrices, the team
 is able to reduce time-complexity of vector-matrix mutliply from $\mathcal{O}(n^2)$ to $\mathcal{O}(n\log{}n)$. This technique reduced storage needs by 400x-4000x, enabling the model to be stored
-in on-chip memory and reducing energy consumption by 60x-70x compared to naïve FPGA implementation \cite*{ding2017circnn}. Taking a different route, by developing a so-called ``Block-Balanced Pruning'' 
+in on-chip memory and reducing energy consumption by 60x-70x compared to na\"ive FPGA implementation \cite*{ding2017circnn}. Taking a different route, by developing a so-called ``Block-Balanced Pruning'' 
 technique to pack a pruned weight matrix and its index information in an FPGA BRAM, Qi \textit{et al.} managed to double inference speed compared to a GPU \cite*{qi2021accommodating}. Another example
 of software-hardware co-design is the work by Zhi \textit{et al.} who developed a ``Clipped staircase ReLU'' activation function optimized for their custom CiM processing element and use of quantized
 weights. Their work consumed 5x less energy and 100x-1000x fewer memory accesses \cite*{zhi2021opportunities}.
