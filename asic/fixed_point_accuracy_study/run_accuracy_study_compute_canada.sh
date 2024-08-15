@@ -1,8 +1,8 @@
 #!/bin/bash 
-#SBATCH --nodes=4
+#SBATCH --nodes=12
 #SBATCH --ntasks-per-node=48
 #SBATCH --mem=128GB
-#SBATCH --time=00-01:59 # time (DD-HH:MM)
+#SBATCH --time=00-10:59 # time (DD-HH:MM)
 #SBATCH --output=%N-%j.out # %N for node name, %j for jobID
 #SBATCH --mail-user=tristan.robitaille@mail.utoronto.ca
 #SBATCH --mail-type=ALL
