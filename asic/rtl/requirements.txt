@@ -1,4 +1,5 @@
 cocotb>=1.8.1
+cocotb_test>=0.2.5
 pytest>=7.4.1
 h5py>=3.10.0
 spfpm>=1.6

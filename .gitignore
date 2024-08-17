@@ -119,32 +119,14 @@ asic/func_sim/CMakeDoxyfile.in
 asic/mem/
 
 ### ASIC RTL
-asic/rtl/__pycache__
-asic/rtl/ip/__pycache__
-asic/rtl/ip/*/__pycache__
-asic/rtl/ip/*/sim_build
-asic/rtl/ip/*/dump.vcd
-asic/rtl/ip/*/results.xml
-asic/rtl/master/__pycache__
-asic/rtl/master/sim_build
-asic/rtl/master/dump.vcd
-asic/rtl/master/results.xml
+*__pycache__*
+*dump.vcd*
+*results.xml*
 asic/rtl/master/~*
-asic/rtl/cim/__pycache__
-asic/rtl/cim/sim_build
-asic/rtl/cim/dump.vcd
-asic/rtl/cim/results.xml
 asic/rtl/cim/~*
 asic/rtl/rtl_env
-asic/rtl/ip/adder/adder.saif
-asic/rtl/ip/multiplier/multiplier.saif
-asic/rtl/ip/divider/divider.saif
-asic/rtl/ip/exp/exp.saif
-asic/rtl/ip/layernorm/layernorm.saif
-asic/rtl/ip/sqrt/sqrt.saif
-asic/rtl/ip/softmax/softmax.saif
-asic/rtl/top.saif
-asic/rtl/master/master.saif
+*.saif
+*sim_build*
 
 ### ASIC functional simulation
 asic/fixed_point_accuracy_study/results_test.csv

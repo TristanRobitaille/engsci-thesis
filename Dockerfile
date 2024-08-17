@@ -20,6 +20,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 RUN locale-gen en_CA.UTF-8
+ENV LANG en_CA.UTF-8
+ENV LANGUAGE en_CA:en
+ENV LC_ALL en_CA.UTF-8
 
 #----- VSCode server -----#
 RUN mkdir -p /root/.vscode-server/extensions
@@ -77,6 +80,7 @@ RUN apt-get update && apt-get install -y \
     rm -rf /var/lib/apt/lists/*
 COPY python_prototype/requirements.txt .
 RUN pip3 install --upgrade -r requirements.txt
+RUN rm requirements.txt
 
 # Clean up
 WORKDIR /tmp
