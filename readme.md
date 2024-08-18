@@ -40,7 +40,8 @@ To generate the Makefile, run `cmake CMakeLists.txt` from `/asic/func_sim`. Comp
 
 ### RTL
 For RTL verification, we use `verilator` and `CocoTB`. These are installed when building the Docker container.\
-You can inspect dumpfiles with `gtkwave`. Install the program with Homebrew: `brew install --cask gtkwave`.\
+You can inspect dumpfiles with `gtkwave`. Install the program with Homebrew: `brew install --HEAD randomplum/gtkwave/gtkwave`.\
+Run GTKWave with `gtkwave <dump file>`.
 
 ### LaTeX
 To compile LaTeX documents, we use `latexmk`. We also need `biber` and `texlive`. To generate pretty EPS plots, we use the Python package `SciencePlots`.

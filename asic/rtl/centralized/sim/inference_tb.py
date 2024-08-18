@@ -7,6 +7,8 @@ CLK_FREQ_MHZ = 100
 
 # ----- TEST ----- #
 @cocotb.test()
-async def cim_centralized_tb(dut):
+async def inference_tb(dut):
     cocotb.start_soon(Clock(dut.clk, 1/CLK_FREQ_MHZ, 'us').start())
-    
+
+    for _ in range(1000):
+        await RisingEdge(dut.clk)

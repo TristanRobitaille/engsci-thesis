@@ -1,5 +1,6 @@
-module cim_centralized #()
-(
+import Defines::*;
+
+module cim_centralized #()(
     input wire clk, rst_n
 );
 
@@ -35,6 +36,12 @@ counter #(.WIDTH(7), .MODE(0)) cnt_7b (.clk(clk), .rst_n(cnt_7b_rst_n), .inc(cnt
 logic cnt_9b_rst_n, cnt_9b_inc;
 logic [8:0] cnt_9b_cnt;
 counter #(.WIDTH(9), .MODE(0)) cnt_9b (.clk(clk), .rst_n(cnt_9b_rst_n), .inc(cnt_9b_inc), .cnt(cnt_9b_cnt));
+
+// ----- GLOBAL SIGNALS ----- //
+TempResAddr_t temp_res_addr;
+ParamAddr_t param_addr;
+Param_t params [CIM_PARAMS_STORAGE_SIZE_NUM_ELEM-1:0];
+IntResSingle_t int_res [CIM_INT_RES_SIZE_NUM_ELEM-1:0];
 
 // ----- FSM ----- //
 always_ff @ (posedge clk) begin : main_fsm
