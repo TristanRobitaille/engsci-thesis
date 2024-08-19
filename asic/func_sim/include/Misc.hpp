@@ -22,13 +22,14 @@
 #define PRINT_INF_PROGRESS          false
 
 #if DISTRIBUTED_ARCH
-#define CIM_PARAMS_STORAGE_SIZE_NUM_ELEM 528
-#define CIM_INT_RES_SIZE_NUM_ELEM 886
+#define CIM_PARAMS_BANK_SIZE_NUM_WORD   528
+#define CIM_INT_RES_BANK_SIZE_NUM_WORD  886
 #elif CENTRALIZED_ARCH
-#define CIM_PARAMS_STORAGE_SIZE_NUM_ELEM 31648
-#define CIM_INT_RES_SIZE_NUM_ELEM 57116
+// Need to synthesize two memory banks as the maximum size is 16384. Needs to be divisible by 2*32
+#define CIM_PARAMS_BANK_SIZE_NUM_WORD   15872 // Need 2 banks
+#define CIM_INT_RES_BANK_SIZE_NUM_WORD  14336 // Need 4 banks
+#define NUM_INT_RES_BANKS               4
 #endif
-
 
 /*----- TYPEDEFS -----*/
 // All fixed-point types are signed and all except for comp_fx_t have the same number of bits. We adjust the fix point format on each layer.

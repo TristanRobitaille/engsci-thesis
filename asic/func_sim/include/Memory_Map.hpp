@@ -170,15 +170,15 @@ const std::map<DATA, uint32_t> mem_map = {
     {ENC_V_MEM,                 (NUM_PATCHES+1)*EMB_DEPTH}, // Need to protect positional embedding as we'll use it below
     {ENC_QK_T_MEM,              2*DOUBLE_WIDTH*(NUM_PATCHES+1)*EMB_DEPTH + 2*(NUM_PATCHES+1)*EMB_DEPTH},
     {ENC_V_MULT_MEM,            2*DOUBLE_WIDTH*(NUM_PATCHES+1)*EMB_DEPTH + 2*(NUM_PATCHES+1)*EMB_DEPTH + NUM_HEADS*(NUM_PATCHES+1)*(NUM_PATCHES+1)},
-    {ENC_MHSA_OUT_MEM,          (NUM_PATCHES+1)*EMB_DEPTH},
-    {ENC_LN2_MEM,               DOUBLE_WIDTH*2*(NUM_PATCHES+1)*EMB_DEPTH},
-    {ENC_MLP_DENSE1_MEM,        DOUBLE_WIDTH*3*(NUM_PATCHES+1)*EMB_DEPTH},
-    {ENC_MLP_OUT_MEM,           DOUBLE_WIDTH*4*(NUM_PATCHES+1)*EMB_DEPTH},
-    {ENC_LN3_MEM,               DOUBLE_WIDTH*4*(NUM_PATCHES+2)*EMB_DEPTH},
-    {MLP_HEAD_DENSE_1_OUT_MEM,  DOUBLE_WIDTH*4*(NUM_PATCHES+3)*EMB_DEPTH},
-    {MLP_HEAD_DENSE_2_OUT_MEM,  DOUBLE_WIDTH*4*(NUM_PATCHES+3)*EMB_DEPTH+DOUBLE_WIDTH*MLP_DIM},
+    {ENC_MHSA_OUT_MEM,          DOUBLE_WIDTH*(NUM_PATCHES+1)*EMB_DEPTH},
+    {ENC_LN2_MEM,               0},
+    {ENC_MLP_DENSE1_MEM,        DOUBLE_WIDTH*EMB_DEPTH*EMB_DEPTH},
+    {ENC_MLP_OUT_MEM,           0},
+    {ENC_LN3_MEM,               DOUBLE_WIDTH*EMB_DEPTH*EMB_DEPTH},
+    {MLP_HEAD_DENSE_1_OUT_MEM,  0},
+    {MLP_HEAD_DENSE_2_OUT_MEM,  DOUBLE_WIDTH*EMB_DEPTH*EMB_DEPTH},
     {SOFTMAX_AVG_SUM_MEM,       0},
-    {PREV_SOFTMAX_OUTPUT_MEM,   CIM_INT_RES_SIZE_NUM_ELEM - DOUBLE_WIDTH*NUM_SLEEP_STAGES*(NUM_SAMPLES_OUT_AVG-1)}
+    {PREV_SOFTMAX_OUTPUT_MEM,   NUM_INT_RES_BANKS*CIM_INT_RES_BANK_SIZE_NUM_WORD - DOUBLE_WIDTH*NUM_SLEEP_STAGES*(NUM_SAMPLES_OUT_AVG-1)}
 };
 
 /*----- STRUCT -----*/
@@ -189,17 +189,17 @@ struct ParamInfo {
 
 /*----- STATIC -----*/
 static std::map<PARAM_NAME, ParamInfo> param_addr_map = {
-    {PATCH_PROJ_KERNEL_PARAMS,  {/*addr*/ 0,        /*len*/ PATCH_LEN*EMB_DEPTH}},
-    {POS_EMB_PARAMS,            {/*addr*/ 4096,     /*len*/ (NUM_PATCHES+1)*EMB_DEPTH}},
-    {ENC_Q_DENSE_PARAMS,        {/*addr*/ 8000,     /*len*/ PATCH_LEN*EMB_DEPTH}},
-    {ENC_K_DENSE_PARAMS,        {/*addr*/ 12096,    /*len*/ PATCH_LEN*EMB_DEPTH}},
-    {ENC_V_DENSE_PARAMS,        {/*addr*/ 16192,    /*len*/ PATCH_LEN*EMB_DEPTH}},
-    {ENC_COMB_HEAD_PARAMS,      {/*addr*/ 20288,    /*len*/ PATCH_LEN*EMB_DEPTH}},
-    {ENC_MLP_DENSE_1_PARAMS,    {/*addr*/ 24384,    /*len*/ EMB_DEPTH*MLP_DIM}},
-    {ENC_MLP_DENSE_2_PARAMS,    {/*addr*/ 26432,    /*len*/ MLP_DIM*EMB_DEPTH}},
-    {MLP_HEAD_DENSE_1_PARAMS,   {/*addr*/ 28480,    /*len*/ MLP_DIM*EMB_DEPTH}},
-    {MLP_HEAD_DENSE_2_PARAMS,   {/*addr*/ 30528,    /*len*/ NUM_SLEEP_STAGES*MLP_DIM}},
-    {SINGLE_PARAMS,             {/*addr*/ 30688,    /*len*/ 961}}
+    {PATCH_PROJ_KERNEL_PARAMS,      {/*addr*/ 0,        /*len*/ PATCH_LEN*EMB_DEPTH}},
+    {POS_EMB_PARAMS,                {/*addr*/ 4096,     /*len*/ (NUM_PATCHES+1)*EMB_DEPTH}},
+    {ENC_Q_DENSE_PARAMS,            {/*addr*/ 8000,     /*len*/ PATCH_LEN*EMB_DEPTH}},
+    {ENC_K_DENSE_PARAMS,            {/*addr*/ 12096,    /*len*/ PATCH_LEN*EMB_DEPTH}},
+    {ENC_V_DENSE_PARAMS,            {/*addr*/ 16192,    /*len*/ PATCH_LEN*EMB_DEPTH}},
+    {ENC_COMB_HEAD_PARAMS,          {/*addr*/ 20288,    /*len*/ PATCH_LEN*EMB_DEPTH}},
+    {ENC_MLP_DENSE_1_PARAMS,        {/*addr*/ 24384,    /*len*/ EMB_DEPTH*MLP_DIM}},
+    {ENC_MLP_DENSE_2_PARAMS,        {/*addr*/ 26432,    /*len*/ MLP_DIM*EMB_DEPTH}},
+    {MLP_HEAD_DENSE_1_PARAMS,       {/*addr*/ 28480,    /*len*/ MLP_DIM*EMB_DEPTH}},
+    {MLP_HEAD_DENSE_2_PARAMS,       {/*addr*/ 30528,    /*len*/ NUM_SLEEP_STAGES*MLP_DIM}},
+    {SINGLE_PARAMS,                 {/*addr*/ 30688,    /*len*/ 961}}
 };
 
 static std::map<SINGLE_PARAM_OFFSET, ParamInfo> param_addr_map_bias = {
