@@ -84,9 +84,8 @@ void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, uint8_t id, float* dat
     }
 }
 #elif CENTRALIZED_ARCH
-void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, IntResRead_t data_read, uint32_t starting_addr, uint16_t outside_dim_len, DATA_WIDTH data_width) {
+void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, IntResRead_t data_read, uint32_t starting_addr, uint16_t outside_dim_len) {
     if (ENABLE_COMPUTATION_VERIFICATION == false) { return; }
-    uint16_t stride = (data_width == SINGLE_WIDTH) ? 1 : 2;
 
     if (cim_step == POST_SOFTMAX_AVG_VERIF) {
         rapidcsv::Document csv(step_verif_info[MLP_HEAD_SOFTMAX_DIV_VERIF].csv_fp, rapidcsv::LabelParams(-1, -1));
@@ -99,7 +98,7 @@ void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, IntResRead_t data_read
             vector<float> dummy_softmax = csv.GetRow<float>(0);
             for (int j = 0; j < NUM_SLEEP_STAGES; j++) { ref_data[j] += dummy_softmax[j] / NUM_SAMPLES_OUT_AVG; }
         }
-        for (int i = 0; i < NUM_SLEEP_STAGES; i++) { are_equal(ref_data[i], data_read(starting_addr+stride*i), starting_addr+stride*i); }
+        for (int i = 0; i < NUM_SLEEP_STAGES; i++) { are_equal(ref_data[i], data_read(starting_addr+i), starting_addr+i); }
     } else {
         uint8_t num_repeats;
         if (cim_step == ENC_MHSA_DENSE_QK_T_VERIF || cim_step == ENC_SOFTMAX_VERIF) { num_repeats = NUM_HEADS; }
@@ -117,7 +116,7 @@ void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, IntResRead_t data_read
             for (int i = 0; i < num_rows; i++) { // Row
                 vector<float> ref_data = csv.GetRow<float>(i);
                 for (int j = 0; j < csv.GetColumnCount(); j++) { // Colum
-                    int32_t addr = starting_addr + stride*(j + i*outside_dim_len + repeat*(NUM_PATCHES+1)*(NUM_PATCHES+1));
+                    int32_t addr = starting_addr + j + i*outside_dim_len + repeat*(NUM_PATCHES+1)*(NUM_PATCHES+1);
                     if (cim_step == MLP_HEAD_SOFTMAX_DIV_VERIF) { are_equal(ref_data[j]/NUM_SAMPLES_OUT_AVG, data_read(addr), addr); }
                     else { are_equal(ref_data[j], data_read(addr), addr); }
                 }
@@ -125,12 +124,16 @@ void verify_layer_out(COMPUTE_VERIFICATION_STEP cim_step, IntResRead_t data_read
         }
     }
 }
-
 #endif
 
+#if DISTRIBUTED_ARCH
 void print_softmax_error(float* input_data, uint32_t starting_addr, DATA_WIDTH data_width) {
-    if (ENABLE_COMPUTATION_VERIFICATION == false) { return; }
     uint16_t stride = (data_width == SINGLE_WIDTH) ? 1 : 2;
+#elif CENTRALIZED_ARCH
+void print_softmax_error(float* input_data, uint32_t starting_addr) {
+    uint16_t stride = 1;
+#endif
+    if (ENABLE_COMPUTATION_VERIFICATION == false) { return; }
 
     rapidcsv::Document csv(step_verif_info[MLP_HEAD_SOFTMAX_VERIF].csv_fp, rapidcsv::LabelParams(-1, -1));
     vector<float> ref_softmax = csv.GetColumn<float>(0);
@@ -148,17 +151,17 @@ void print_softmax_error(float* input_data, uint32_t starting_addr, DATA_WIDTH d
 #if DISTRIBUTED_ARCH
 void verify_result(RESULT_TYPE type, float result, float* input_data, uint16_t starting_addr, uint16_t len, uint8_t id, DATA_WIDTH data_width) {
 #elif CENTRALIZED_ARCH
-void verify_result(RESULT_TYPE type, float result, IntResRead_t data_read, uint32_t starting_addr, uint16_t len, DATA_WIDTH data_width) {
+void verify_result(RESULT_TYPE type, float result, IntResRead_t data_read, uint32_t starting_addr, uint16_t len) {
 #endif
     if (ENABLE_COMPUTATION_VERIFICATION == false) { return; }
 
     float data[len];
     float reference_result = 0.0f;
-    uint16_t stride = (data_width == SINGLE_WIDTH) ? 1 : 2;
+
 #if DISTRIBUTED_ARCH
-    for (int i = 0; i < len; i++) { data[i] = input_data[starting_addr+stride*i]; }
+    for (int i = 0; i < len; i++) { data[i] = input_data[starting_addr+data_width*i]; }
 #elif CENTRALIZED_ARCH
-    for (int i = 0; i < len; i++) { data[i] = data_read(starting_addr+stride*i); }
+    for (int i = 0; i < len; i++) { data[i] = data_read(starting_addr+i); }
 #endif
     arma::fvec arma_data(data, len);
 
@@ -191,9 +194,9 @@ void verify_softmax_storage(float* input_data, uint32_t prev_softmax_base_addr) 
             addr = prev_softmax_base_addr + DOUBLE_WIDTH*j;
             are_equal(ref_softmax[j]/NUM_SAMPLES_OUT_AVG, input_data[addr], addr, 0);
 #elif CENTRALIZED_ARCH
-            int32_t addr = prev_softmax_base_addr + DOUBLE_WIDTH*j;
+            int32_t addr = prev_softmax_base_addr + j;
             are_equal(ref_softmax[j]/NUM_SAMPLES_OUT_AVG, input_data[addr], addr);
-            addr += DOUBLE_WIDTH*NUM_SLEEP_STAGES;
+            addr += NUM_SLEEP_STAGES;
             are_equal(dummy_softmax[j]/NUM_SAMPLES_OUT_AVG, input_data[addr], addr);
 #endif
         }
