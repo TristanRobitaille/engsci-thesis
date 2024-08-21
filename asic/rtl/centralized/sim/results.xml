@@ -1,0 +1,6 @@
+<testsuites name="results">
+  <testsuite name="all" package="all">
+    <property name="random_seed" value="1723953256" />
+    <testcase name="inference_tb" classname="inference_tb" file="/tmp/asic/rtl/centralized/sim/inference_tb.py" lineno="9" time="0.025045394897460938" sim_time_ns="9990.001" ratio_time="398875.76302551216" />
+  </testsuite>
+</testsuites>

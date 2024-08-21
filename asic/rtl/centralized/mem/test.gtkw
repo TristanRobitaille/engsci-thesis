@@ -1,0 +1,36 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Wed Aug 21 04:50:06 2024
+[*]
+[dumpfile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/mem/sim_build/dump.fst"
+[dumpfile_mtime] "Wed Aug 21 04:49:42 2024"
+[dumpfile_size] 1371
+[savefile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/mem/test.gtkw"
+[timestart] 0
+[size] 1512 916
+[pos] -1 -1
+*-15.900000 40000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[treeopen] mem_tb.
+[treeopen] mem_tb.params.
+[treeopen] mem_tb.params.params_0.
+[sst_width] 253
+[signals_width] 156
+[sst_expanded] 1
+[sst_vpaned_height] 256
+@28
+mem_tb.clk
+mem_tb.rst_n
+mem_tb.params.params_0.WEN
+mem_tb.params.params_0.CEN
+@22
+mem_tb.params.params_0.write.data[8:0]
+mem_tb.params.params_0.write.addr[13:0]
+@200
+-
+@22
+mem_tb.params.params_0.read.data[8:0]
+mem_tb.params.params_0.read.addr[13:0]
+@29
+mem_tb.params.params_0.read.en
+[pattern_trace] 1
+[pattern_trace] 0

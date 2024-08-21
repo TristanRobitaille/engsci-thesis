@@ -1,0 +1,6 @@
+<testsuites name="results">
+  <testsuite name="all" package="all">
+    <property name="random_seed" value="1724219880" />
+    <testcase name="mem_tb" classname="mem_tb" file="/tmp/asic/rtl/centralized/mem/mem_tb.py" lineno="35" time="0.17298054695129395" sim_time_ns="30010.01" ratio_time="173487.77379256353" />
+  </testsuite>
+</testsuites>

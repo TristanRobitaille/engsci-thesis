@@ -1,0 +1,8 @@
+<testsuites name="results">
+  <testsuite name="all" package="all">
+    <property name="random_seed" value="1724216181" />
+    <testcase name="mem_tb" classname="mem_tb" file="/tmp/asic/rtl/centralized/mem/mem_tb.py" lineno="27" time="0.004476070404052734" sim_time_ns="40.01" ratio_time="8938.644031106849">
+      <failure message="Test failed with RANDOM_SEED=1724216181" />
+    </testcase>
+  </testsuite>
+</testsuites>
