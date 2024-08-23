@@ -25,7 +25,6 @@ int CiM_Centralized::reset(){
     gen_cnt_9b.reset();
     cim_state = IDLE_CIM;
     current_inf_step = INVALID_STEP;
-    system_state = IDLE;
     mac_or_div = MAC_OP;
     mac_or_add = ADD_OP;
     generic_done = false;
@@ -211,7 +210,7 @@ uint16_t CiM_Centralized::get_softmax_max_index() {
     return _softmax_max_index;
 }
 
-SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_base_filepath, string eeg_filepath, uint16_t clip_index) {
+bool CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_base_filepath, string eeg_filepath, uint16_t clip_index) {
     /* Run the CiM FSM */
     if (ext_sigs->master_nrst == false) {
         reset();
@@ -233,7 +232,6 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
         case INFERENCE_RUNNING:
             if (current_inf_step == INFERENCE_COMPLETE) {
                 cim_state = IDLE_CIM;
-                system_state = EVERYTHING_FINISHED;
             }
             break;
 
@@ -818,7 +816,7 @@ SYSTEM_STATE CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_b
     // Reset compute done (stays on for only one cycle)
     reset_compute_done();
 
-    return system_state;
+    return (current_inf_step == INFERENCE_COMPLETE) & (cim_state == IDLE_CIM);
 }
 
 #endif

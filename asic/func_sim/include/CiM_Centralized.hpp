@@ -58,7 +58,6 @@ class CiM_Centralized : public CiM_Compute {
         uint16_t _softmax_max_index;
         STATE cim_state = INVALID_CIM;
         INFERENCE_STEP current_inf_step = INVALID_STEP;
-        SYSTEM_STATE system_state;
         Counter gen_cnt_4b;
         Counter gen_cnt_7b;
         Counter gen_cnt_9b;
@@ -72,7 +71,7 @@ class CiM_Centralized : public CiM_Compute {
     public:
         CiM_Centralized(const std::string params_filepath);
         int reset();
-        SYSTEM_STATE run(struct ext_signals* ext_sigs, string softmax_base_filepath, string eeg_filepath, uint16_t clip_index);
+        bool run(struct ext_signals* ext_sigs, string softmax_base_filepath, string eeg_filepath, uint16_t clip_index);
         uint16_t get_softmax_max_index();
 };
 

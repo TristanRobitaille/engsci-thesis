@@ -2,18 +2,18 @@ import Defines::*;
 
 module params_mem (
     input logic clk, rst_n,
-    input MemoryAccessSignals.data_in write,
-    output MemoryAccessSignals.data_out read
+    input MemoryInterface.data_in write,
+    output MemoryInterface.data_out read
 );
 
     //Theory of operation: Params are always SINGLE_WIDTH so both banks form essentially a contiguous block of memory, with params_1 mapping the upper addresses
 
     // Signals
     logic params_0_read_en_prev, params_1_read_en_prev;
-    MemoryAccessSignals #(Param_t, ParamBankAddr_t) params_0_read ();
-    MemoryAccessSignals #(Param_t, ParamBankAddr_t) params_0_write ();
-    MemoryAccessSignals #(Param_t, ParamBankAddr_t) params_1_read ();
-    MemoryAccessSignals #(Param_t, ParamBankAddr_t) params_1_write ();
+    MemoryInterface #(Param_t, ParamBankAddr_t) params_0_read ();
+    MemoryInterface #(Param_t, ParamBankAddr_t) params_0_write ();
+    MemoryInterface #(Param_t, ParamBankAddr_t) params_1_read ();
+    MemoryInterface #(Param_t, ParamBankAddr_t) params_1_write ();
     mem_model #(.DEPTH(CIM_PARAMS_BANK_SIZE_NUM_WORD)) params_0 (.rst_n, .clk, .read(params_0_read), .write(params_0_write));
     mem_model #(.DEPTH(CIM_PARAMS_BANK_SIZE_NUM_WORD)) params_1 (.rst_n, .clk, .read(params_1_read), .write(params_1_write));
 

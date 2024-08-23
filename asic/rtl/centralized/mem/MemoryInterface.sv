@@ -1,6 +1,6 @@
 import Defines::*;
 
-interface MemoryAccessSignals # (
+interface MemoryInterface # (
     parameter type Data_t,
     parameter type Addr_t
 );

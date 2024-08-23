@@ -2,8 +2,8 @@ module mem_model #(
     parameter int DEPTH
 )(
     input logic clk, rst_n,
-    input MemoryAccessSignals.data_in_bank write,
-    output MemoryAccessSignals.data_out_bank read
+    input MemoryInterface.data_in_bank write,
+    output MemoryInterface.data_out_bank read
 );
 
     logic WEN, CEN;

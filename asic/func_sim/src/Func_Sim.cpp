@@ -119,7 +119,7 @@ void run_sim(uint32_t clip_num, string results_csv_fp) {
         epoch_cnt++;
 #elif CENTRALIZED_ARCH
         check_event_schedule(epoch_cnt);
-        if (cim.run(&ext_sigs, string(DATA_BASE_DIR)+"dummy_softmax_", string(DATA_BASE_DIR)+"eeg.h5", clip_num) == EVERYTHING_FINISHED) { break; }; // Run CiM
+        if (cim.run(&ext_sigs, string(DATA_BASE_DIR)+"dummy_softmax_", string(DATA_BASE_DIR)+"eeg.h5", clip_num)) { break; }; // Run CiM
         epoch_cnt++;
 #else 
         throw invalid_argument("Please define either DISTRIBUTED_ARCH or CENTRALIZED_ARCH!");

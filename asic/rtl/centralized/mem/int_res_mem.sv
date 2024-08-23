@@ -2,8 +2,8 @@ import Defines::*;
 
 module int_res_mem (
     input clk, rst_n,
-    input MemoryAccessSignals.data_in write,
-    output MemoryAccessSignals.data_out read
+    input MemoryInterface.data_in write,
+    output MemoryInterface.data_out read
 );
 
     /*  Theory of operation
@@ -15,14 +15,14 @@ module int_res_mem (
     */
 
     // Signals to individual memory banks instantiated in the memory controller
-    MemoryAccessSignals #(IntResSingle_t, IntResBankAddr_t) int_res_0_read ();
-    MemoryAccessSignals #(IntResSingle_t, IntResBankAddr_t) int_res_0_write ();
-    MemoryAccessSignals #(IntResSingle_t, IntResBankAddr_t) int_res_1_read ();
-    MemoryAccessSignals #(IntResSingle_t, IntResBankAddr_t) int_res_1_write ();
-    MemoryAccessSignals #(IntResSingle_t, IntResBankAddr_t) int_res_2_read ();
-    MemoryAccessSignals #(IntResSingle_t, IntResBankAddr_t) int_res_2_write ();
-    MemoryAccessSignals #(IntResSingle_t, IntResBankAddr_t) int_res_3_read ();
-    MemoryAccessSignals #(IntResSingle_t, IntResBankAddr_t) int_res_3_write ();
+    MemoryInterface #(IntResSingle_t, IntResBankAddr_t) int_res_0_read ();
+    MemoryInterface #(IntResSingle_t, IntResBankAddr_t) int_res_0_write ();
+    MemoryInterface #(IntResSingle_t, IntResBankAddr_t) int_res_1_read ();
+    MemoryInterface #(IntResSingle_t, IntResBankAddr_t) int_res_1_write ();
+    MemoryInterface #(IntResSingle_t, IntResBankAddr_t) int_res_2_read ();
+    MemoryInterface #(IntResSingle_t, IntResBankAddr_t) int_res_2_write ();
+    MemoryInterface #(IntResSingle_t, IntResBankAddr_t) int_res_3_read ();
+    MemoryInterface #(IntResSingle_t, IntResBankAddr_t) int_res_3_write ();
 
     mem_model #(.DEPTH(CIM_INT_RES_BANK_SIZE_NUM_WORD)) int_res_0 (.clk, .rst_n, .read(int_res_0_read), .write(int_res_0_write));
     mem_model #(.DEPTH(CIM_INT_RES_BANK_SIZE_NUM_WORD)) int_res_1 (.clk, .rst_n, .read(int_res_1_read), .write(int_res_1_write));

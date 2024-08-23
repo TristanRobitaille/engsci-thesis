@@ -35,19 +35,19 @@
 // All fixed-point types are signed and all except for comp_fx_t have the same number of bits. We adjust the fix point format on each layer.
 // Xilinx AP_FIXED format: ap_fixed<width, integer, quantization_mode, overflow_mode, num. sat. bit> (https://docs.amd.com/r/en-US/ug1399-vitis-hls/Arbitrary-Precision-Fixed-Point-Data-Types)
 // TODO: Evaluate best quantization and overflow modes
-using comp_fx_t         = ap_fixed<N_COMP, N_COMP-Q_COMP, AP_RND_CONV, AP_SAT_SYM>;
-using softmax_exp_fx_t  = ap_fixed<N_COMP, N_COMP-Q_COMP, AP_RND_CONV, AP_SAT_SYM>;
+using comp_fx_t         = ap_fixed<N_COMP, N_COMP-Q_COMP, AP_TRN_ZERO, AP_WRAP>;
+using softmax_exp_fx_t  = ap_fixed<N_COMP, N_COMP-Q_COMP, AP_TRN_ZERO, AP_WRAP>;
 
-using params_fx_2_x_t   = ap_fixed<N_STO_PARAMS, 2, AP_RND_CONV, AP_SAT_SYM>; // ]-2, 2[
-using params_fx_3_x_t   = ap_fixed<N_STO_PARAMS, 3, AP_RND_CONV, AP_SAT_SYM>; // ]-4, 4[
-using params_fx_4_x_t   = ap_fixed<N_STO_PARAMS, 4, AP_RND_CONV, AP_SAT_SYM>; // ]-8, 8[
-using params_fx_5_x_t   = ap_fixed<N_STO_PARAMS, 5, AP_RND_CONV, AP_SAT_SYM>; // ]-16, 16[
+using params_fx_2_x_t   = ap_fixed<N_STO_PARAMS, 2, AP_TRN_ZERO, AP_WRAP>; // ]-2, 2[
+using params_fx_3_x_t   = ap_fixed<N_STO_PARAMS, 3, AP_TRN_ZERO, AP_WRAP>; // ]-4, 4[
+using params_fx_4_x_t   = ap_fixed<N_STO_PARAMS, 4, AP_TRN_ZERO, AP_WRAP>; // ]-8, 8[
+using params_fx_5_x_t   = ap_fixed<N_STO_PARAMS, 5, AP_TRN_ZERO, AP_WRAP>; // ]-16, 16[
 
-using sw_fx_1_x_t       = ap_fixed<N_STO_INT_RES, 1, AP_RND_CONV, AP_SAT_SYM>; // ]-1, 1[
-using sw_fx_2_x_t       = ap_fixed<N_STO_INT_RES, 2, AP_RND_CONV, AP_SAT_SYM>; // ]-2, 2[
-using sw_fx_5_x_t       = ap_fixed<N_STO_INT_RES, 5, AP_RND_CONV, AP_SAT_SYM>; // ]-16, 16[
-using sw_fx_6_x_t       = ap_fixed<N_STO_INT_RES, 6, AP_RND_CONV, AP_SAT_SYM>; // ]-32, 32[
-using dw_fx_x_t         = ap_fixed<2*N_STO_INT_RES, 8, AP_RND_CONV, AP_SAT_SYM>; // TODO: Reduce num integer bits
+using sw_fx_1_x_t       = ap_fixed<N_STO_INT_RES, 1, AP_TRN_ZERO, AP_WRAP>; // ]-1, 1[
+using sw_fx_2_x_t       = ap_fixed<N_STO_INT_RES, 2, AP_TRN_ZERO, AP_WRAP>; // ]-2, 2[
+using sw_fx_5_x_t       = ap_fixed<N_STO_INT_RES, 5, AP_TRN_ZERO, AP_WRAP>; // ]-16, 16[
+using sw_fx_6_x_t       = ap_fixed<N_STO_INT_RES, 6, AP_TRN_ZERO, AP_WRAP>; // ]-32, 32[
+using dw_fx_x_t         = ap_fixed<2*N_STO_INT_RES, 8, AP_TRN_ZERO, AP_WRAP>; // TODO: Reduce num integer bits
 
 /*----- MACROS -----*/
 #if DISTRIBUTED_ARCH
