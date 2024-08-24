@@ -130,7 +130,7 @@ async def start_routine_basic_arithmetic(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start()) # 100MHz clock
     await RisingEdge(dut.clk)
     await reset(dut)
-    dut.refresh.value = 1
+    dut.start.value = 1
     
 def BinToDec(dec:float, num_type:FXfamily):
     z2 = num_type(dec)

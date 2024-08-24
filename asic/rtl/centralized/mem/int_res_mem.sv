@@ -7,7 +7,7 @@ module int_res_mem (
 );
 
     /*  Theory of operation
-        The intermediate results memory is split into 4 banks, and supports two data width: SINGLE_WIDTH and DOUBLE_WIDTH. The later uses two
+        The intermediate results memory is split into 4 banks, and supports 2 data width: SINGLE_WIDTH and DOUBLE_WIDTH. The later uses two
         locations to represent the upper and lower halves. Each bank is single-port. To permit single-cycle accesses for DOUBLE_WIDTH data, the upper and lower halves
         are always stored at the same address, but in different banks. Banks 0 and 2 hold the two halves of a double word (bank 0 storing the Most-Significant Half).
         Banks 1 and 3 hold the two halves of a word (bank 1 storing the Most-Significant Half). Apart from that, the memory looks contiguous to the rest of the system.

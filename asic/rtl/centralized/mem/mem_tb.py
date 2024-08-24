@@ -3,7 +3,7 @@ import random
 from cocotb.triggers import RisingEdge
 from cocotb.clock import Clock
 
-import Constants
+import Constants as const
 
 # ----- CONSTANTS ----- #
 CLK_FREQ_MHZ = 100
@@ -37,9 +37,9 @@ async def write_one_word(dut, addr:int, data:int, device:str, width:int):
 
 async def test_params(dut):
     for _ in range(NUM_WRITES):
-        addr = random.randint(0, Constants.CIM_PARAMS_NUM_BANKS * Constants.CIM_PARAMS_BANK_SIZE_NUM_WORD)
-        data = random.randint(0, 2**Constants.N_STO_PARAMS-1)
-        await write_one_word(dut, addr=addr, data=data, device="params", width=Constants.DataWidth.SINGLE_WIDTH.value)
+        addr = random.randint(0, const.CIM_PARAMS_NUM_BANKS * const.CIM_PARAMS_BANK_SIZE_NUM_WORD)
+        data = random.randint(0, 2**const.N_STO_PARAMS-1)
+        await write_one_word(dut, addr=addr, data=data, device="params", width=const.DataWidth.SINGLE_WIDTH.value)
 
         # Check if the data was written correctly
         dut.param_read_en.value = 1
@@ -49,11 +49,11 @@ async def test_params(dut):
         dut.param_read_en.value = 0
 
 async def test_int_res(dut):
-    for width in [Constants.DataWidth.SINGLE_WIDTH, Constants.DataWidth.DOUBLE_WIDTH]:
+    for width in [const.DataWidth.SINGLE_WIDTH, const.DataWidth.DOUBLE_WIDTH]:
         for _ in range(NUM_WRITES):
-            addr = random.randint(0, Constants.CIM_INT_RES_NUM_BANKS * Constants.CIM_INT_RES_BANK_SIZE_NUM_WORD)
-            if (width == Constants.DataWidth.SINGLE_WIDTH): data = random.randint(0, 2**Constants.N_STO_INT_RES-1)
-            elif (width == Constants.DataWidth.DOUBLE_WIDTH): data = random.randint(0, 2**(2*Constants.N_STO_INT_RES)-1)
+            addr = random.randint(0, const.CIM_INT_RES_NUM_BANKS * const.CIM_INT_RES_BANK_SIZE_NUM_WORD)
+            if (width == const.DataWidth.SINGLE_WIDTH): data = random.randint(0, 2**const.N_STO_INT_RES-1)
+            elif (width == const.DataWidth.DOUBLE_WIDTH): data = random.randint(0, 2**(2*const.N_STO_INT_RES)-1)
 
             await write_one_word(dut, addr=addr, data=data, device="int_res", width=width.value)
 

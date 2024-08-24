@@ -9,6 +9,7 @@ package Defines;
     localparam int CIM_INT_RES_NUM_BANKS            = 4;
     localparam int N_STO_INT_RES                    = 9;
     localparam int N_STO_PARAMS                     = 9;
+    localparam int N_COMP                           = 38;
 
     localparam int EMB_DEPTH = 64;
     localparam int NUM_PATCHES = 60;
@@ -18,14 +19,17 @@ package Defines;
     localparam int NUM_SLEEP_STAGES = 5;
     localparam int NUM_SAMPLES_OUT_AVG = 3;
 
+    localparam MAC_MAX_LEN = 64;
+
     /* ----- Types ----- */
     typedef logic [$clog2(CIM_INT_RES_NUM_BANKS*CIM_PARAMS_BANK_SIZE_NUM_WORD)-1:0] IntResAddr_t;
     typedef logic [$clog2(CIM_PARAMS_NUM_BANKS*CIM_INT_RES_BANK_SIZE_NUM_WORD)-1:0] ParamAddr_t;
     typedef logic [$clog2(CIM_INT_RES_BANK_SIZE_NUM_WORD)-1:0]                      IntResBankAddr_t;
     typedef logic [$clog2(CIM_PARAMS_BANK_SIZE_NUM_WORD)-1:0]                       ParamBankAddr_t;
-    typedef logic [N_STO_PARAMS-1:0]                                                Param_t;
-    typedef logic [N_STO_INT_RES-1:0]                                               IntResSingle_t;
-    typedef logic [2*N_STO_INT_RES-1:0]                                             IntResDouble_t;
+    typedef logic signed [N_STO_PARAMS-1:0]                                         Param_t;
+    typedef logic signed [N_STO_INT_RES-1:0]                                        IntResSingle_t;
+    typedef logic signed [2*N_STO_INT_RES-1:0]                                      IntResDouble_t;
+    typedef logic signed [N_COMP-1:0]                                               CompFx_t;
 
     /* ----- Enum ----- */
     typedef enum logic {
@@ -38,6 +42,19 @@ package Defines;
         INFERENCE_RUNNING,
         INVALID_CIM
     } State_t;
+
+    typedef enum logic [1:0] {
+        MODEL_PARAM,
+        INTERMEDIATE_RES,
+        IMMEDIATE_VAL,
+        ADC_INPUT
+    } ParamType_t;
+
+    typedef enum logic [1:0] {
+        NO_ACTIVATION,
+        LINEAR_ACTIVATION,
+        SWISH_ACTIVATION
+    } Activation_t;
 
     typedef enum logic [4:0] {
         PATCH_PROJ_STEP,
