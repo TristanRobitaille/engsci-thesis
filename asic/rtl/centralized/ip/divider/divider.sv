@@ -13,7 +13,7 @@
 
 module divider (
     input wire clk, rst_n,
-    input ComputeIPInterface.basic io
+    input ComputeIPInterface.basic_in io
 );
     typedef logic [$clog2(N_COMP):0] count_t;
     count_t count;

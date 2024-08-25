@@ -11,7 +11,7 @@
 module multiplier (
     input wire clk,
     input wire rst_n,
-    input ComputeIPInterface.basic io
+    input ComputeIPInterface.basic_in io
 );
 
     localparam LSB = Q_COMP; // LSB of fractional part that we retain in output
@@ -50,9 +50,10 @@ module multiplier (
         end
     end
 
-    assign io.out = rounded_temp[2*N_COMP-(N_COMP-Q_COMP)-1:Q_COMP];
+    assign io.out = rounded_temp[2*N_COMP-(N_COMP-Q_COMP)-1:Q_COMP]; // Essentially AP_TRN (truncation towards minus infinity)
 
     // Overflow detection
+    // Note that if the result is too small to be represented (and thus "0"), the overflow may trigger if one of the input was negative
     always_comb begin : multipler_overflow
         logic one_is_zero = (in_1_q == 'd0) || (in_2_q == 'd0);
         logic out_is_neg = io.out[N_COMP-1];

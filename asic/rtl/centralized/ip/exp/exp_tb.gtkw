@@ -1,0 +1,47 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Sun Aug 25 21:13:48 2024
+[*]
+[dumpfile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/ip/exp/sim_build/dump.fst"
+[dumpfile_mtime] "Sun Aug 25 19:21:01 2024"
+[dumpfile_size] 3219
+[savefile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/ip/exp/exp_tb.gtkw"
+[timestart] 0
+[size] 1512 1639
+[pos] -1 -1
+*-15.000000 30000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[treeopen] exp_tb.
+[treeopen] exp_tb.adder.
+[treeopen] exp_tb.mult.
+[sst_width] 253
+[signals_width] 228
+[sst_expanded] 1
+[sst_vpaned_height] 522
+@28
+exp_tb.clk
+exp_tb.start
+@100000028
+exp_tb.exp.state[2:0]
+@421
+exp_tb.io.in_1[37:0]
+exp_tb.io.out[37:0]
+@200
+-
+-ADDER
+@420
+exp_tb.adder.io.in_1[37:0]
+exp_tb.adder.io.in_2[37:0]
+exp_tb.adder.io.out[37:0]
+@28
+exp_tb.adder.io.start
+@200
+-
+-MULTIPLIER
+@420
+exp_tb.mult.io.in_1[37:0]
+exp_tb.mult.io.in_2[37:0]
+exp_tb.mult.io.out[37:0]
+@28
+exp_tb.mult.io.start
+[pattern_trace] 1
+[pattern_trace] 0

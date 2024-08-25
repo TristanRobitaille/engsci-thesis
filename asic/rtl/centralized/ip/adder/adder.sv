@@ -9,7 +9,7 @@
 
 module adder (
     input wire clk, rst_n,
-    input ComputeIPInterface.basic io
+    input ComputeIPInterface.basic_in io
 );
 
     logic start_delayed;
@@ -29,7 +29,7 @@ module adder (
         end
     end
 
-    assign io.out = sum[N_COMP-1:0];
+    assign io.out = sum[N_COMP-1:0]; // Essentially AP_TRN (truncation towards minus infinity)
     assign io.overflow = start_delayed & (in_1_q[N_COMP-1] == in_2_q[N_COMP-1]) & (in_1_q[N_COMP-1] != io.out[N_COMP-1]);
 
     // Note: Verilator does not support assertions well

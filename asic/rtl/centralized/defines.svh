@@ -8,7 +8,7 @@ package Defines;
     localparam int CIM_PARAMS_NUM_BANKS             = 2;
     localparam int CIM_INT_RES_NUM_BANKS            = 4;
     localparam int N_STO_INT_RES                    = 9;
-    localparam int N_STO_PARAMS                     = 9;
+    localparam int N_STO_PARAMS                     = 8;
     localparam int N_COMP                           = 38;
     localparam int Q_COMP                           = 21;
 

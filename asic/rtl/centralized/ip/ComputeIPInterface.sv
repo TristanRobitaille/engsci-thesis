@@ -6,12 +6,20 @@ interface ComputeIPInterface;
     logic overflow;
     CompFx_t in_1, in_2;
     CompFx_t out;
-    modport basic (
+    modport basic_in (
         input start,
         input in_1, in_2,
         output busy, done,
         output out,
         output overflow
+    );
+
+    modport basic_out (
+        input busy, done,
+        input out,
+        input overflow,
+        output start,
+        output in_1, in_2
     );
 
     // Extra signals for composite IP
