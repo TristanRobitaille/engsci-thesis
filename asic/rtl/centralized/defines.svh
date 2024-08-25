@@ -10,6 +10,7 @@ package Defines;
     localparam int N_STO_INT_RES                    = 9;
     localparam int N_STO_PARAMS                     = 9;
     localparam int N_COMP                           = 38;
+    localparam int Q_COMP                           = 21;
 
     localparam int EMB_DEPTH = 64;
     localparam int NUM_PATCHES = 60;

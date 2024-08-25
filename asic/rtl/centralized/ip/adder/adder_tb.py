@@ -14,6 +14,7 @@ NUM_TESTS = 1000
 @cocotb.test()
 async def basic_reset(dut):
     await utilities.start_routine_basic_arithmetic(dut)
+    dut.start.value = 1
     input_1 = 0.5
     input_2 = 10.25
     dut.input_q_1.value = utilities.BinToDec(input_1, const.num_Q_comp)
@@ -42,6 +43,7 @@ async def basic_count(dut):
     
     await RisingEdge(dut.clk)
     for _ in range(NUM_TESTS):
+        dut.start.value = 1
         input_1 = random.uniform(-const.MAX_INT_ADD, const.MAX_INT_ADD)
         input_2 = random.uniform(-const.MAX_INT_ADD, const.MAX_INT_ADD)
         expected = const.num_Q_comp(input_1) + const.num_Q_comp(input_2)
@@ -65,6 +67,7 @@ async def overflow(dut):
     for i in range(len(input_q_1)):
         dut.input_q_1.value = utilities.BinToDec(input_q_1[i], const.num_Q_comp_overflow)
         dut.input_q_2.value = utilities.BinToDec(input_q_2[i], const.num_Q_comp_overflow)
+        dut.start.value = 1
         expected = const.num_Q_comp_overflow(expected[i])
         for _ in range(2): await RisingEdge(dut.clk)
         assert dut.overflow.value == 1, "Overflow not set as expected!"

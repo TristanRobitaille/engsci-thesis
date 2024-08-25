@@ -14,6 +14,7 @@ Q_COMP                          = 21
 # ----- TEST CONSTANTS ----- #
 Q_STO_INT_RES   = 4
 MAX_INT_ADD = 2**(N_COMP-Q_COMP-1)/2 - 1
+MAX_INT_MULT = 2**(N_COMP-Q_COMP-1)/2 - 1
 
 # ----- ENUM ----- #
 class DataWidth(Enum):

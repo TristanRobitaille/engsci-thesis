@@ -1,7 +1,7 @@
-`ifndef _adder_tb_sv_
-`define _adder_tb_sv_
+`ifndef _multiplier_tb_sv_
+`define _multiplier_tb_sv_
 
-module adder_tb (
+module multiplier_tb (
     input wire clk,
     input wire rst_n,
 
@@ -19,6 +19,6 @@ module adder_tb (
     assign output_q = io.out;
     assign overflow = io.overflow;
 
-    adder adder (.clk, .rst_n, .io);
+    multiplier multiplier (.clk, .rst_n, .io);
 endmodule
 `endif

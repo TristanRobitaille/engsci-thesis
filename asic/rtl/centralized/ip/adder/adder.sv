@@ -6,6 +6,7 @@
 - Output is updated when start is set
 - Provides notice of overflow
 */
+
 module adder (
     input wire clk, rst_n,
     input ComputeIPInterface.basic io
@@ -21,8 +22,8 @@ module adder (
     always_ff @(posedge clk) begin : adder_logic
         if (!rst_n) begin
             sum <= '0;
-        end else if (io.start) begin
-            sum <= io.in_1 + io.in_2;
+        end else begin
+            sum <= (io.start) ? (io.in_1 + io.in_2) : sum;
             in_1_q <= io.in_1;
             in_2_q <= io.in_2;
         end
