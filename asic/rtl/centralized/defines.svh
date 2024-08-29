@@ -9,7 +9,8 @@ package Defines;
     localparam int CIM_INT_RES_NUM_BANKS            = 4;
     localparam int N_STO_INT_RES                    = 9;
     localparam int N_STO_PARAMS                     = 8;
-    localparam int N_COMP                           = 38;
+    localparam int Q_STO_INT_RES_DOUBLE             = 2*N_STO_INT_RES - 10;
+    localparam int N_COMP                           = 39;
     localparam int Q_COMP                           = 21;
 
     localparam int EMB_DEPTH = 64;
@@ -20,23 +21,40 @@ package Defines;
     localparam int NUM_SLEEP_STAGES = 5;
     localparam int NUM_SAMPLES_OUT_AVG = 3;
 
-    localparam MAC_MAX_LEN = 64;
+    localparam int MAC_MAX_LEN = 64;
 
     /* ----- Types ----- */
     typedef logic [$clog2(CIM_INT_RES_NUM_BANKS*CIM_PARAMS_BANK_SIZE_NUM_WORD)-1:0] IntResAddr_t;
     typedef logic [$clog2(CIM_PARAMS_NUM_BANKS*CIM_INT_RES_BANK_SIZE_NUM_WORD)-1:0] ParamAddr_t;
     typedef logic [$clog2(CIM_INT_RES_BANK_SIZE_NUM_WORD)-1:0]                      IntResBankAddr_t;
     typedef logic [$clog2(CIM_PARAMS_BANK_SIZE_NUM_WORD)-1:0]                       ParamBankAddr_t;
+    typedef logic [$clog2(MAC_MAX_LEN+1)-1:0]                                       MACLen_t;
     typedef logic signed [N_STO_PARAMS-1:0]                                         Param_t;
     typedef logic signed [N_STO_INT_RES-1:0]                                        IntResSingle_t;
     typedef logic signed [2*N_STO_INT_RES-1:0]                                      IntResDouble_t;
     typedef logic signed [N_COMP-1:0]                                               CompFx_t;
+    typedef logic signed                                                            FxFormat_Unused_t; // Needed for MemoryInterface to instantiate correctly for banks
 
     /* ----- Enum ----- */
     typedef enum logic {
         SINGLE_WIDTH,
         DOUBLE_WIDTH
     } DataWidth_t;
+
+    typedef enum logic [2:0] {
+        INT_RES_SW_FX_1_X,
+        INT_RES_SW_FX_2_X,
+        INT_RES_SW_FX_5_X,
+        INT_RES_SW_FX_6_X,
+        INT_RES_DW_FX
+    } FxFormatIntRes_t;
+
+    typedef enum logic [1:0] {
+        PARAMS_FX_2_X,
+        PARAMS_FX_3_X,
+        PARAMS_FX_4_X,
+        PARAMS_FX_5_X
+    } FxFormatParams_t;
 
     typedef enum logic [1:0] {
         IDLE_CIM,

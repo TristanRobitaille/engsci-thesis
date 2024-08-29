@@ -1,0 +1,1 @@
+SIM=verilator pytest -o log_cli=True ~/../tmp/asic/rtl/centralized/ip/sqrt/sim_config.py
