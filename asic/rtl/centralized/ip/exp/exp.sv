@@ -47,7 +47,7 @@ wire [N_COMP-1:Q_COMP] input_mapped_complement;
 
 assign input_mapped_complement = ~input_mapped[N_COMP-1:Q_COMP];
 assign sign_bit_input = input_capture[N_COMP-1];
-assign io.overflow = io.done && io.out[N_COMP-1]; // Overflow occurs when the output is negative
+assign io.overflow = io.done && io.out[N_COMP-1]; // Overflow occurs when the output is negative since exp(x) is always positive
 
 always_ff @ (posedge clk) begin : exp_FSM
     if (!rst_n) begin

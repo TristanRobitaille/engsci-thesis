@@ -6,7 +6,7 @@ from FixedPoint import FXnum
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, FallingEdge
+from cocotb.triggers import RisingEdge
 
 #----- CONSTANTS -----#
 TOLERANCE_REL = 0.025 # Percent

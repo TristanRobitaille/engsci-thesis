@@ -50,20 +50,21 @@ module multiplier (
         end
     end
 
-    assign io.out = rounded_temp[2*N_COMP-(N_COMP-Q_COMP)-1:Q_COMP]; // Essentially AP_TRN (truncation towards minus infinity)
+    assign io.out = rounded_temp[N_COMP+Q_COMP-1:Q_COMP]; // Essentially AP_TRN (truncation towards minus infinity)
 
     // Overflow detection
     // Note that if the result is too small to be represented (and thus "0"), the overflow may trigger if one of the input was negative
     always_comb begin : multipler_overflow
-        logic one_is_zero = (in_1_q == 'd0) || (in_2_q == 'd0);
+        logic one_input_is_zero = (in_1_q == 'd0) || (in_2_q == 'd0);
         logic out_is_neg = io.out[N_COMP-1];
+        logic out_is_zero = (io.out == 'd0);
 
         if (start_delayed) begin
-            if (one_is_zero & out_is_neg) begin
+            if (one_input_is_zero & out_is_neg) begin
                 assign io.overflow = 1'b1;
             end else if ((in_1_q[N_COMP-1] == in_2_q[N_COMP-1]) & out_is_neg) begin
                 assign io.overflow = 1'b1;
-            end else if ((in_1_q[N_COMP-1] != in_2_q[N_COMP-1] & ~one_is_zero) & ~out_is_neg) begin
+            end else if ((in_1_q[N_COMP-1] != in_2_q[N_COMP-1] & ~one_input_is_zero) & ~out_is_neg & ~out_is_zero) begin
                 assign io.overflow = 1'b1;
             end else begin
                 assign io.overflow = 1'b0;

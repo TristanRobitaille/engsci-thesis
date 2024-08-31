@@ -1,0 +1,134 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Sat Aug 31 21:01:52 2024
+[*]
+[dumpfile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/ip/mac/sim_build/dump.fst"
+[dumpfile_mtime] "Sat Aug 31 21:00:36 2024"
+[dumpfile_size] 143480
+[savefile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/ip/mac/mac.gtkw"
+[timestart] 0
+[size] 1512 916
+[pos] -1 -1
+*-24.033569 72800000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[markername] AA
+[markername] BB
+[markername] CC
+[markername] DD
+[markername] EE
+[markername] FF
+[markername] GG
+[markername] HH
+[markername] II
+[markername] JJ
+[markername] KK
+[markername] LL
+[markername] MM
+[markername] NN
+[markername] OO
+[markername] PP
+[markername] QQ
+[markername] RR
+[markername] SS
+[markername] TT
+[markername] UU
+[markername] VV
+[markername] WW
+[markername] XX
+[markername] YY
+[markername] ZZ
+[treeopen] mac_tb.
+[treeopen] mac_tb.mac.
+[sst_width] 253
+[signals_width] 389
+[sst_expanded] 1
+[sst_vpaned_height] 432
+@28
+clk
+@200
+-MAC
+@28
+mac_tb.start
+mac_tb.done
+@100000028
+mac_tb.mac.state[2:0]
+@24
+mac_tb.io_extra.bias_addr[14:0]
+@420
+mac_tb.mac.compute_temp[38:0]
+mac_tb.computation_result[38:0]
+@100000028
+mac_tb.mac.io_extra.activation[1:0]
+@100000029
+mac_tb.mac.io_extra.param_type[1:0]
+@200
+-
+-INT RES WRITE
+@24
+mac_tb.int_res.write.addr[15:0]
+@420
+mac_tb.int_res.write.data[38:0]
+@100000028
+mac_tb.int_res.write.data_width
+mac_tb.int_res.write.format[2:0]
+@200
+-INT RES READ
+@24
+mac_tb.int_res.read.addr[15:0]
+@420
+mac_tb.int_res.read.data[38:0]
+@100000028
+mac_tb.int_res.read.data_width
+mac_tb.int_res.read.format[2:0]
+@200
+-PARAM WRITE
+@24
+mac_tb.params.write.addr[14:0]
+@420
+mac_tb.params.write.data[38:0]
+@100000028
+mac_tb.param_write.format[1:0]
+@200
+-PARAM READ
+@c00024
+mac_tb.params.read.addr[14:0]
+@28
+(0)mac_tb.params.read.addr[14:0]
+(1)mac_tb.params.read.addr[14:0]
+(2)mac_tb.params.read.addr[14:0]
+(3)mac_tb.params.read.addr[14:0]
+(4)mac_tb.params.read.addr[14:0]
+(5)mac_tb.params.read.addr[14:0]
+(6)mac_tb.params.read.addr[14:0]
+(7)mac_tb.params.read.addr[14:0]
+(8)mac_tb.params.read.addr[14:0]
+(9)mac_tb.params.read.addr[14:0]
+(10)mac_tb.params.read.addr[14:0]
+(11)mac_tb.params.read.addr[14:0]
+(12)mac_tb.params.read.addr[14:0]
+(13)mac_tb.params.read.addr[14:0]
+(14)mac_tb.params.read.addr[14:0]
+@1401200
+-group_end
+@420
+mac_tb.params.read.data[38:0]
+@100000028
+mac_tb.param_read.format[1:0]
+@200
+-
+-ADD
+@28
+mac_tb.MAC_add_io.start
+@420
+mac_tb.MAC_add_io.in_1[38:0]
+mac_tb.MAC_add_io.in_2[38:0]
+mac_tb.MAC_add_io.out[38:0]
+@200
+-MULT
+@28
+mac_tb.MAC_mult_io.start
+@420
+mac_tb.MAC_mult_io.in_1[38:0]
+mac_tb.MAC_mult_io.in_2[38:0]
+mac_tb.MAC_mult_io.out[38:0]
+[pattern_trace] 1
+[pattern_trace] 0

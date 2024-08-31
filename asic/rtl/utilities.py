@@ -1,5 +1,6 @@
 # Some common functions that are used in the testbenches
 import cocotb
+import Constants as const
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
 from FixedPoint import FXfamily, FXnum
@@ -171,6 +172,37 @@ def params(param_name:str, params_file:h5py.File):
     elif (param_name == "mlp_dense_1_bias"):                return params_file["Encoder_1"]["vision_transformer"]["Encoder_1"]["mlp_dense1_encoder"]["bias:0"] # Encoder MLP dense 1 bias
     elif (param_name == "mlp_head_softmax_kernel"):         return params_file["mlp_head_softmax"]["vision_transformer"]["mlp_head_softmax"]["kernel:0"]# MLP head softmax kernel
     else: raise ValueError(f"Unknown parameter name: {param_name}")
+
+async def write_one_word_cent(dut, addr:int, data:int, device:str, data_format, data_width:const.DataWidth=const.DataWidth.SINGLE_WIDTH):
+    await RisingEdge(dut.clk)
+
+    if device == "params": data_fx = FXnum(data, FXfamily(const.N_STO_PARAMS-data_format.value, data_format.value))
+    elif device == "int_res": 
+        if data_width == const.DataWidth.SINGLE_WIDTH: data_fx = FXnum(data, FXfamily(const.N_STO_INT_RES-data_format.value, data_format.value))
+        elif data_width == const.DataWidth.DOUBLE_WIDTH: data_fx = FXnum(data, FXfamily(2*const.N_STO_INT_RES-data_format.value, data_format.value))
+    
+    data_fx = FXnum(data_fx, const.num_Q_comp)
+    data_fx = BinToDec(data_fx, const.num_Q_comp)
+
+    if device == "params":
+        assert (data_width.value == const.DataWidth.SINGLE_WIDTH.value), "Params memory only compatible with SINGLE_WIDTH!"
+        dut.param_chip_en.value = 1
+        dut.param_write_en.value = 1
+        dut.param_write_addr.value = addr
+        dut.param_write_data.value = data_fx
+        dut.param_write_format.value = const.params_fx_rtl_enum[data_format]
+        await RisingEdge(dut.clk)
+        dut.param_write_en.value = 0
+    elif device == "int_res":
+        dut.int_res_chip_en.value = 1
+        dut.int_res_write_en.value = 1
+        dut.int_res_write_data_width.value = data_width.value
+        dut.int_res_write_addr.value = addr
+        dut.int_res_write_data.value = data_fx
+        dut.int_res_write_format.value = const.int_res_fx_rtl_enum[data_format]
+        await RisingEdge(dut.clk)
+        dut.int_res_write_en.value = 0
+    await RisingEdge(dut.clk)
 
 #----- EEG -----#
 eeg_index = 0

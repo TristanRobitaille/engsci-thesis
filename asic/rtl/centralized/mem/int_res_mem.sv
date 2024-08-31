@@ -2,27 +2,67 @@ import Defines::*;
 
 module int_res_mem (
     input clk, rst_n,
-    input MemoryInterface.data_in write,
-    output MemoryInterface.data_out read
+    input MemoryInterface.input_write write,
+    output MemoryInterface.input_read read
 );
 
     /*  Theory of operation
-        The intermediate results memory is split into 4 banks, and supports 2 data width: SINGLE_WIDTH and DOUBLE_WIDTH. The later uses two
-        locations to represent the upper and lower halves. Each bank is single-port. To permit single-cycle accesses for DOUBLE_WIDTH data, the upper and lower halves
-        are always stored at the same address, but in different banks. Banks 0 and 2 hold the two halves of a double word (bank 0 storing the Most-Significant Half).
-        Banks 1 and 3 hold the two halves of a word (bank 1 storing the Most-Significant Half). Apart from that, the memory looks contiguous to the rest of the system.
-        The data is passed as DOUBLE_WIDTH; if the data is SINGLE_WIDTH, is it aligned to the LSH rather than aligned to the decimal point (since it changes).
+    *   The intermediate results memory is split into 4 banks, and supports 2 data width: SINGLE_WIDTH and DOUBLE_WIDTH. The later uses two
+    *   locations to represent the upper and lower halves. Each bank is single-port. To permit single-cycle accesses for DOUBLE_WIDTH data, the upper and lower halves
+    *   are always stored at the same address, but in different banks. Banks 0 and 2 hold the two halves of a double word (bank 0 storing the Most-Significant Half).
+    *   Banks 1 and 3 hold the two halves of a word (bank 1 storing the Most-Significant Half). Apart from that, the memory looks contiguous to the rest of the system.
+    *   The data is passed as DOUBLE_WIDTH; if the data is SINGLE_WIDTH, is it aligned to the LSH rather than aligned to the decimal point (since it changes).
     */
 
+    // Typedef
+    typedef enum logic {
+        MSH,
+        LSH
+    } HalfType_e;
+
+    // Functions
+    function automatic CompFx_t cast_to_CompFx_t(input IntResDouble_t data, input FxFormatIntRes_t format);
+        // Casts a IntResDouble_t number to CompFx_t, taking care of proper sign extension in both the upper bits and lower bits
+        bit sign = (format == INT_RES_DW_FX) ? data[2*N_STO_INT_RES-1] : data[N_STO_INT_RES-1];
+
+        case (format)
+            INT_RES_SW_FX_1_X: return {{(N_COMP - Q_COMP - 1){sign}}, data[N_STO_INT_RES-1:0], {(Q_COMP - (N_STO_INT_RES - 1)){sign}}};
+            INT_RES_SW_FX_2_X: return {{(N_COMP - Q_COMP - 2){sign}}, data[N_STO_INT_RES-1:0], {(Q_COMP - (N_STO_INT_RES - 2)){sign}}};
+            INT_RES_SW_FX_5_X: return {{(N_COMP - Q_COMP - 5){sign}}, data[N_STO_INT_RES-1:0], {(Q_COMP - (N_STO_INT_RES - 5)){sign}}};
+            INT_RES_SW_FX_6_X: return {{(N_COMP - Q_COMP - 6){sign}}, data[N_STO_INT_RES-1:0], {(Q_COMP - (N_STO_INT_RES - 6)){sign}}};
+            INT_RES_DW_FX:     return {{(N_COMP - Q_COMP - (2*N_STO_INT_RES-Q_STO_INT_RES_DOUBLE)){sign}}, data, {(Q_COMP - Q_STO_INT_RES_DOUBLE){sign}}};
+            default: return {{(N_COMP - Q_COMP - 5){sign}}, data[N_STO_INT_RES-1:0], {(Q_COMP - (N_STO_INT_RES - 5)){sign}}};
+        endcase
+    endfunction
+
+    function automatic IntResSingle_t cast_to_IntResSingle_t(input CompFx_t data, input FxFormatIntRes_t format);
+        bit sign = data[N_COMP-1];
+        case (format)
+            INT_RES_SW_FX_1_X: return {sign, data[Q_COMP-1 : Q_COMP - (N_STO_INT_RES - 1)]};
+            INT_RES_SW_FX_2_X: return {sign, data[Q_COMP+0 : Q_COMP - (N_STO_INT_RES - 2)]};
+            INT_RES_SW_FX_5_X: return {sign, data[Q_COMP+3 : Q_COMP - (N_STO_INT_RES - 5)]};
+            INT_RES_SW_FX_6_X: return {sign, data[Q_COMP+4 : Q_COMP - (N_STO_INT_RES - 6)]};
+            default: return {sign, data[Q_COMP+3 : Q_COMP - (N_STO_INT_RES - 5)]};
+        endcase
+    endfunction
+
+    function automatic IntResSingle_t cast_to_HalfIntResDouble_t(input CompFx_t data, input HalfType_e half_type);
+        bit sign = data[N_COMP-1];
+        IntResDouble_t data_cast = {sign, data[Q_COMP+(2*N_STO_INT_RES-Q_STO_INT_RES_DOUBLE)-2 : Q_COMP - Q_STO_INT_RES_DOUBLE]};
+
+        if (half_type == MSH) return data_cast[2*N_STO_INT_RES-1:N_STO_INT_RES];
+        else return data_cast[N_STO_INT_RES-1:0];
+    endfunction
+
     // Signals to individual memory banks instantiated in the memory controller
-    MemoryInterface #(IntResSingle_t, IntResBankAddr_t) int_res_0_read ();
-    MemoryInterface #(IntResSingle_t, IntResBankAddr_t) int_res_0_write ();
-    MemoryInterface #(IntResSingle_t, IntResBankAddr_t) int_res_1_read ();
-    MemoryInterface #(IntResSingle_t, IntResBankAddr_t) int_res_1_write ();
-    MemoryInterface #(IntResSingle_t, IntResBankAddr_t) int_res_2_read ();
-    MemoryInterface #(IntResSingle_t, IntResBankAddr_t) int_res_2_write ();
-    MemoryInterface #(IntResSingle_t, IntResBankAddr_t) int_res_3_read ();
-    MemoryInterface #(IntResSingle_t, IntResBankAddr_t) int_res_3_write ();
+    MemoryInterface #(IntResSingle_t, IntResBankAddr_t, FxFormat_Unused_t) int_res_0_read ();
+    MemoryInterface #(IntResSingle_t, IntResBankAddr_t, FxFormat_Unused_t) int_res_0_write ();
+    MemoryInterface #(IntResSingle_t, IntResBankAddr_t, FxFormat_Unused_t) int_res_1_read ();
+    MemoryInterface #(IntResSingle_t, IntResBankAddr_t, FxFormat_Unused_t) int_res_1_write ();
+    MemoryInterface #(IntResSingle_t, IntResBankAddr_t, FxFormat_Unused_t) int_res_2_read ();
+    MemoryInterface #(IntResSingle_t, IntResBankAddr_t, FxFormat_Unused_t) int_res_2_write ();
+    MemoryInterface #(IntResSingle_t, IntResBankAddr_t, FxFormat_Unused_t) int_res_3_read ();
+    MemoryInterface #(IntResSingle_t, IntResBankAddr_t, FxFormat_Unused_t) int_res_3_write ();
 
     mem_model #(.DEPTH(CIM_INT_RES_BANK_SIZE_NUM_WORD)) int_res_0 (.clk, .rst_n, .read(int_res_0_read), .write(int_res_0_write));
     mem_model #(.DEPTH(CIM_INT_RES_BANK_SIZE_NUM_WORD)) int_res_1 (.clk, .rst_n, .read(int_res_1_read), .write(int_res_1_write));
@@ -108,15 +148,15 @@ module int_res_mem (
 
     always_comb begin : int_res_mem_ctrl_read_sel
         if (read_data_width_prev == SINGLE_WIDTH) begin
-            if (bank_read_prev == 0)        read.data = IntResDouble_t'(int_res_0_read.data);
-            else if (bank_read_prev == 1)   read.data = IntResDouble_t'(int_res_1_read.data);
-            else if (bank_read_prev == 2)   read.data = IntResDouble_t'(int_res_2_read.data);
-            else                            read.data = IntResDouble_t'(int_res_3_read.data);
+            if (bank_read_prev == 0)        read.data = cast_to_CompFx_t({IntResSingle_t'(0), IntResSingle_t'(int_res_0_read.data)}, read.format);
+            else if (bank_read_prev == 1)   read.data = cast_to_CompFx_t({IntResSingle_t'(0), IntResSingle_t'(int_res_1_read.data)}, read.format);
+            else if (bank_read_prev == 2)   read.data = cast_to_CompFx_t({IntResSingle_t'(0), IntResSingle_t'(int_res_2_read.data)}, read.format);
+            else                            read.data = cast_to_CompFx_t({IntResSingle_t'(0), IntResSingle_t'(int_res_3_read.data)}, read.format);
         end else begin
             if (bank_read_prev == 0 || bank_read_prev == 2) begin
-                read.data = IntResDouble_t'({int_res_0_read.data, int_res_2_read.data});
+                read.data = cast_to_CompFx_t(IntResDouble_t'({int_res_0_read.data, int_res_2_read.data}), read.format);
             end else begin
-                read.data = IntResDouble_t'({int_res_1_read.data, int_res_3_read.data});
+                read.data = cast_to_CompFx_t(IntResDouble_t'({int_res_1_read.data, int_res_3_read.data}), read.format);
             end
         end
     end
@@ -155,11 +195,10 @@ module int_res_mem (
                 int_res_3_write.addr = (bank_write_current == 3) ? IntResBankAddr_t'(write.addr - IntResAddr_t'(3*CIM_INT_RES_BANK_SIZE_NUM_WORD)): IntResBankAddr_t'(0);
 
                 // Note: When casting from IntResDouble_t to IntResSingle_t, we discard the upper bits. Thus, this assumes the valid, single-width data is on the lower bits.
-                int_res_0_write.data = (bank_write_current == 0) ? IntResSingle_t'(write.data) : IntResSingle_t'(0);
-                int_res_1_write.data = (bank_write_current == 1) ? IntResSingle_t'(write.data) : IntResSingle_t'(0);
-                int_res_2_write.data = (bank_write_current == 2) ? IntResSingle_t'(write.data) : IntResSingle_t'(0);
-                int_res_3_write.data = (bank_write_current == 3) ? IntResSingle_t'(write.data) : IntResSingle_t'(0);
-
+                int_res_0_write.data = (bank_write_current == 0) ? cast_to_IntResSingle_t(write.data, write.format) : IntResSingle_t'(0);
+                int_res_1_write.data = (bank_write_current == 1) ? cast_to_IntResSingle_t(write.data, write.format) : IntResSingle_t'(0);
+                int_res_2_write.data = (bank_write_current == 2) ? cast_to_IntResSingle_t(write.data, write.format) : IntResSingle_t'(0);
+                int_res_3_write.data = (bank_write_current == 3) ? cast_to_IntResSingle_t(write.data, write.format) : IntResSingle_t'(0);
                 int_res_0_write.en = (bank_write_current == 0);
                 int_res_1_write.en = (bank_write_current == 1);
                 int_res_2_write.en = (bank_write_current == 2);
@@ -174,8 +213,8 @@ module int_res_mem (
                     int_res_2_write.en = 'b1;
                     int_res_1_write.en = 'b0;
                     int_res_3_write.en = 'b0;
-                    int_res_0_write.data = IntResSingle_t'(write.data[2*N_STO_INT_RES-1:N_STO_INT_RES]); // MSH
-                    int_res_2_write.data = IntResSingle_t'(write.data[N_STO_INT_RES-1:0]); // LSH
+                    int_res_0_write.data = cast_to_HalfIntResDouble_t(write.data, MSH);
+                    int_res_2_write.data = cast_to_HalfIntResDouble_t(write.data, LSH);
                     int_res_1_write.data = IntResSingle_t'(0);
                     int_res_3_write.data = IntResSingle_t'(0);
                 end else begin
@@ -189,8 +228,8 @@ module int_res_mem (
                     int_res_3_write.en = 'b1;
                     int_res_0_write.data = IntResSingle_t'(0);
                     int_res_2_write.data = IntResSingle_t'(0);
-                    int_res_1_write.data = IntResSingle_t'(write.data[2*N_STO_INT_RES-1:N_STO_INT_RES]); // MSH
-                    int_res_3_write.data = IntResSingle_t'(write.data[N_STO_INT_RES-1:0]); // LSH
+                    int_res_1_write.data = cast_to_HalfIntResDouble_t(write.data, MSH);
+                    int_res_3_write.data = cast_to_HalfIntResDouble_t(write.data, LSH);
                 end
             end
         end else begin
@@ -209,4 +248,9 @@ module int_res_mem (
         end
     end
 
+    // Assertions
+    always_ff @ (posedge clk) begin : int_res_mem_assertions
+        if (read.data_width == DOUBLE_WIDTH) assert (read.format == INT_RES_DW_FX) else $error("Intermediate results memory: Read format must be INT_RES_DW_FX if width is DOUBLE_WIDTH");
+        if (write.data_width == DOUBLE_WIDTH) assert (write.format == INT_RES_DW_FX) else $error("Intermediate results memory: Write format must be INT_RES_DW_FX if width is DOUBLE_WIDTH");
+    end
 endmodule
