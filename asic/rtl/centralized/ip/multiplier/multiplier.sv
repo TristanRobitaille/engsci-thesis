@@ -17,19 +17,18 @@ module multiplier (
     localparam LSB = Q_COMP; // LSB of fractional part that we retain in output
     localparam HALF_FRACT = 'b1 << (Q_COMP - 1); // 0.5 in Q format for the bottom half of the fractional part of the temporary result
 
-    logic start_delayed;
     CompFx_t in_1_q, in_2_q;
     logic signed [2*N_COMP-1:0] temp_result, rounded_temp;
     
     always_ff @ (posedge clk) begin : multiplier_logic
         if (!rst_n) begin
             temp_result <= 'd0;
-            start_delayed <= 1'b0;
+            io.done <= 1'b0;
             in_1_q <= 'd0;
             in_2_q <= 'd0;
         end else begin
             temp_result <= (io.start) ? (io.in_1 * io.in_2) : temp_result;
-            start_delayed <= io.start;
+            io.done <= io.start;
             in_1_q <= io.in_1;
             in_2_q <= io.in_2;
         end
@@ -59,7 +58,7 @@ module multiplier (
         logic out_is_neg = io.out[N_COMP-1];
         logic out_is_zero = (io.out == 'd0);
 
-        if (start_delayed) begin
+        if (io.done) begin
             if (one_input_is_zero & out_is_neg) begin
                 assign io.overflow = 1'b1;
             end else if ((in_1_q[N_COMP-1] == in_2_q[N_COMP-1]) & out_is_neg) begin

@@ -18,7 +18,7 @@ async def test_params(dut):
     for _ in range(NUM_WRITES):
         data_format = random.choice(list(const.FxFormatParams))
         addr = random.randint(0, const.CIM_PARAMS_NUM_BANKS * const.CIM_PARAMS_BANK_SIZE_NUM_WORD-1)
-        data_in = random.uniform(-2**(data_format.value-1)+1, 2**(data_format.value-1)-1) # Currently only positive values are supported in testbench, but negative values are supported in RTL
+        data_in = random.uniform(-2**(data_format.value-1)+1, 2**(data_format.value-1)-1)
         await utilities.write_one_word_cent(dut, addr=addr, data=data_in, device="params", data_format=data_format)
 
         # Check that the data was written correctly
@@ -30,7 +30,6 @@ async def test_int_res(dut):
     for width in [const.DataWidth.SINGLE_WIDTH, const.DataWidth.DOUBLE_WIDTH]:
         for _ in range(NUM_WRITES):
             addr = random.randint(0, const.CIM_INT_RES_NUM_BANKS * const.CIM_INT_RES_BANK_SIZE_NUM_WORD-1)
-            # Currently only positive values are supported in testbench, but negative values are supported in RTL
             if (width == const.DataWidth.SINGLE_WIDTH):
                 data_format = random.choice([const.FxFormatIntRes.INT_RES_SW_FX_1_X, const.FxFormatIntRes.INT_RES_SW_FX_2_X, const.FxFormatIntRes.INT_RES_SW_FX_5_X, const.FxFormatIntRes.INT_RES_SW_FX_6_X])
                 data_in = random.uniform(-2**(data_format.value-1)+1, 2**(data_format.value-1)-1)

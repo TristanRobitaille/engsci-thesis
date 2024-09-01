@@ -96,7 +96,7 @@ module mac_tb # () (
             int_res_write.data_width = tb_int_res_write.data_width;
         end
 
-        int_res_read.en = MAC_int_res_read.en; // Only testbench reads
+        int_res_read.en = MAC_int_res_read.en; // Only MAC reads
         int_res_write.en = tb_int_res_write.en; // Only testbench writes
     end
 
