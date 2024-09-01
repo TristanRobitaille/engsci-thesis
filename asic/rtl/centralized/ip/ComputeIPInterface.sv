@@ -23,17 +23,19 @@ interface ComputeIPInterface;
     );
 
     // Extra signals for composite IP
-    logic [$clog2(MAC_MAX_LEN+1)-1:0] len;
+    VectorLen_t len;
+    HalfSelect_t half_select;
     ParamType_t param_type;
     Activation_t activation;
     ParamAddr_t bias_addr;
-    IntResAddr_t start_addr_1, start_addr_2;
+    IntResAddr_t start_addr_1, start_addr_2, start_addr_3;
     modport extra (
+        input half_select,
         input len,
         input param_type,
         input activation,
         input bias_addr,
-        input start_addr_1, start_addr_2
+        input start_addr_1, start_addr_2, start_addr_3
     );
 
 endinterface

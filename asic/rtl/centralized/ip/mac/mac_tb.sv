@@ -1,13 +1,11 @@
 import Defines::*;
 
-// TODO: Add memory access from testbench
-
 module mac_tb # () (
     input wire clk, rst_n,
 
     // MAC control
     input wire start,
-    input MACLen_t len,
+    input VectorLen_t len,
     input ParamAddr_t bias_addr,
     input ParamType_t param_type,
     input Activation_t activation,
@@ -102,7 +100,7 @@ module mac_tb # () (
         int_res_write.en = tb_int_res_write.en; // Only testbench writes
     end
 
-    // Compute module instantiation
+    // Compute
     ComputeIPInterface add_io();
     ComputeIPInterface mult_io();
     ComputeIPInterface exp_add_io();
@@ -146,8 +144,14 @@ module mac_tb # () (
     ComputeIPInterface MAC_exp_io();
     ComputeIPInterface MAC_div_io();
     MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) MAC_int_res_read ();
-    MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) MAC_int_res_write ();
     MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t)  MAC_param_read ();
+    MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t)  casts ();
+
+    always_comb begin : mem_casts_assigns
+        casts.int_res_read_width = int_res_write_data_width;
+        casts.int_res_read_format = int_res_write_format;
+        casts.params_read_format = param_write_format;
+    end
 
     ComputeIPInterface io();
     ComputeIPInterface io_extra ();
@@ -166,22 +170,13 @@ module mac_tb # () (
 
     mac mac (
         .clk, .rst_n,
-
-        // Mem
-        .int_res_data_width(int_res_write_data_width), .int_res_format(int_res_write_format),
-        .param_read(MAC_param_read), .param_format(param_write_format),
-        .int_res_read(MAC_int_res_read), .int_res_write(MAC_int_res_write),
-
-        // Compute
+        .casts, .param_read(MAC_param_read), .int_res_read(MAC_int_res_read),
         .io, .io_extra,
-        .add_io(MAC_add_io),
-        .mult_io(MAC_mult_io),
-        .div_io(MAC_div_io),
-        .exp_io(MAC_exp_io)
+        .add_io(MAC_add_io), .mult_io(MAC_mult_io), .div_io(MAC_div_io), .exp_io(MAC_exp_io)
     );
 
     // Assertions
-    always_ff @ (posedge clk) begin : mux_assertions
+    always_ff @ (posedge clk) begin : compute_mux_assertions
         assert (~(MAC_add_io.start & exp_add_io.start)) else $fatal("Both MAC and exp are asserting adder start signal simultaneously!");
         assert (~(MAC_mult_io.start & exp_mult_io.start)) else $fatal("Both MAC and exp are asserting multiplier start signal simultaneously!");
         assert (~(MAC_param_read.en & tb_param_write.en)) else $fatal("MAC and testbench are trying to read/write from parameters memory simultaneously!");

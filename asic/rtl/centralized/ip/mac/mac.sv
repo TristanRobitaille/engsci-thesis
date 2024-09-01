@@ -1,7 +1,7 @@
 `ifndef _mac_sv_
 `define _mac_sv_
 
-/* Note:
+/* Notes:
 - Fixed-point MAC
 - Done signal is a single-cycle pulse
 - Uses external adder, multiplier, divider and exp modules to be shared with other modules in the CiM.
@@ -11,16 +11,12 @@
 import Defines::*;
 
 module mac (
-    input wire clk,
-    input wire rst_n,
+    input wire clk, rst_n,
 
     // Memory access signals
-    input DataWidth_t int_res_data_width,
-    input FxFormatIntRes_t int_res_format,
-    input FxFormatParams_t param_format,
-    output MemoryInterface.output_read  param_read,    // Data format: Param_t
-    output MemoryInterface.output_read  int_res_read,  // Data format: CompFx_t
-    output MemoryInterface.output_write int_res_write, // Data format: IntResDouble_t
+    input MemoryInterface.casts         casts,
+    output MemoryInterface.output_read  param_read,
+    output MemoryInterface.output_read  int_res_read,
 
     // Compute IO signals
     input ComputeIPInterface.basic_in   io,
@@ -35,33 +31,32 @@ module mac (
     task set_default_values();
         param_read.en <= 1'b0;
         int_res_read.en <= 1'b0;
-        int_res_write.en <= 1'b0;
         mult_io.start <= 1'b0;
         add_io.start <= 1'b0;
         exp_io.start <= 1'b0;
         div_io.start <= 1'b0;
     endtask
-    
-    task read_int_res(input IntResAddr_t addr, input DataWidth_t width, input FxFormatIntRes_t int_res_format); // Starts a read request to the int_res memory
+
+    task read_int_res(input IntResAddr_t addr, input DataWidth_t width, input FxFormatIntRes_t int_res_format);
         int_res_read.en <= 1'b1;
         int_res_read.addr <= addr;
         int_res_read.data_width <= width;
         int_res_read.format <= int_res_format;
     endtask
 
-    task read_param(input ParamAddr_t addr, input FxFormatParams_t param_format); // Starts a read request to the param memory
+    task read_param(input ParamAddr_t addr, input FxFormatParams_t param_format);
         param_read.en <= 1'b1;
         param_read.addr <= addr;
         param_read.format <= param_format;
     endtask
 
-    task start_mult(input CompFx_t in_1, input CompFx_t in_2); // Starts a multiplication operation
+    task start_mult(input CompFx_t in_1, input CompFx_t in_2);
         mult_io.in_1 <= in_1;
         mult_io.in_2 <= in_2;
         mult_io.start <= 1'b1;
     endtask
 
-    task start_add(input CompFx_t in_1, input CompFx_t in_2); // Starts a multiplication operation
+    task start_add(input CompFx_t in_1, input CompFx_t in_2);
         add_io.in_1 <= in_1;
         add_io.in_2 <= in_2;
         add_io.start <= 1'b1;
@@ -70,7 +65,7 @@ module mac (
     /*----- LOGIC -----*/
     logic input_currently_reading;
     logic [1:0] delay_signal;
-    MACLen_t index;
+    VectorLen_t index;
     CompFx_t compute_temp, compute_temp_2;
 
     enum logic [2:0] {IDLE, BASIC_MAC, BASIC_MAC_DONE, LINEAR_ACTIVATION_COMP, SWISH_ACTIVATION_ADD,
@@ -96,7 +91,7 @@ module mac (
                         compute_temp_2 <= 'd0;
                         input_currently_reading <= 1'b0;
                         io.busy <= 1'b1;
-                        read_int_res(io_extra.start_addr_1, int_res_data_width, int_res_format);
+                        read_int_res(io_extra.start_addr_1, casts.int_res_read_width, casts.int_res_read_format);
                     end else begin
                         io.done <= 1'b0;
                         io.busy <= 1'b0;
@@ -119,13 +114,13 @@ module mac (
                         else if (io_extra.param_type == MODEL_PARAM) mult_io.in_2 <= param_read.data;
 
                         if (index <= io_extra.len) begin
-                            if (io_extra.param_type == INTERMEDIATE_RES) read_int_res(io_extra.start_addr_2 + IntResAddr_t'(index), int_res_data_width, int_res_format);
-                            else if (io_extra.param_type == MODEL_PARAM) read_param(ParamAddr_t'(io_extra.start_addr_2 + IntResAddr_t'(index)), param_format);
+                            if (io_extra.param_type == INTERMEDIATE_RES) read_int_res(io_extra.start_addr_2 + IntResAddr_t'(index), casts.int_res_read_width, casts.int_res_read_format);
+                            else if (io_extra.param_type == MODEL_PARAM) read_param(ParamAddr_t'(io_extra.start_addr_2 + IntResAddr_t'(index)), casts.params_read_format);
                         end
                     end else begin // Read input 1
                         input_currently_reading <= 1'b0;
                         mult_io.in_1 <= int_res_read.data;
-                        if (index <= io_extra.len) read_int_res(io_extra.start_addr_1 + IntResAddr_t'(index), int_res_data_width, int_res_format);
+                        if (index <= io_extra.len) read_int_res(io_extra.start_addr_1 + IntResAddr_t'(index), casts.int_res_read_width, casts.int_res_read_format);
                     end
 
                     if (input_currently_reading == 1'b0 && index != 0) begin
@@ -143,7 +138,7 @@ module mac (
                         io.done <= 1'b1;
                         state <= IDLE;
                     end else begin // Linear activation or SWISH activation
-                        read_param(io_extra.bias_addr, param_format);
+                        read_param(io_extra.bias_addr, casts.params_read_format);
                         if (delay_signal[0]) begin
                             delay_signal <= (io_extra.activation == LINEAR_ACTIVATION) ? delay_signal : 'd0; // Reset signal
                             state <= (io_extra.activation == LINEAR_ACTIVATION) ? LINEAR_ACTIVATION_COMP : SWISH_ACTIVATION_ADD;

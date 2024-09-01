@@ -13,6 +13,7 @@ interface MemoryInterface # (
     Addr_t addr;
     FxFormat_t format;
 
+    // To memory controllers
     modport input_read (
         input en,
         input addr,
@@ -29,6 +30,7 @@ interface MemoryInterface # (
         input data_width
     );
 
+    // From compute
     modport output_read (
         output en,
         output addr,
@@ -45,6 +47,7 @@ interface MemoryInterface # (
         output data_width
     );
 
+    // To memory banks
     modport input_read_bank (
         input en,
         input addr,
@@ -56,4 +59,15 @@ interface MemoryInterface # (
         input data,
         input addr
     );
+
+    // To compute
+    FxFormatIntRes_t int_res_read_format, int_res_write_format;
+    DataWidth_t int_res_read_width, int_res_write_width;
+    FxFormatParams_t params_read_format, params_write_format;
+    modport casts (
+        input int_res_read_format, int_res_write_format,
+        input int_res_read_width, int_res_write_width,
+        input params_read_format, params_write_format
+    );
+
 endinterface

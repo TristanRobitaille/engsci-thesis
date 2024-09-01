@@ -173,12 +173,17 @@ def params(param_name:str, params_file:h5py.File):
     elif (param_name == "mlp_head_softmax_kernel"):         return params_file["mlp_head_softmax"]["vision_transformer"]["mlp_head_softmax"]["kernel:0"]# MLP head softmax kernel
     else: raise ValueError(f"Unknown parameter name: {param_name}")
 
-async def write_one_word_cent(dut, addr:int, data:int, device:str, data_format, data_width:const.DataWidth=const.DataWidth.SINGLE_WIDTH):
-    await RisingEdge(dut.clk)
+def twos_complement_to_float(input_data, bit_width:int=const.N_COMP):
+    input_data = str(input_data)
+    integer_value = int(input_data, 2) # Convert binary string to an integer
+    if input_data[0] == '1': integer_value -= (1 << bit_width)
+    return float(integer_value / 2**const.Q_COMP)
 
+async def write_one_word_cent(dut, addr:int, data:int, device:str, data_format, data_width:const.DataWidth=const.DataWidth.SINGLE_WIDTH):
     if device == "params": data_fx = FXnum(data, FXfamily(const.N_STO_PARAMS-data_format.value, data_format.value))
     elif device == "int_res": 
-        if data_width == const.DataWidth.SINGLE_WIDTH: data_fx = FXnum(data, FXfamily(const.N_STO_INT_RES-data_format.value, data_format.value))
+        if data_width == const.DataWidth.SINGLE_WIDTH: 
+            data_fx = FXnum(data, FXfamily(const.N_STO_INT_RES-data_format.value, data_format.value))
         elif data_width == const.DataWidth.DOUBLE_WIDTH: data_fx = FXnum(data, FXfamily(2*const.N_STO_INT_RES-data_format.value, data_format.value))
     
     data_fx = FXnum(data_fx, const.num_Q_comp)
@@ -202,7 +207,29 @@ async def write_one_word_cent(dut, addr:int, data:int, device:str, data_format, 
         dut.int_res_write_format.value = const.int_res_fx_rtl_enum[data_format]
         await RisingEdge(dut.clk)
         dut.int_res_write_en.value = 0
+
+async def read_one_word_cent(dut, addr:int, device:str, data_format, data_width:const.DataWidth=const.DataWidth.SINGLE_WIDTH):
     await RisingEdge(dut.clk)
+    if device == "params":
+        assert (data_width.value == const.DataWidth.SINGLE_WIDTH.value), "Params memory only compatible with SINGLE_WIDTH!"
+        dut.param_chip_en.value = 1
+        dut.param_read_en.value = 1
+        dut.param_read_addr.value = addr
+        dut.param_read_format.value = const.params_fx_rtl_enum[data_format]
+        await RisingEdge(dut.clk)
+        dut.param_read_en.value = 0
+        await RisingEdge(dut.clk)
+        return twos_complement_to_float(dut.param_read_data.value)
+    elif device == "int_res":
+        dut.int_res_chip_en.value = 1
+        dut.int_res_read_en.value = 1
+        dut.int_res_read_data_width.value = data_width.value
+        dut.int_res_read_addr.value = addr
+        dut.int_res_read_format.value = const.int_res_fx_rtl_enum[data_format]
+        await RisingEdge(dut.clk)
+        dut.int_res_read_en.value = 0
+        await RisingEdge(dut.clk)
+        return twos_complement_to_float(dut.int_res_read_data.value)
 
 #----- EEG -----#
 eeg_index = 0

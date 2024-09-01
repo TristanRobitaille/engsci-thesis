@@ -6,8 +6,8 @@ CIM_PARAMS_BANK_SIZE_NUM_WORD   = 15872
 CIM_INT_RES_BANK_SIZE_NUM_WORD  = 14336
 CIM_PARAMS_NUM_BANKS            = 2
 CIM_INT_RES_NUM_BANKS           = 4
-N_STO_INT_RES                   = 8
-N_STO_PARAMS                    = 9
+N_STO_INT_RES                   = 15
+N_STO_PARAMS                    = 15
 N_COMP                          = 39
 Q_COMP                          = 21
 
@@ -28,6 +28,10 @@ class ActivationType(Enum):
     NO_ACTIVATION = 0
     LINEAR_ACTIVATION = 1
     SWISH_ACTIVATION = 2
+
+class LayerNormHalfSelect(Enum):
+    FIRST_HALF = 0
+    SECOND_HALF = 1
 
 class FxFormatIntRes(Enum): # Value is the number of integer bits
     INT_RES_SW_FX_1_X = 1

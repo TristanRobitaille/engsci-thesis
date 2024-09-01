@@ -16,12 +16,6 @@ NUM_TESTS = 3
 TOLERANCE = 0.075
 
 #----- FUNCTIONS -----#
-def twos_complement_to_float(input_data, bit_width:int=const.N_COMP):
-    input_data = str(input_data)
-    integer_value = int(input_data, 2) # Convert binary string to an integer
-    if input_data[0] == '1': integer_value -= (1 << bit_width)
-    return float(integer_value / 2**const.Q_COMP)
-
 async def test_MAC(dut, activation, param_type, int_res_width, int_res_format, param_format):
     # Prepare MAC
     expected_result = 0
@@ -69,7 +63,7 @@ async def test_MAC(dut, activation, param_type, int_res_width, int_res_format, p
 
     # Wait for the MAC to finish and check result
     while dut.done.value == 0: await RisingEdge(dut.clk)
-    received = twos_complement_to_float(dut.computation_result.value)
+    received = utilities.twos_complement_to_float(dut.computation_result.value)
     expected_result = float(expected_result)
     assert received == pytest.approx(expected_result, rel=TOLERANCE), f"Expected: {expected_result}, received: {received}"
 
