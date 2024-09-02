@@ -131,32 +131,133 @@ package Defines;
         MLP_HEAD_DENSE_2_OUT_MEM,
         SOFTMAX_AVG_SUM_MEM,
         PREV_SOFTMAX_OUTPUT_MEM,
-        NUM_DATA_ADDR
-    } DataAddr_t;
+        NUM_DATA_STEP
+    } DataStep_t;
+
+    typedef enum int {
+        PATCH_PROJ_KERNEL_PARAMS,
+        POS_EMB_PARAMS,
+        ENC_Q_DENSE_PARAMS,
+        ENC_K_DENSE_PARAMS,
+        ENC_V_DENSE_PARAMS,
+        ENC_COMB_HEAD_PARAMS,
+        ENC_MLP_DENSE_1_PARAMS,
+        ENC_MLP_DENSE_2_PARAMS,
+        MLP_HEAD_DENSE_1_PARAMS,
+        MLP_HEAD_DENSE_2_PARAMS,
+        SINGLE_PARAMS,
+        NUM_PARAM_STEP
+    } ParamStep_t;
+
+    typedef enum int {
+        PATCH_PROJ_BIAS_OFF,
+        CLASS_TOKEN_OFF,
+        ENC_LAYERNORM_1_GAMMA_OFF,
+        ENC_LAYERNORM_1_BETA_OFF,
+        ENC_Q_DENSE_BIAS_0FF,
+        ENC_K_DENSE_BIAS_0FF,
+        ENC_V_DENSE_BIAS_0FF,
+        ENC_INV_SQRT_NUM_HEADS_OFF,
+        ENC_COMB_HEAD_BIAS_OFF,
+        ENC_LAYERNORM_2_GAMMA_OFF,
+        ENC_LAYERNORM_2_BETA_OFF,
+        ENC_MLP_DENSE_1_BIAS_OFF,
+        ENC_MLP_DENSE_2_BIAS_OFF,
+        ENC_LAYERNORM_3_GAMMA_OFF,
+        ENC_LAYERNORM_3_BETA_OFF,
+        MLP_HEAD_DENSE_1_BIAS_OFF,
+        MLP_HEAD_DENSE_2_BIAS_OFF,
+        NUM_PARAM_BIAS_STEP
+    } ParamBiasStep_t;
 
     /* ----- ADDRESSES ----- */
-    localparam int mem_map [NUM_DATA_ADDR] = '{
-        0, // EEG_INPUT_MEM
-        SINGLE_WIDTH*NUM_PATCHES*PATCH_LEN + PATCH_LEN, // PATCH_MEM
-        SINGLE_WIDTH*NUM_PATCHES*PATCH_LEN, // CLASS_TOKEN_MEM
-        0, // POS_EMB_MEM
-        20000, // ENC_LN1_MEM
-        2*(NUM_PATCHES+1)*EMB_DEPTH, // ENC_Q_MEM
-        2*(NUM_PATCHES+1)*EMB_DEPTH+(NUM_PATCHES+1)*EMB_DEPTH, // ENC_K_MEM
-        (NUM_PATCHES+1)*EMB_DEPTH, // ENC_V_MEM
-        4*(NUM_PATCHES+1)*EMB_DEPTH, // ENC_QK_T_MEM
-        4*(NUM_PATCHES+1)*EMB_DEPTH + NUM_HEADS*(NUM_PATCHES+1)*(NUM_PATCHES+1), // ENC_V_MULT_MEM
-        (NUM_PATCHES+1)*EMB_DEPTH, // ENC_MHSA_OUT_MEM
-        0, // ENC_LN2_MEM
-        EMB_DEPTH*EMB_DEPTH, // ENC_MLP_DENSE1_MEM
-        0, // ENC_MLP_OUT_MEM
-        EMB_DEPTH, // ENC_LN3_MEM
-        0, // MLP_HEAD_DENSE_1_OUT_MEM
-        MLP_DIM, // MLP_HEAD_DENSE_2_OUT_MEM
-        0, // SOFTMAX_AVG_SUM_MEM
-        CIM_INT_RES_NUM_BANKS*CIM_INT_RES_BANK_SIZE_NUM_WORD - NUM_SLEEP_STAGES*(NUM_SAMPLES_OUT_AVG-1) // PREV_SOFTMAX_OUTPUT_MEM
+    const IntResAddr_t mem_map [NUM_DATA_STEP] = '{
+        IntResAddr_t'(0),                                                                                               // EEG_INPUT_MEM
+        IntResAddr_t'(NUM_PATCHES*PATCH_LEN + PATCH_LEN),                                                               // PATCH_MEM
+        IntResAddr_t'(NUM_PATCHES*PATCH_LEN),                                                                           // CLASS_TOKEN_MEM
+        IntResAddr_t'(0),                                                                                               // POS_EMB_MEM
+        IntResAddr_t'(20000),                                                                                           // ENC_LN1_MEM
+        IntResAddr_t'(2*(NUM_PATCHES+1)*EMB_DEPTH),                                                                     // ENC_Q_MEM
+        IntResAddr_t'(2*(NUM_PATCHES+1)*EMB_DEPTH+(NUM_PATCHES+1)*EMB_DEPTH),                                           // ENC_K_MEM
+        IntResAddr_t'((NUM_PATCHES+1)*EMB_DEPTH),                                                                       // ENC_V_MEM
+        IntResAddr_t'(4*(NUM_PATCHES+1)*EMB_DEPTH),                                                                     // ENC_QK_T_MEM
+        IntResAddr_t'(4*(NUM_PATCHES+1)*EMB_DEPTH + NUM_HEADS*(NUM_PATCHES+1)*(NUM_PATCHES+1)),                         // ENC_V_MULT_MEM
+        IntResAddr_t'((NUM_PATCHES+1)*EMB_DEPTH),                                                                       // ENC_MHSA_OUT_MEM
+        IntResAddr_t'(0),                                                                                               // ENC_LN2_MEM
+        IntResAddr_t'(EMB_DEPTH*EMB_DEPTH),                                                                             // ENC_MLP_DENSE1_MEM
+        IntResAddr_t'(0),                                                                                               // ENC_MLP_OUT_MEM
+        IntResAddr_t'(EMB_DEPTH),                                                                                       // ENC_LN3_MEM
+        IntResAddr_t'(0),                                                                                               // MLP_HEAD_DENSE_1_OUT_MEM
+        IntResAddr_t'(MLP_DIM),                                                                                         // MLP_HEAD_DENSE_2_OUT_MEM
+        IntResAddr_t'(0),                                                                                               // SOFTMAX_AVG_SUM_MEM
+        IntResAddr_t'(CIM_INT_RES_NUM_BANKS*CIM_INT_RES_BANK_SIZE_NUM_WORD - NUM_SLEEP_STAGES*(NUM_SAMPLES_OUT_AVG-1))  // PREV_SOFTMAX_OUTPUT_MEM
+    };
+
+    const ParamAddr_t param_addr_map [NUM_PARAM_STEP] = '{
+        0,      // PATCH_PROJ_KERNEL_PARAMS
+        4096,   // POS_EMB_PARAMS
+        8000,   // ENC_Q_DENSE_PARAMS
+        12096,  // ENC_K_DENSE_PARAMS
+        16192,  // ENC_V_DENSE_PARAMS
+        20288,  // ENC_COMB_HEAD_PARAMS
+        24384,  // ENC_MLP_DENSE_1_PARAMS
+        26432,  // ENC_MLP_DENSE_2_PARAMS
+        28480,  // MLP_HEAD_DENSE_1_PARAMS
+        30528,  // MLP_HEAD_DENSE_2_PARAMS
+        30688   // SINGLE_PARAMS
+    };
+
+    const ParamAddr_t param_addr_map_bias [NUM_PARAM_BIAS_STEP] = '{
+        param_addr_map[NUM_PARAM_STEP],       // PATCH_PROJ_BIAS_OFF
+        param_addr_map[NUM_PARAM_STEP] + 64,  // CLASS_TOKEN_OFF
+        param_addr_map[NUM_PARAM_STEP] + 128, // ENC_LAYERNORM_1_GAMMA_OFF
+        param_addr_map[NUM_PARAM_STEP] + 192, // ENC_LAYERNORM_1_BETA_OFF
+        param_addr_map[NUM_PARAM_STEP] + 256, // ENC_Q_DENSE_BIAS_0FF
+        param_addr_map[NUM_PARAM_STEP] + 320, // ENC_K_DENSE_BIAS_0FF
+        param_addr_map[NUM_PARAM_STEP] + 384, // ENC_V_DENSE_BIAS_0FF
+        param_addr_map[NUM_PARAM_STEP] + 448, // ENC_INV_SQRT_NUM_HEADS_OFF
+        param_addr_map[NUM_PARAM_STEP] + 449, // ENC_COMB_HEAD_BIAS_OFF
+        param_addr_map[NUM_PARAM_STEP] + 513, // ENC_LAYERNORM_2_GAMMA_OFF
+        param_addr_map[NUM_PARAM_STEP] + 577, // ENC_LAYERNORM_2_BETA_OFF
+        param_addr_map[NUM_PARAM_STEP] + 641, // ENC_MLP_DENSE_1_BIAS_OFF
+        param_addr_map[NUM_PARAM_STEP] + 673, // ENC_MLP_DENSE_2_BIAS_OFF
+        param_addr_map[NUM_PARAM_STEP] + 737, // ENC_LAYERNORM_3_GAMMA_OFF
+        param_addr_map[NUM_PARAM_STEP] + 801, // ENC_LAYERNORM_3_BETA_OFF
+        param_addr_map[NUM_PARAM_STEP] + 865, // MLP_HEAD_DENSE_1_BIAS_OFF
+        param_addr_map[NUM_PARAM_STEP] + 897  // MLP_HEAD_DENSE_2_BIAS_OFF
+    };
+
+    /* ----- CASTS ----- */
+    typedef enum int {
+        PATCH_PROJ_INPUT_WIDTH,
+        PATCH_PROJ_OUTPUT_WIDTH,
+        NUM_INT_RES_WIDTHS
+    } IntResWidth_t;
+
+    typedef enum int {
+        PATCH_PROJ_INPUT_FORMAT,
+        PATCH_PROJ_OUTPUT_FORMAT,
+        NUM_INT_RES_FORMATS
+    } IntResFormat_t;
+
+    typedef enum int {
+        PATCH_PROJ_PARAM_FORMAT,
+        NUM_PARAMS_FORMATS
+    } ParamWidth_t;
+
+    const DataWidth_t int_res_width [NUM_INT_RES_WIDTHS] = '{
+        DOUBLE_WIDTH, // PATCH_PROJ_INPUT_WIDTH
+        DOUBLE_WIDTH // PATCH_PROJ_OUTPUT_WIDTH
+    };
+
+    const FxFormatIntRes_t int_res_format [NUM_INT_RES_FORMATS] = '{
+        INT_RES_DW_FX, // PATCH_PROJ_INPUT_FORMAT
+        INT_RES_DW_FX // PATCH_PROJ_OUTPUT_FORMAT
+    };
+
+    const FxFormatParams_t params_format [NUM_PARAMS_FORMATS] = '{
+        PARAMS_FX_2_X // PATCH_PROJ_PARAM_FORMAT
     };
 
 endpackage
-
 `endif // _defines_vh_

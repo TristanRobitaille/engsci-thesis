@@ -1,0 +1,147 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Mon Sep  2 16:49:13 2024
+[*]
+[dumpfile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/sim/sim_build/dump.fst"
+[dumpfile_mtime] "Mon Sep  2 16:47:56 2024"
+[dumpfile_size] 18867901
+[savefile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/sim/cim_centralized.gtkw"
+[timestart] 0
+[size] 1512 916
+[pos] -1 -1
+*-30.700001 574850000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[markername] AA
+[markername] BB
+[markername] CC
+[markername] DD
+[markername] EE
+[markername] FF
+[markername] GG
+[markername] HH
+[markername] II
+[markername] JJ
+[markername] KK
+[markername] LL
+[markername] MM
+[markername] NN
+[markername] OO
+[markername] PP
+[markername] QQ
+[markername] RR
+[markername] SS
+[markername] TT
+[markername] UU
+[markername] VV
+[markername] WW
+[markername] XX
+[markername] YY
+[markername] ZZ
+[treeopen] cim_centralized_tb.
+[treeopen] cim_centralized_tb.cim_centralized.
+[treeopen] cim_centralized_tb.cim_centralized.add.
+[treeopen] cim_centralized_tb.cim_centralized.mac.
+[sst_width] 253
+[signals_width] 297
+[sst_expanded] 1
+[sst_vpaned_height] 526
+@28
+clk
+@200
+-CIM
+@28
+cim_centralized_tb.soc_ctrl_i.new_sleep_epoch
+cim_centralized_tb.soc_ctrl_new_sleep_epoch
+@22
+cim_centralized_tb.cim_centralized.cnt_4b_i.cnt[3:0]
+@24
+cim_centralized_tb.cim_centralized.cnt_7b_i.cnt[6:0]
+cim_centralized_tb.cim_centralized.cnt_9b_i.cnt[8:0]
+@100000028
+cim_centralized_tb.cim_centralized.cim_state[1:0]
+cim_centralized_tb.cim_centralized.current_inf_step[4:0]
+@200
+-PARAMS READ
+-PARAMS WRITE
+@28
+cim_centralized_tb.cim_centralized.param_write_i.en
+@24
+cim_centralized_tb.cim_centralized.param_write_i.addr[14:0]
+@c00420
+cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+@28
+(0)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(1)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(2)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(3)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(4)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(5)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(6)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(7)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(8)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(9)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(10)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(11)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(12)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(13)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(14)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(15)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(16)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(17)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(18)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(19)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(20)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(21)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(22)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(23)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(24)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(25)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(26)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(27)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(28)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(29)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(30)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(31)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(32)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(33)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(34)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(35)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(36)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(37)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+(38)cim_centralized_tb.cim_centralized.param_write_i.data[38:0]
+@1401200
+-group_end
+@100000028
+cim_centralized_tb.cim_centralized.param_write_i.format[1:0]
+@200
+-INT_RES READ
+@28
+cim_centralized_tb.cim_centralized.int_res_read_i.en
+@24
+cim_centralized_tb.cim_centralized.int_res_read_i.addr[15:0]
+@420
+cim_centralized_tb.cim_centralized.int_res_read_i.data[38:0]
+@100000028
+cim_centralized_tb.cim_centralized.int_res_read_i.format[2:0]
+cim_centralized_tb.cim_centralized.int_res_read_i.data_width
+@200
+-INT_RES_WRITE
+@28
+cim_centralized_tb.cim_centralized.int_res_write_i.en
+@24
+cim_centralized_tb.cim_centralized.int_res_write_i.addr[15:0]
+@420
+cim_centralized_tb.cim_centralized.int_res_write_i.data[38:0]
+@100000028
+cim_centralized_tb.cim_centralized.int_res_write_i.format[2:0]
+cim_centralized_tb.cim_centralized.int_res_write_i.data_width
+@28
+cim_centralized_tb.cim_centralized.cnt_7b_i.rst_n
+@200
+-MAC
+@28
+cim_centralized_tb.cim_centralized.mac.io.start
+cim_centralized_tb.cim_centralized.mac.io.done
+@420
+cim_centralized_tb.cim_centralized.mac.io.out[38:0]
+[pattern_trace] 1
+[pattern_trace] 0

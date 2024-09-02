@@ -139,10 +139,10 @@ module mac_tb # () (
     end
 
     // MAC module instantiation
-    ComputeIPInterface MAC_add_io();
-    ComputeIPInterface MAC_mult_io();
-    ComputeIPInterface MAC_exp_io();
-    ComputeIPInterface MAC_div_io();
+    ComputeIPInterface MAC_add_io ();
+    ComputeIPInterface MAC_mult_io ();
+    ComputeIPInterface MAC_exp_io ();
+    ComputeIPInterface MAC_div_io ();
     MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) MAC_int_res_read ();
     MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t)  MAC_param_read ();
     MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t)  casts ();
@@ -153,7 +153,7 @@ module mac_tb # () (
         casts.params_read_format = param_write_format;
     end
 
-    ComputeIPInterface io();
+    ComputeIPInterface io ();
     ComputeIPInterface io_extra ();
     always_comb begin : tb_io_sig_assign
         io.start = start;

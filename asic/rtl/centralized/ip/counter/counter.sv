@@ -21,7 +21,7 @@ module counter # (
             sig.cnt <= 0;
         end else begin
             if (MODE == 0) begin // Posedge-triggered
-                sig.cnt <= (sig.inc != inc_prev) ? (sig.cnt + 1) : sig.cnt;
+                sig.cnt <= (sig.inc & ~inc_prev) ? (sig.cnt + 1) : sig.cnt;
                 inc_prev <= sig.inc;
             end else if (MODE == 1) begin // Level-triggered
                 sig.cnt <= (sig.inc) ? (sig.cnt + 1) : sig.cnt;
