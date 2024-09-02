@@ -1,5 +1,5 @@
-`ifndef _defines_vh_
-`define _defines_vh_
+`ifndef _defines_svh_
+`define _defines_svh_
 
 package Defines;
     /* ----- Constants ----- */
@@ -260,4 +260,4 @@ package Defines;
     };
 
 endpackage
-`endif // _defines_vh_
+`endif // _defines_svh_

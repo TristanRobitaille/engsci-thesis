@@ -1,3 +1,6 @@
+`ifndef _mem_model_sv_
+`define _mem_model_sv_
+
 module mem_model #(
     parameter int DEPTH
 )(
@@ -32,3 +35,4 @@ module mem_model #(
         assert (!((write.en | read.en) & ~write.chip_en)) else $error("Tried to write or read from memory while it was not enabled!"); // Never try to read or write while memory not enabled 
     end
 endmodule
+`endif

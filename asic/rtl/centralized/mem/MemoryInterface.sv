@@ -1,4 +1,5 @@
-import Defines::*;
+`ifndef _memory_interface_vh_
+`define _memory_interface_vh_
 
 interface MemoryInterface # (
     parameter type Data_t,
@@ -71,3 +72,4 @@ interface MemoryInterface # (
     );
 
 endinterface
+`endif

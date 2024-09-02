@@ -29,8 +29,8 @@ function automatic CompFx_t real_to_fixed(input real decimal_float);
 endfunction
 
 // Constants
-localparam CompFx_t ln2_inv = real_to_fixed(1.44269504089); // 1/ln(2)
-localparam CompFx_t Taylor_mult[0:3] = {
+CompFx_t localparam ln2_inv = real_to_fixed(1.44269504089); // 1/ln(2)
+CompFx_t localparam Taylor_mult[0:3] = {
     real_to_fixed(1.0),             // 1.0
     real_to_fixed(0.69314718056),   // ln(2)
     real_to_fixed(0.24022650700),   // ln(2)^2/2!

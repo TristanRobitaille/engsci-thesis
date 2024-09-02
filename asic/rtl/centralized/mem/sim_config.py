@@ -28,7 +28,7 @@ ARGS = [
 def test_dff_verilog():
     run(
         verilog_sources=[
-            os.path.join(src_dir, "defines.svh"),
+            os.path.join(src_dir, "Defines.svh"),
             os.path.join(src_dir, "mem/MemoryInterface.sv"),
             os.path.join(src_dir, "mem/mem_model.sv"),
             os.path.join(src_dir, "mem/params_mem.sv"),

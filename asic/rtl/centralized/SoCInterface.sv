@@ -1,3 +1,6 @@
+`ifndef _soc_interface_vh_
+`define _soc_interface_vh_
+
 import Defines::*;
 
 interface SoCInterface;
@@ -11,3 +14,4 @@ interface SoCInterface;
     );
 
 endinterface
+`endif

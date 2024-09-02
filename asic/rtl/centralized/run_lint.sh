@@ -1,0 +1,19 @@
+#!/bin/bash
+LIB_FILES="\
+    Defines.svh\
+    SoCInterface.sv\
+    ip/ComputeIPInterface.sv\
+    ip/adder/adder.sv\
+    ip/multiplier/multiplier.sv\
+    ip/counter/counter.sv\
+    ip/exp/exp.sv\
+    ip/layernorm/layernorm.sv\
+    ip/mac/mac.sv\
+    ip/softmax/softmax.sv\
+    ip/sqrt/sqrt.sv\
+    mem/MemoryInterface.sv\
+    mem/mem_model.sv\
+    mem/params_mem.sv\
+    mem/int_res_mem.sv"
+clear
+verilator --lint-only -Wall -v $LIB_FILES "cim_centralized.sv"

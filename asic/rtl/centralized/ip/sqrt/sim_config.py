@@ -25,7 +25,7 @@ ARGS = [
 def test_dff_verilog():
     run(
         verilog_sources=[
-            os.path.join(src_dir, "defines.svh"),
+            os.path.join(src_dir, "Defines.svh"),
             os.path.join(src_dir, "ip/ComputeIPInterface.sv"),
             os.path.join(src_dir, "ip/sqrt/sqrt.sv"),
             os.path.join(src_dir, "ip/sqrt/sqrt_tb.sv"),
