@@ -24,6 +24,19 @@ async def fill_int_res_mem(dut):
         data = random.uniform(-2**(data_format.value-1)+1, 2**(data_format.value-1)-1)
         await utilities.write_one_word_cent(dut, addr=addr, data=data, device="int_res", data_format=data_format, data_width=data_width)
 
+async def load_eeg(dut):
+    dut.soc_ctrl_start_eeg_load.value = 1
+    await RisingEdge(dut.clk)
+    dut.soc_ctrl_start_eeg_load.value = 0
+
+    for _ in range(utilities.NUM_PATCHES*utilities.PATCH_LEN):
+        await RisingEdge(dut.clk)
+        dut.soc_ctrl_new_eeg_data.value = 1
+        dut.soc_ctrl_eeg.value = random.randint(0, 2**16-1)
+        await RisingEdge(dut.clk)
+        dut.soc_ctrl_new_eeg_data.value = 0
+        for _ in range(3): await RisingEdge(dut.clk)
+
 # ----- TEST ----- #
 @cocotb.test()
 async def inference_tb(dut):
@@ -35,12 +48,13 @@ async def inference_tb(dut):
     dut.soc_ctrl_rst_n.value = 1
 
     # Fill memory concurrently
-    params_task = cocotb.start_soon(fill_params_mem(dut))
-    int_res_task = cocotb.start_soon(fill_int_res_mem(dut))
+    params_fill = cocotb.start_soon(fill_params_mem(dut))
+    int_res_fill = cocotb.start_soon(fill_int_res_mem(dut))
+    await params_fill
+    await int_res_fill
 
-    # Wait for both tasks to complete
-    await params_task
-    await int_res_task
+    # Load EEG data as if it was a stream from the ADC
+    await load_eeg(dut)
 
     # Inference
     dut.soc_ctrl_new_sleep_epoch.value = 1

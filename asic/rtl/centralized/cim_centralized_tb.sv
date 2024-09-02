@@ -1,6 +1,7 @@
 module cim_centralized_tb (
-    input logic clk, soc_ctrl_rst_n,
-    input logic soc_ctrl_new_sleep_epoch,
+    input logic clk, soc_ctrl_rst_n, soc_ctrl_start_eeg_load,
+    input logic soc_ctrl_new_eeg_data, soc_ctrl_new_sleep_epoch,
+    input AdcData_t soc_ctrl_eeg,
     output logic soc_ctrl_inference_complete,
 
     // ----- Memory ---- //
@@ -23,7 +24,10 @@ module cim_centralized_tb (
     SoCInterface soc_ctrl_i ();
     always_comb begin : soc_ctrl_sign_assign
         soc_ctrl_i.rst_n = soc_ctrl_rst_n;
+        soc_ctrl_i.start_eeg_load = soc_ctrl_start_eeg_load;
+        soc_ctrl_i.new_eeg_data = soc_ctrl_new_eeg_data;
         soc_ctrl_i.new_sleep_epoch = soc_ctrl_new_sleep_epoch;
+        soc_ctrl_i.eeg = soc_ctrl_eeg;
         soc_ctrl_inference_complete = soc_ctrl_i.inference_complete;        
     end
 

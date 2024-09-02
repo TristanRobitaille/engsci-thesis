@@ -12,6 +12,7 @@ package Defines;
     localparam int Q_STO_INT_RES_DOUBLE             = 2*N_STO_INT_RES - 10;
     localparam int N_COMP                           = 39;
     localparam int Q_COMP                           = 21;
+    localparam int ADC_BITWIDTH                     = 16; // Assume that the ADC feeding EEG data is 16b unsigned integer
 
     localparam int EMB_DEPTH = 64;
     localparam int NUM_PATCHES = 60;
@@ -34,6 +35,7 @@ package Defines;
     typedef logic signed [2*N_STO_INT_RES-1:0]                                      IntResDouble_t;
     typedef logic signed [N_COMP-1:0]                                               CompFx_t;
     typedef logic signed                                                            FxFormat_Unused_t; // Needed for MemoryInterface to instantiate correctly for banks
+    typedef logic [ADC_BITWIDTH-1:0]                                                AdcData_t;
 
     /* ----- Enum ----- */
     typedef enum logic {
@@ -63,6 +65,7 @@ package Defines;
 
     typedef enum logic [1:0] {
         IDLE_CIM,
+        EEG_LOAD,
         INFERENCE_RUNNING,
         INVALID_CIM
     } State_t;
@@ -229,13 +232,13 @@ package Defines;
 
     /* ----- CASTS ----- */
     typedef enum int {
-        PATCH_PROJ_INPUT_WIDTH,
+        EEG_WIDTH,
         PATCH_PROJ_OUTPUT_WIDTH,
         NUM_INT_RES_WIDTHS
     } IntResWidth_t;
 
     typedef enum int {
-        PATCH_PROJ_INPUT_FORMAT,
+        EEG_FORMAT,
         PATCH_PROJ_OUTPUT_FORMAT,
         NUM_INT_RES_FORMATS
     } IntResFormat_t;
@@ -246,12 +249,12 @@ package Defines;
     } ParamWidth_t;
 
     const DataWidth_t int_res_width [NUM_INT_RES_WIDTHS] = '{
-        DOUBLE_WIDTH, // PATCH_PROJ_INPUT_WIDTH
+        DOUBLE_WIDTH, // EEG_WIDTH
         DOUBLE_WIDTH // PATCH_PROJ_OUTPUT_WIDTH
     };
 
     const FxFormatIntRes_t int_res_format [NUM_INT_RES_FORMATS] = '{
-        INT_RES_DW_FX, // PATCH_PROJ_INPUT_FORMAT
+        INT_RES_DW_FX, // EEG_FORMAT
         INT_RES_DW_FX // PATCH_PROJ_OUTPUT_FORMAT
     };
 

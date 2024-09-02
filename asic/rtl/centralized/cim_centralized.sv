@@ -3,10 +3,6 @@
 
 import Defines::*;
 
-/* Todo:
-*   - Load patch stream (instead of just starting with patch projection)
-*/
-
 module cim_centralized #()(
     input wire clk,
     SoCInterface soc_ctrl_i,
@@ -78,10 +74,12 @@ module cim_centralized #()(
         end else begin
             unique case (cim_state)
                 IDLE_CIM: begin
-                    if (soc_ctrl_i.new_sleep_epoch) begin
-                        cim_state <= INFERENCE_RUNNING;
-                        current_inf_step <= PATCH_PROJ_STEP;
-                    end
+                    current_inf_step <= PATCH_PROJ_STEP;
+                    if (soc_ctrl_i.start_eeg_load) cim_state <= EEG_LOAD;
+                    if (soc_ctrl_i.new_sleep_epoch) cim_state <= INFERENCE_RUNNING;
+                end
+                EEG_LOAD: begin
+                    if (soc_ctrl_i.new_sleep_epoch) cim_state <= INFERENCE_RUNNING;
                 end
                 INFERENCE_RUNNING: begin
                     if (current_inf_step == CLASS_TOKEN_CONCAT_STEP) begin
@@ -101,23 +99,35 @@ module cim_centralized #()(
 
     always_ff @ (posedge clk) begin : inference_fsm
         set_default_values();
-        if (cim_state == INFERENCE_RUNNING) begin
+        if (cim_state == EEG_LOAD) begin
+            if (soc_ctrl_i.new_eeg_data) begin
+                /* cnt_7b_i holds current EEG data in patch
+                   cnt_9b_i holds current patch */
+                    IntResAddr_t addr = mem_map[EEG_INPUT_MEM] + IntResAddr_t'(int'(cnt_7b_i.cnt) + (int'(cnt_9b_i.cnt) << $clog2(PATCH_LEN)));
+                    CompFx_t eeg_normalized = CompFx_t'({soc_ctrl_i.eeg, (Q_COMP-ADC_BITWIDTH)'(0)}); // Normalize to [0, 1]
+                    write_int_res(addr, eeg_normalized, int_res_width[EEG_WIDTH], int_res_format[EEG_FORMAT]);
+                    if (int'(cnt_7b_i.cnt) == PATCH_LEN-1) begin
+                        cnt_7b_i.rst_n <= 1'b0;
+                        if (int'(cnt_9b_i.cnt) == NUM_PATCHES-1) cnt_9b_i.rst_n <= 1'b0;
+                        else cnt_9b_i.inc <= 1'b1;
+                    end else cnt_7b_i.inc <= 1'b1;
+            end
+        end else if (cim_state == INFERENCE_RUNNING) begin
             unique case (current_inf_step)
                 PATCH_PROJ_STEP: begin
                     /* cnt_7b_i holds current parameters row
-                    cnt_9b_i holds current patch */
+                       cnt_9b_i holds current patch */
 
                     if (mac_io.done || (cnt_7b_i.cnt == 0 && ~mac_io.busy)) begin
                         IntResAddr_t patch_addr = mem_map[EEG_INPUT_MEM] + IntResAddr_t'(int'(cnt_9b_i.cnt) << $clog2(EMB_DEPTH));
                         ParamAddr_t param_addr  = param_addr_map[PATCH_PROJ_KERNEL_PARAMS] + ParamAddr_t'(int'(cnt_7b_i.cnt) << $clog2(EMB_DEPTH));
                         ParamAddr_t bias_addr   = param_addr_map_bias[PATCH_PROJ_BIAS_OFF] + ParamAddr_t'(cnt_7b_i.cnt);
-                        start_mac(patch_addr, IntResAddr_t'(param_addr), bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, VectorLen_t'(PATCH_LEN), int_res_format[PATCH_PROJ_INPUT_FORMAT],
-                                int_res_width[PATCH_PROJ_INPUT_WIDTH], params_format[PATCH_PROJ_PARAM_FORMAT]);
+                        start_mac(patch_addr, IntResAddr_t'(param_addr), bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, VectorLen_t'(PATCH_LEN), int_res_format[EEG_FORMAT],
+                                int_res_width[EEG_WIDTH], params_format[PATCH_PROJ_PARAM_FORMAT]);
                     end
 
                     if (mac_io.done) begin
-                        IntResAddr_t addr = mem_map[PATCH_MEM] + IntResAddr_t'(cnt_7b_i.cnt) + IntResAddr_t'(int'(cnt_9b_i.cnt) << $clog2(PATCH_LEN)); // Left shift instead of multiply since PATCH_LEN is a power of 2
-                        $display("Addr: %d.", addr);
+                        IntResAddr_t addr = mem_map[PATCH_MEM] + IntResAddr_t'(int'(cnt_7b_i.cnt) + int'(cnt_9b_i.cnt) << $clog2(PATCH_LEN)); // Left shift instead of multiply since PATCH_LEN is a power of 2
                         write_int_res(addr, mac_io.out, int_res_width[PATCH_PROJ_OUTPUT_WIDTH], int_res_format[PATCH_PROJ_OUTPUT_FORMAT]);
         
                         // Update index control
