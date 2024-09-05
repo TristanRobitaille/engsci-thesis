@@ -39,6 +39,11 @@ package Defines;
 
     /* ----- Enum ----- */
     typedef enum logic {
+        POSEDGE_TRIGGERED,
+        LEVEL_TRIGGERED
+    } CounterMode_t;
+
+    typedef enum logic {
         SINGLE_WIDTH,
         DOUBLE_WIDTH
     } DataWidth_t;
@@ -211,55 +216,61 @@ package Defines;
     };
 
     const ParamAddr_t param_addr_map_bias [NUM_PARAM_BIAS_STEP] = '{
-        param_addr_map[NUM_PARAM_STEP],       // PATCH_PROJ_BIAS_OFF
-        param_addr_map[NUM_PARAM_STEP] + 64,  // CLASS_TOKEN_OFF
-        param_addr_map[NUM_PARAM_STEP] + 128, // ENC_LAYERNORM_1_GAMMA_OFF
-        param_addr_map[NUM_PARAM_STEP] + 192, // ENC_LAYERNORM_1_BETA_OFF
-        param_addr_map[NUM_PARAM_STEP] + 256, // ENC_Q_DENSE_BIAS_0FF
-        param_addr_map[NUM_PARAM_STEP] + 320, // ENC_K_DENSE_BIAS_0FF
-        param_addr_map[NUM_PARAM_STEP] + 384, // ENC_V_DENSE_BIAS_0FF
-        param_addr_map[NUM_PARAM_STEP] + 448, // ENC_INV_SQRT_NUM_HEADS_OFF
-        param_addr_map[NUM_PARAM_STEP] + 449, // ENC_COMB_HEAD_BIAS_OFF
-        param_addr_map[NUM_PARAM_STEP] + 513, // ENC_LAYERNORM_2_GAMMA_OFF
-        param_addr_map[NUM_PARAM_STEP] + 577, // ENC_LAYERNORM_2_BETA_OFF
-        param_addr_map[NUM_PARAM_STEP] + 641, // ENC_MLP_DENSE_1_BIAS_OFF
-        param_addr_map[NUM_PARAM_STEP] + 673, // ENC_MLP_DENSE_2_BIAS_OFF
-        param_addr_map[NUM_PARAM_STEP] + 737, // ENC_LAYERNORM_3_GAMMA_OFF
-        param_addr_map[NUM_PARAM_STEP] + 801, // ENC_LAYERNORM_3_BETA_OFF
-        param_addr_map[NUM_PARAM_STEP] + 865, // MLP_HEAD_DENSE_1_BIAS_OFF
-        param_addr_map[NUM_PARAM_STEP] + 897  // MLP_HEAD_DENSE_2_BIAS_OFF
+        param_addr_map[NUM_PARAM_STEP-1],       // PATCH_PROJ_BIAS_OFF
+        param_addr_map[NUM_PARAM_STEP-1] + 64,  // CLASS_TOKEN_OFF
+        param_addr_map[NUM_PARAM_STEP-1] + 128, // ENC_LAYERNORM_1_GAMMA_OFF
+        param_addr_map[NUM_PARAM_STEP-1] + 192, // ENC_LAYERNORM_1_BETA_OFF
+        param_addr_map[NUM_PARAM_STEP-1] + 256, // ENC_Q_DENSE_BIAS_0FF
+        param_addr_map[NUM_PARAM_STEP-1] + 320, // ENC_K_DENSE_BIAS_0FF
+        param_addr_map[NUM_PARAM_STEP-1] + 384, // ENC_V_DENSE_BIAS_0FF
+        param_addr_map[NUM_PARAM_STEP-1] + 448, // ENC_INV_SQRT_NUM_HEADS_OFF
+        param_addr_map[NUM_PARAM_STEP-1] + 449, // ENC_COMB_HEAD_BIAS_OFF
+        param_addr_map[NUM_PARAM_STEP-1] + 513, // ENC_LAYERNORM_2_GAMMA_OFF
+        param_addr_map[NUM_PARAM_STEP-1] + 577, // ENC_LAYERNORM_2_BETA_OFF
+        param_addr_map[NUM_PARAM_STEP-1] + 641, // ENC_MLP_DENSE_1_BIAS_OFF
+        param_addr_map[NUM_PARAM_STEP-1] + 673, // ENC_MLP_DENSE_2_BIAS_OFF
+        param_addr_map[NUM_PARAM_STEP-1] + 737, // ENC_LAYERNORM_3_GAMMA_OFF
+        param_addr_map[NUM_PARAM_STEP-1] + 801, // ENC_LAYERNORM_3_BETA_OFF
+        param_addr_map[NUM_PARAM_STEP-1] + 865, // MLP_HEAD_DENSE_1_BIAS_OFF
+        param_addr_map[NUM_PARAM_STEP-1] + 897  // MLP_HEAD_DENSE_2_BIAS_OFF
     };
 
     /* ----- CASTS ----- */
     typedef enum int {
         EEG_WIDTH,
         PATCH_PROJ_OUTPUT_WIDTH,
+        CLASS_EMB_TOKEN_WIDTH,
         NUM_INT_RES_WIDTHS
     } IntResWidth_t;
 
     typedef enum int {
         EEG_FORMAT,
         PATCH_PROJ_OUTPUT_FORMAT,
+        CLASS_EMB_TOKEN_FORMAT,
         NUM_INT_RES_FORMATS
     } IntResFormat_t;
 
     typedef enum int {
         PATCH_PROJ_PARAM_FORMAT,
+        CLASS_EMB_TOKEN_PARAM_FORMAT,
         NUM_PARAMS_FORMATS
     } ParamWidth_t;
 
     const DataWidth_t int_res_width [NUM_INT_RES_WIDTHS] = '{
         DOUBLE_WIDTH, // EEG_WIDTH
-        DOUBLE_WIDTH // PATCH_PROJ_OUTPUT_WIDTH
+        DOUBLE_WIDTH, // PATCH_PROJ_OUTPUT_WIDTH
+        DOUBLE_WIDTH  // CLASS_TOKEN_WIDTH
     };
 
     const FxFormatIntRes_t int_res_format [NUM_INT_RES_FORMATS] = '{
         INT_RES_DW_FX, // EEG_FORMAT
-        INT_RES_DW_FX // PATCH_PROJ_OUTPUT_FORMAT
+        INT_RES_DW_FX, // PATCH_PROJ_OUTPUT_FORMAT
+        INT_RES_DW_FX  // CLASS_EMB_TOKEN_FORMAT
     };
 
     const FxFormatParams_t params_format [NUM_PARAMS_FORMATS] = '{
-        PARAMS_FX_2_X // PATCH_PROJ_PARAM_FORMAT
+        PARAMS_FX_2_X, // PATCH_PROJ_PARAM_FORMAT
+        PARAMS_FX_2_X  // CLASS_EMB_TOKEN_PARAM_FORMAT
     };
 
 endpackage

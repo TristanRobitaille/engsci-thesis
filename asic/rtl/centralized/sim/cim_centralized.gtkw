@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Mon Sep  2 16:49:13 2024
+[*] Thu Sep  5 05:04:53 2024
 [*]
 [dumpfile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/sim/sim_build/dump.fst"
-[dumpfile_mtime] "Mon Sep  2 16:47:56 2024"
-[dumpfile_size] 18867901
+[dumpfile_mtime] "Thu Sep  5 05:03:12 2024"
+[dumpfile_size] 17798095
 [savefile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/sim/cim_centralized.gtkw"
-[timestart] 0
+[timestart] 6143135900
 [size] 1512 916
 [pos] -1 -1
-*-30.700001 574850000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+*-15.400002 6143332400 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -38,12 +38,11 @@
 [markername] ZZ
 [treeopen] cim_centralized_tb.
 [treeopen] cim_centralized_tb.cim_centralized.
-[treeopen] cim_centralized_tb.cim_centralized.add.
-[treeopen] cim_centralized_tb.cim_centralized.mac.
+[treeopen] cim_centralized_tb.cim_centralized.cnt_7b_u.
 [sst_width] 253
 [signals_width] 297
 [sst_expanded] 1
-[sst_vpaned_height] 526
+[sst_vpaned_height] 624
 @28
 clk
 @200
@@ -61,6 +60,15 @@ cim_centralized_tb.cim_centralized.cim_state[1:0]
 cim_centralized_tb.cim_centralized.current_inf_step[4:0]
 @200
 -PARAMS READ
+@28
+cim_centralized_tb.cim_centralized.param_read_i.en
+@24
+cim_centralized_tb.cim_centralized.param_read_i.addr[14:0]
+@420
+cim_centralized_tb.cim_centralized.param_read_i.data[38:0]
+@100000028
+cim_centralized_tb.cim_centralized.param_read_i.format[1:0]
+@200
 -PARAMS WRITE
 @28
 cim_centralized_tb.cim_centralized.param_write_i.en

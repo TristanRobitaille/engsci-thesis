@@ -272,7 +272,8 @@ bool CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_base_file
         case CLASS_TOKEN_CONCAT_STEP:
             if (gen_cnt_7b.get_cnt() < EMB_DEPTH) {
                 uint32_t class_token_addr = param_addr_map_bias[CLASS_TOKEN_OFF].addr + gen_cnt_7b.get_cnt();
-                int_res_write(param_read(class_token_addr), mem_map.at(CLASS_TOKEN_MEM) + gen_cnt_7b.get_cnt(), DOUBLE_WIDTH);
+                float data = static_cast<float> ( params_fx_2_x_t { param_read(class_token_addr) } );
+                int_res_write(data, mem_map.at(CLASS_TOKEN_MEM) + gen_cnt_7b.get_cnt(), DOUBLE_WIDTH);
                 gen_cnt_7b.inc();
             } else {
                 gen_cnt_7b.reset();

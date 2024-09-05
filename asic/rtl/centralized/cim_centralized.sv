@@ -16,9 +16,9 @@ module cim_centralized #()(
     CounterInterface #(.WIDTH(4)) cnt_4b_i ();
     CounterInterface #(.WIDTH(7)) cnt_7b_i ();
     CounterInterface #(.WIDTH(9)) cnt_9b_i ();
-    counter #(.WIDTH(4), .MODE(0)) cnt_4b_u (.clk(clk), .sig(cnt_4b_i));
-    counter #(.WIDTH(7), .MODE(0)) cnt_7b_u (.clk(clk), .sig(cnt_7b_i));
-    counter #(.WIDTH(9), .MODE(0)) cnt_9b_u (.clk(clk), .sig(cnt_9b_i));
+    counter #(.WIDTH(4), .MODE(LEVEL_TRIGGERED)) cnt_4b_u (.clk(clk), .sig(cnt_4b_i));
+    counter #(.WIDTH(7), .MODE(LEVEL_TRIGGERED)) cnt_7b_u (.clk(clk), .sig(cnt_7b_i));
+    counter #(.WIDTH(9), .MODE(LEVEL_TRIGGERED)) cnt_9b_u (.clk(clk), .sig(cnt_9b_i));
 
     // Memory
     MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t) param_write_i ();
@@ -61,6 +61,7 @@ module cim_centralized #()(
 
     // ----- GLOBAL SIGNALS ----- //
     logic rst_n;
+    logic temp_1b;
     State_t cim_state;
     InferenceStep_t current_inf_step;
 
@@ -82,7 +83,7 @@ module cim_centralized #()(
                     if (soc_ctrl_i.new_sleep_epoch) cim_state <= INFERENCE_RUNNING;
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == CLASS_TOKEN_CONCAT_STEP) begin
+                    if (current_inf_step == POS_EMB_STEP) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -118,12 +119,12 @@ module cim_centralized #()(
                     /* cnt_7b_i holds current parameters row
                        cnt_9b_i holds current patch */
 
-                    if (mac_io.done || (cnt_7b_i.cnt == 0 && ~mac_io.busy)) begin
+                    if ((mac_io.done || (cnt_7b_i.cnt == 0 && ~mac_io.busy)) && (int'(cnt_7b_i.cnt) != 63)) begin
                         IntResAddr_t patch_addr = mem_map[EEG_INPUT_MEM] + IntResAddr_t'(int'(cnt_9b_i.cnt) << $clog2(EMB_DEPTH));
                         ParamAddr_t param_addr  = param_addr_map[PATCH_PROJ_KERNEL_PARAMS] + ParamAddr_t'(int'(cnt_7b_i.cnt) << $clog2(EMB_DEPTH));
                         ParamAddr_t bias_addr   = param_addr_map_bias[PATCH_PROJ_BIAS_OFF] + ParamAddr_t'(cnt_7b_i.cnt);
                         start_mac(patch_addr, IntResAddr_t'(param_addr), bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, VectorLen_t'(PATCH_LEN), int_res_format[EEG_FORMAT],
-                                int_res_width[EEG_WIDTH], params_format[PATCH_PROJ_PARAM_FORMAT]);
+                                  int_res_width[EEG_WIDTH], params_format[PATCH_PROJ_PARAM_FORMAT]);
                     end
 
                     if (mac_io.done) begin
@@ -141,6 +142,20 @@ module cim_centralized #()(
                     end
                 end
                 CLASS_TOKEN_CONCAT_STEP: begin
+                    ParamAddr_t read_addr = param_addr_map_bias[CLASS_TOKEN_OFF] + ParamAddr_t'(cnt_7b_i.cnt);
+                    IntResAddr_t write_addr = mem_map[CLASS_TOKEN_MEM] + IntResAddr_t'(cnt_9b_i.cnt);
+                    if (cnt_7b_i.inc) read_params(read_addr, params_format[CLASS_EMB_TOKEN_PARAM_FORMAT]);
+                    if (cnt_9b_i.inc) write_int_res(write_addr, param_read_i.data, int_res_width[CLASS_EMB_TOKEN_WIDTH], int_res_format[CLASS_EMB_TOKEN_FORMAT]); // Using cnt_7b_i.inc as a one cycle delay when first arriving at this step for the correct data to be read
+
+                    cnt_7b_i.inc <= 1'b1;
+                    temp_1b <= cnt_7b_i.inc; // One cycle delay
+                    cnt_9b_i.inc <= temp_1b;
+                    if (int'(cnt_9b_i.cnt) == EMB_DEPTH-1) begin
+                        temp_1b <= 1'b0;
+                        current_inf_step <= POS_EMB_STEP;
+                    end
+                end
+                POS_EMB_STEP: begin
                 end
                 default: begin
                 end
@@ -159,13 +174,15 @@ module cim_centralized #()(
         param_write_i.format = tb_param_write_i.format;
 
         // Read
-        param_write_i.data_width = SINGLE_WIDTH;
-        param_read_i.en = mac_param_read_i.en;
+        param_read_i.data_width = SINGLE_WIDTH;
+        param_read_i.en = mac_param_read_i.en | cim_param_read_i.en;
         mac_param_read_i.data = param_read_i.data;
         if (mac_param_read_i.en) begin // MAC
             param_read_i.addr = mac_param_read_i.addr;
-            param_read_i.data_width = mac_param_read_i.data_width;
             param_read_i.format = mac_param_read_i.format;
+        end else if (cim_param_read_i.en) begin
+            param_read_i.addr = cim_param_read_i.addr;
+            param_read_i.format = cim_param_read_i.format;
         end
     end
 
@@ -261,8 +278,8 @@ module cim_centralized #()(
         cnt_7b_i.rst_n <= 1'b1;
         cnt_9b_i.rst_n <= 1'b1;
 
-        cim_int_res_read_i.en <= 1'b0;
         cim_param_read_i.en <= 1'b0;
+        cim_int_res_read_i.en <= 1'b0;
         cim_int_res_write_i.en <= 1'b0;
 
         mac_io.start <= 1'b0;
@@ -286,6 +303,12 @@ module cim_centralized #()(
         cim_int_res_write_i.data <= data;
         cim_int_res_write_i.data_width <= width;
         cim_int_res_write_i.format <= int_res_format;
+    endtask
+
+    task read_params(input ParamAddr_t addr, input FxFormatParams_t format);
+        cim_param_read_i.en <= 1'b1;
+        cim_param_read_i.addr <= addr;
+        cim_param_read_i.format <= format;
     endtask
 
     task start_mac(input IntResAddr_t addr_1, input IntResAddr_t addr_2, input ParamAddr_t bias_addr, input ParamType_t param_type, input Activation_t act, input VectorLen_t len, input FxFormatIntRes_t int_res_input_format, input DataWidth_t int_res_read_width, input FxFormatParams_t params_read_format);
