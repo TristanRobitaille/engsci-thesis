@@ -32,22 +32,22 @@ module cim_centralized_tb (
     end
 
     // Memory
-    MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t) tb_param_write_i ();
-    MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) tb_int_res_write_i ();
+    MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t) param_write_tb_i ();
+    MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_write_tb_i ();
 
     always_comb begin : tb_mem_sig
-        tb_int_res_write_i.en = int_res_write_en;
-        tb_int_res_write_i.chip_en = int_res_chip_en;
-        tb_int_res_write_i.addr = int_res_write_addr;
-        tb_int_res_write_i.data = int_res_write_data;
-        tb_int_res_write_i.data_width = int_res_write_data_width;
-        tb_int_res_write_i.format = int_res_write_format;
+        int_res_write_tb_i.en = int_res_write_en;
+        int_res_write_tb_i.chip_en = int_res_chip_en;
+        int_res_write_tb_i.addr = int_res_write_addr;
+        int_res_write_tb_i.data = int_res_write_data;
+        int_res_write_tb_i.data_width = int_res_write_data_width;
+        int_res_write_tb_i.format = int_res_write_format;
 
-        tb_param_write_i.en = param_write_en;
-        tb_param_write_i.chip_en = param_chip_en;
-        tb_param_write_i.addr = param_write_addr;
-        tb_param_write_i.data = param_write_data;
-        tb_param_write_i.format = param_write_format;
+        param_write_tb_i.en = param_write_en;
+        param_write_tb_i.chip_en = param_chip_en;
+        param_write_tb_i.addr = param_write_addr;
+        param_write_tb_i.data = param_write_data;
+        param_write_tb_i.format = param_write_format;
     end
 
     cim_centralized cim_centralized (
@@ -55,6 +55,6 @@ module cim_centralized_tb (
         .soc_ctrl_i(soc_ctrl_i),
 
         // ----- Memory ---- //
-        .tb_param_write_i, .tb_int_res_write_i
+        .param_write_tb_i, .int_res_write_tb_i
     );
 endmodule

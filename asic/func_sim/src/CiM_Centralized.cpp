@@ -288,8 +288,8 @@ bool CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_base_file
                gen_cnt_9b holds the row */
 
             if (compute_done || (gen_cnt_7b.get_cnt() == 0 && gen_cnt_9b.get_cnt() == 0 && !compute_in_progress)) { // Start a new ADD
-                uint32_t int_res_addr   = mem_map.at(CLASS_TOKEN_MEM)           + gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_9b.get_cnt();
-                uint32_t params_addr    = param_addr_map[POS_EMB_PARAMS].addr   + gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_9b.get_cnt();
+                uint32_t int_res_addr = mem_map.at(CLASS_TOKEN_MEM)         + gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_9b.get_cnt();
+                uint32_t params_addr  = param_addr_map[POS_EMB_PARAMS].addr + gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_9b.get_cnt();
                 ADD<dw_fx_x_t,params_fx_2_x_t>(int_res_addr, params_addr, MODEL_PARAM);
             }
 

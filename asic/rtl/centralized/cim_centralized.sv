@@ -8,8 +8,8 @@ module cim_centralized #()(
     SoCInterface soc_ctrl_i,
 
     // ----- Memory ---- //
-    output MemoryInterface.input_write  tb_param_write_i,
-    output MemoryInterface.input_write tb_int_res_write_i
+    output MemoryInterface.input_write  param_write_tb_i,
+    output MemoryInterface.input_write int_res_write_tb_i
 );
     // ----- INSTANTIATION ----- //
     // Counters
@@ -23,22 +23,23 @@ module cim_centralized #()(
     // Memory
     MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t) param_write_i ();
     MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t) param_read_i ();
-    MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t) mac_param_read_i ();
-    MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t) cim_param_read_i ();
+    MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t) param_read_mac_i ();
+    MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t) param_read_cim_i ();
 
     MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_read_i ();
     MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_write_i ();
-    MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) cim_int_res_read_i ();
-    MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) mac_int_res_read_i ();
-    MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) cim_int_res_write_i ();
+    MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_read_cim_i ();
+    MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_read_mac_i ();
+    MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_write_cim_i ();
 
     MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) mac_casts_i ();
 
-    params_mem params_u     (.clk, .rst_n, .write(tb_param_write_i),.read(param_read_i)); // Only testbench writes to params
-    int_res_mem int_res_u   (.clk, .rst_n, .write(int_res_write_i), .read(int_res_read_i));
+    params_mem params_u   (.clk, .rst_n, .write(param_write_tb_i),.read(param_read_i)); // Only testbench writes to params
+    int_res_mem int_res_u (.clk, .rst_n, .write(int_res_write_i), .read(int_res_read_i));
 
     // Compute
     ComputeIPInterface add_io();
+    ComputeIPInterface add_io_cim();
     ComputeIPInterface add_io_exp();
     ComputeIPInterface add_io_mac();
     ComputeIPInterface mult_io();
@@ -56,12 +57,12 @@ module cim_centralized #()(
     divider div     (.clk, .rst_n, .io(div_io));
     exp exp         (.clk, .rst_n, .io(exp_io), .adder_io(add_io_exp), .mult_io(mult_io_exp));
     mac mac         (.clk, .rst_n, .io(mac_io), .io_extra(mac_io_extra),
-                     .casts(mac_casts_i), .param_read(mac_param_read_i), .int_res_read(mac_int_res_read_i),
+                     .casts(mac_casts_i), .param_read(param_read_mac_i), .int_res_read(int_res_read_mac_i),
                      .add_io(add_io_mac), .mult_io(mult_io_mac), .div_io(div_io_mac), .exp_io(exp_io_mac));
 
     // ----- GLOBAL SIGNALS ----- //
     logic rst_n;
-    logic temp_1b;
+    logic [1:0] delay_line_2b;
     State_t cim_state;
     InferenceStep_t current_inf_step;
 
@@ -83,7 +84,7 @@ module cim_centralized #()(
                     if (soc_ctrl_i.new_sleep_epoch) cim_state <= INFERENCE_RUNNING;
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == POS_EMB_STEP) begin
+                    if (current_inf_step == ENC_LAYERNORM_1_1ST_HALF_STEP) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -128,9 +129,9 @@ module cim_centralized #()(
                     end
 
                     if (mac_io.done) begin
-                        IntResAddr_t addr = mem_map[PATCH_MEM] + IntResAddr_t'(int'(cnt_7b_i.cnt) + int'(cnt_9b_i.cnt) << $clog2(PATCH_LEN)); // Left shift instead of multiply since PATCH_LEN is a power of 2
-                        write_int_res(addr, mac_io.out, int_res_width[PATCH_PROJ_OUTPUT_WIDTH], int_res_format[PATCH_PROJ_OUTPUT_FORMAT]);
-        
+                        IntResAddr_t int_res_write_addr = mem_map[PATCH_MEM] + IntResAddr_t'(int'(cnt_7b_i.cnt) + int'(cnt_9b_i.cnt) << $clog2(PATCH_LEN)); // Left shift instead of multiply since PATCH_LEN is a power of 2
+                        write_int_res(int_res_write_addr, mac_io.out, int_res_width[PATCH_PROJ_OUTPUT_WIDTH], int_res_format[PATCH_PROJ_OUTPUT_FORMAT]);
+
                         // Update index control
                         if (int'(cnt_7b_i.cnt) == EMB_DEPTH-1) begin
                             cnt_7b_i.rst_n <= 1'b0;
@@ -142,20 +143,59 @@ module cim_centralized #()(
                     end
                 end
                 CLASS_TOKEN_CONCAT_STEP: begin
-                    ParamAddr_t read_addr = param_addr_map_bias[CLASS_TOKEN_OFF] + ParamAddr_t'(cnt_7b_i.cnt);
-                    IntResAddr_t write_addr = mem_map[CLASS_TOKEN_MEM] + IntResAddr_t'(cnt_9b_i.cnt);
-                    if (cnt_7b_i.inc) read_params(read_addr, params_format[CLASS_EMB_TOKEN_PARAM_FORMAT]);
-                    if (cnt_9b_i.inc) write_int_res(write_addr, param_read_i.data, int_res_width[CLASS_EMB_TOKEN_WIDTH], int_res_format[CLASS_EMB_TOKEN_FORMAT]); // Using cnt_7b_i.inc as a one cycle delay when first arriving at this step for the correct data to be read
-
                     cnt_7b_i.inc <= 1'b1;
-                    temp_1b <= cnt_7b_i.inc; // One cycle delay
-                    cnt_9b_i.inc <= temp_1b;
-                    if (int'(cnt_9b_i.cnt) == EMB_DEPTH-1) begin
-                        temp_1b <= 1'b0;
+                    delay_line_2b[0] <= cnt_7b_i.inc; // One cycle delay
+                    cnt_9b_i.inc <= delay_line_2b[0];
+                    if (int'(cnt_9b_i.cnt) == EMB_DEPTH) begin
+                        delay_line_2b <= 'b0;
+                        cnt_7b_i.rst_n <= 1'b0;
+                        cnt_9b_i.rst_n <= 1'b0;
                         current_inf_step <= POS_EMB_STEP;
+                    end else begin
+                        ParamAddr_t read_addr = param_addr_map_bias[CLASS_TOKEN_OFF] + ParamAddr_t'(cnt_7b_i.cnt);
+                        IntResAddr_t write_addr = mem_map[CLASS_TOKEN_MEM] + IntResAddr_t'(cnt_9b_i.cnt);
+                        if (cnt_7b_i.inc) read_params(read_addr, params_format[CLASS_EMB_TOKEN_PARAM_FORMAT]);
+                        if (cnt_9b_i.inc) write_int_res(write_addr, param_read_i.data, int_res_width[CLASS_EMB_TOKEN_WIDTH], int_res_format[CLASS_EMB_TOKEN_FORMAT]);
                     end
                 end
                 POS_EMB_STEP: begin
+                    /* gen_cnt_7b holds the column
+                    gen_cnt_9b holds the row */
+
+                    // TODO: The variables are updated with blocking operators. They would be synthesized with non-blocking operators, so does int_res_addr_write need to be updated in a line before int_res_addr_read?
+
+                    ParamAddr_t params_addr = param_addr_map[POS_EMB_PARAMS] + ParamAddr_t'(cnt_7b_i.cnt) + ParamAddr_t'(EMB_DEPTH*cnt_9b_i.cnt);
+                    IntResAddr_t int_res_addr_read = mem_map[CLASS_TOKEN_MEM] + IntResAddr_t'(cnt_7b_i.cnt) + IntResAddr_t'(EMB_DEPTH*cnt_9b_i.cnt);
+                    IntResAddr_t int_res_addr_write = int_res_addr_read - (mem_map[CLASS_TOKEN_MEM] - mem_map[POS_EMB_MEM]) - IntResAddr_t'('d4);
+
+                    // Read
+                    if (cnt_7b_i.inc) read_params(params_addr, params_format[POS_EMB_PARAM_FORMAT]);
+                    if (cnt_7b_i.inc) read_int_res(int_res_addr_read, int_res_width[CLASS_EMB_TOKEN_WIDTH], int_res_format[CLASS_EMB_TOKEN_FORMAT]);
+
+                    // Add
+                    if (delay_line_2b[1]) start_add(param_read_i.data, int_res_read_i.data);
+
+                    // Write
+                    if (add_io_cim.done) write_int_res(int_res_addr_write, add_io_cim.out, int_res_width[POS_EMB_WIDTH], int_res_format[POS_EMB_FORMAT]);
+
+                    // Counter control
+                    cnt_7b_i.inc <= 1'b1;
+                    delay_line_2b[0] <= param_read_cim_i.en;
+                    delay_line_2b[1] <= delay_line_2b[0]; // One cycle delay
+                    if (int'(cnt_7b_i.cnt) == EMB_DEPTH-2) begin
+                        cnt_7b_i.rst_n <= 1'b0;
+                        cnt_9b_i.inc <= 1'b1;
+                    end
+
+                    // Done
+                    if (int_res_addr_write == IntResAddr_t'(int'(mem_map[POS_EMB_MEM]) + EMB_DEPTH*(NUM_PATCHES+1) - 1)) begin
+                        current_inf_step <= ENC_LAYERNORM_1_1ST_HALF_STEP;
+                        delay_line_2b <= 'b0;
+                        cnt_7b_i.rst_n <= 1'b0;
+                        cnt_9b_i.rst_n <= 1'b0;
+                    end
+                end
+                ENC_LAYERNORM_1_1ST_HALF_STEP: begin
                 end
                 default: begin
                 end
@@ -168,47 +208,52 @@ module cim_centralized #()(
         // Write (only testbench writes to params)
         param_write_i.data_width = SINGLE_WIDTH;
         param_write_i.chip_en = 1'b1;
-        param_write_i.en = tb_param_write_i.en;
-        param_write_i.addr = tb_param_write_i.addr;
-        param_write_i.data = tb_param_write_i.data;
-        param_write_i.format = tb_param_write_i.format;
+        param_write_i.en = param_write_tb_i.en;
+        param_write_i.addr = param_write_tb_i.addr;
+        param_write_i.data = param_write_tb_i.data;
+        param_write_i.format = param_write_tb_i.format;
 
         // Read
         param_read_i.data_width = SINGLE_WIDTH;
-        param_read_i.en = mac_param_read_i.en | cim_param_read_i.en;
-        mac_param_read_i.data = param_read_i.data;
-        if (mac_param_read_i.en) begin // MAC
-            param_read_i.addr = mac_param_read_i.addr;
-            param_read_i.format = mac_param_read_i.format;
-        end else if (cim_param_read_i.en) begin
-            param_read_i.addr = cim_param_read_i.addr;
-            param_read_i.format = cim_param_read_i.format;
+        param_read_i.en = param_read_mac_i.en | param_read_cim_i.en;
+        param_read_mac_i.data = param_read_i.data;
+        if (param_read_mac_i.en) begin // MAC
+            param_read_i.addr = param_read_mac_i.addr;
+            param_read_i.format = param_read_mac_i.format;
+        end else if (param_read_cim_i.en) begin
+            param_read_i.addr = param_read_cim_i.addr;
+            param_read_i.format = param_read_cim_i.format;
         end
     end
 
-    always_latch begin : int_res_mem_MUX
+    always_comb begin : int_res_mem_MUX // TODO: Why does it claim that no latch is inferred if I use always_latch?
         // Write
         int_res_write_i.chip_en = 1'b1;
-        int_res_write_i.en = tb_int_res_write_i.en | cim_int_res_write_i.en;
-        if (tb_int_res_write_i.en) begin // Testbench
-            int_res_write_i.addr = tb_int_res_write_i.addr;
-            int_res_write_i.data = tb_int_res_write_i.data;
-            int_res_write_i.format = tb_int_res_write_i.format;
-            int_res_write_i.data_width = tb_int_res_write_i.data_width;
-        end else if (cim_int_res_write_i.en) begin // CiM
-            int_res_write_i.addr = cim_int_res_write_i.addr;
-            int_res_write_i.data = cim_int_res_write_i.data;
-            int_res_write_i.format = cim_int_res_write_i.format;
-            int_res_write_i.data_width = cim_int_res_write_i.data_width;
+        int_res_write_i.en = int_res_write_tb_i.en | int_res_write_cim_i.en;
+        if (int_res_write_tb_i.en) begin // Testbench
+            int_res_write_i.addr = int_res_write_tb_i.addr;
+            int_res_write_i.data = int_res_write_tb_i.data;
+            int_res_write_i.format = int_res_write_tb_i.format;
+            int_res_write_i.data_width = int_res_write_tb_i.data_width;
+        end else if (int_res_write_cim_i.en) begin // CiM
+            int_res_write_i.addr = int_res_write_cim_i.addr;
+            int_res_write_i.data = int_res_write_cim_i.data;
+            int_res_write_i.format = int_res_write_cim_i.format;
+            int_res_write_i.data_width = int_res_write_cim_i.data_width;
         end
 
         // Read
-        int_res_read_i.en = mac_int_res_read_i.en;
-        mac_int_res_read_i.data = int_res_read_i.data;
-        if (mac_int_res_read_i.en) begin // MAC
-            int_res_read_i.addr = mac_int_res_read_i.addr;
-            int_res_read_i.data_width = mac_int_res_read_i.data_width;
-            int_res_read_i.format = mac_int_res_read_i.format;
+        int_res_read_i.en = int_res_read_mac_i.en | int_res_read_cim_i.en;
+        int_res_read_mac_i.data = int_res_read_i.data;
+        int_res_read_cim_i.data = int_res_read_i.data;
+        if (int_res_read_mac_i.en) begin // MAC
+            int_res_read_i.addr = int_res_read_mac_i.addr;
+            int_res_read_i.data_width = int_res_read_mac_i.data_width;
+            int_res_read_i.format = int_res_read_mac_i.format;
+        end else begin
+            int_res_read_i.addr = int_res_read_cim_i.addr;
+            int_res_read_i.data_width = int_res_read_cim_i.data_width;
+            int_res_read_i.format = int_res_read_cim_i.format;
         end
     end
 
@@ -219,13 +264,18 @@ module cim_centralized #()(
         end else if (add_io_mac.start) begin
             add_io.in_1 = add_io_mac.in_1;
             add_io.in_2 = add_io_mac.in_2;
+        end else if (add_io_cim.start) begin
+            add_io.in_1 = add_io_cim.in_1;
+            add_io.in_2 = add_io_cim.in_2;
         end
 
-        add_io.start = add_io_exp.start | add_io_mac.start;
+        add_io.start = add_io_exp.start | add_io_mac.start | add_io_cim.start;
         add_io_exp.out = add_io.out;
         add_io_exp.done = add_io.done;
         add_io_mac.out = add_io.out;
         add_io_mac.done = add_io.done;
+        add_io_cim.out = add_io.out;
+        add_io_cim.done = add_io.done;
     end
 
     always_latch begin : mult_io_MUX
@@ -278,11 +328,12 @@ module cim_centralized #()(
         cnt_7b_i.rst_n <= 1'b1;
         cnt_9b_i.rst_n <= 1'b1;
 
-        cim_param_read_i.en <= 1'b0;
-        cim_int_res_read_i.en <= 1'b0;
-        cim_int_res_write_i.en <= 1'b0;
+        param_read_cim_i.en <= 1'b0;
+        int_res_read_cim_i.en <= 1'b0;
+        int_res_write_cim_i.en <= 1'b0;
 
         mac_io.start <= 1'b0;
+        add_io_cim.start <= 1'b0;
     endtask
 
     task automatic reset();
@@ -295,20 +346,30 @@ module cim_centralized #()(
         cnt_4b_i.rst_n <= 1'b0;
         cnt_7b_i.rst_n <= 1'b0;
         cnt_9b_i.rst_n <= 1'b0;
+
+        mac_io.start <= 1'b0;
+        add_io_cim.start <= 1'b0;
     endtask
 
     task write_int_res(input IntResAddr_t addr, input CompFx_t data, input DataWidth_t width, input FxFormatIntRes_t int_res_format);
-        cim_int_res_write_i.en <= 1'b1;
-        cim_int_res_write_i.addr <= addr;
-        cim_int_res_write_i.data <= data;
-        cim_int_res_write_i.data_width <= width;
-        cim_int_res_write_i.format <= int_res_format;
+        int_res_write_cim_i.en <= 1'b1;
+        int_res_write_cim_i.addr <= addr;
+        int_res_write_cim_i.data <= data;
+        int_res_write_cim_i.data_width <= width;
+        int_res_write_cim_i.format <= int_res_format;
     endtask
 
     task read_params(input ParamAddr_t addr, input FxFormatParams_t format);
-        cim_param_read_i.en <= 1'b1;
-        cim_param_read_i.addr <= addr;
-        cim_param_read_i.format <= format;
+        param_read_cim_i.en <= 1'b1;
+        param_read_cim_i.addr <= addr;
+        param_read_cim_i.format <= format;
+    endtask
+
+    task read_int_res(input IntResAddr_t addr, input DataWidth_t width, input FxFormatIntRes_t int_res_format);
+        int_res_read_cim_i.en <= 1'b1;
+        int_res_read_cim_i.addr <= addr;
+        int_res_read_cim_i.data_width <= width;
+        int_res_read_cim_i.format <= int_res_format;
     endtask
 
     task start_mac(input IntResAddr_t addr_1, input IntResAddr_t addr_2, input ParamAddr_t bias_addr, input ParamType_t param_type, input Activation_t act, input VectorLen_t len, input FxFormatIntRes_t int_res_input_format, input DataWidth_t int_res_read_width, input FxFormatParams_t params_read_format);
@@ -324,12 +385,19 @@ module cim_centralized #()(
         mac_casts_i.params_read_format <= params_read_format;
     endtask
 
+    task start_add(CompFx_t in_1, CompFx_t in_2);
+        add_io_cim.start <= 1'b1;
+        add_io_cim.in_1 <= in_1;
+        add_io_cim.in_2 <= in_2;
+    endtask
+
     // ----- ASSERTIONS ----- //
     always_ff @ (posedge clk) begin : compute_mux_assertions
-        assert (~(tb_int_res_write_i.en & cim_int_res_write_i.en)) else $fatal("More than one source is trying to write to intermediate result memory simulatenously!");
-        assert (~(cim_int_res_read_i.en & 0)) else $fatal("More than one source is trying to read from intermediate result memory simulatenously!");
+        assert (~(int_res_write_tb_i.en & int_res_write_cim_i.en)) else $fatal("More than one source is trying to write to intermediate result memory simulatenously!");
+        assert (~(int_res_read_cim_i.en & int_res_read_mac_i.en)) else $fatal("More than one source is trying to read from intermediate results memory simulatenously!");
+        assert (~(param_read_cim_i.en & param_read_mac_i.en)) else $fatal("More than one source is trying to read from parameters result memory simulatenously!");
 
-        assert (~(add_io_exp.start & add_io_mac.start)) else $fatal("More than one source is trying to start an add!");
+        assert (~(add_io_exp.start & add_io_mac.start & add_io_cim.start)) else $fatal("More than one source is trying to start an add!");
         assert (~(mult_io_exp.start & mult_io_mac.start)) else $fatal("More than one source is trying to start a mult!");
         assert (~(div_io_mac.start & 0)) else $fatal("More than one source is trying to start a div!");
         assert (~(exp_io_mac.start & 0)) else $fatal("More than one source is trying to start an exp!");

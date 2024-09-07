@@ -19,7 +19,7 @@ module counter # (
     logic inc_prev;
 
     always_ff @ (posedge clk) begin : main_cnt_block
-        if (!sig.rst_n) begin
+        if (~sig.rst_n) begin
             sig.cnt <= 0;
         end else begin
             if (MODE == POSEDGE_TRIGGERED) begin // Posedge-triggered

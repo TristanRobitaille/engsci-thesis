@@ -240,6 +240,7 @@ package Defines;
         EEG_WIDTH,
         PATCH_PROJ_OUTPUT_WIDTH,
         CLASS_EMB_TOKEN_WIDTH,
+        POS_EMB_WIDTH,
         NUM_INT_RES_WIDTHS
     } IntResWidth_t;
 
@@ -247,30 +248,35 @@ package Defines;
         EEG_FORMAT,
         PATCH_PROJ_OUTPUT_FORMAT,
         CLASS_EMB_TOKEN_FORMAT,
+        POS_EMB_FORMAT,
         NUM_INT_RES_FORMATS
     } IntResFormat_t;
 
     typedef enum int {
         PATCH_PROJ_PARAM_FORMAT,
         CLASS_EMB_TOKEN_PARAM_FORMAT,
+        POS_EMB_PARAM_FORMAT,
         NUM_PARAMS_FORMATS
-    } ParamWidth_t;
+    } ParamFormat_t;
 
     const DataWidth_t int_res_width [NUM_INT_RES_WIDTHS] = '{
         DOUBLE_WIDTH, // EEG_WIDTH
         DOUBLE_WIDTH, // PATCH_PROJ_OUTPUT_WIDTH
-        DOUBLE_WIDTH  // CLASS_TOKEN_WIDTH
+        DOUBLE_WIDTH, // CLASS_TOKEN_WIDTH
+        DOUBLE_WIDTH  // POS_EMB_WIDTH
     };
 
     const FxFormatIntRes_t int_res_format [NUM_INT_RES_FORMATS] = '{
         INT_RES_DW_FX, // EEG_FORMAT
         INT_RES_DW_FX, // PATCH_PROJ_OUTPUT_FORMAT
-        INT_RES_DW_FX  // CLASS_EMB_TOKEN_FORMAT
+        INT_RES_DW_FX, // CLASS_EMB_TOKEN_FORMAT
+        INT_RES_DW_FX  // POS_EMB_FORMAT
     };
 
     const FxFormatParams_t params_format [NUM_PARAMS_FORMATS] = '{
         PARAMS_FX_2_X, // PATCH_PROJ_PARAM_FORMAT
-        PARAMS_FX_2_X  // CLASS_EMB_TOKEN_PARAM_FORMAT
+        PARAMS_FX_2_X, // CLASS_EMB_TOKEN_PARAM_FORMAT
+        PARAMS_FX_2_X  // POS_EMB_PARAM_FORMAT
     };
 
 endpackage
