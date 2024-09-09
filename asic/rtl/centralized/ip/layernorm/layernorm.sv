@@ -197,7 +197,7 @@ module layernorm (
                 SECOND_HALF_LOOP: begin
                     if (index < LEN_SECOND_HALF) begin
                         if (gen_reg_3b == 'd0) begin
-                            read_int_res(io_extra.start_addr_2 + IntResAddr_t'(index), casts.int_res_read_width, casts.int_res_read_format);
+                            read_int_res(io_extra.start_addr_2 + IntResAddr_t'(index*EMB_DEPTH), casts.int_res_read_width, casts.int_res_read_format);
                             if (int_res_read.en) gen_reg_3b <= 'd1;
                         end else if (gen_reg_3b == 'd1) begin
                             start_mult(compute_temp_2, int_res_read.data); // Gamma
@@ -206,7 +206,7 @@ module layernorm (
                             start_add(mult_io.out, compute_temp_3); // Beta
                             if (add_io.start) gen_reg_3b <= 'd3;
                         end else if (gen_reg_3b == 'd3) begin
-                            write_int_res(io_extra.start_addr_2 + IntResAddr_t'(index), add_io.out, casts.int_res_write_width, casts.int_res_write_format);
+                            write_int_res(io_extra.start_addr_2 + IntResAddr_t'(index*EMB_DEPTH), add_io.out, casts.int_res_write_width, casts.int_res_write_format);
                             gen_reg_3b <= 'd4;
                         end else begin
                             gen_reg_3b <= 'd0;

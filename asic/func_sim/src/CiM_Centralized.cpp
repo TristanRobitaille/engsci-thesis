@@ -377,12 +377,9 @@ bool CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_base_file
                 if (gen_cnt_7b.get_cnt() == EMB_DEPTH-1) { // Done going through all columns
                     gen_cnt_7b.reset();
                     if (PRINT_INF_PROGRESS) { cout << "Finished LayerNorm" << endl; }
-                    if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) {
-                        verify_layer_out(ENC_LAYERNORM1_VERIF, int_res_read, mem_map.at(ENC_LN1_MEM), EMB_DEPTH);
-                    } else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) {
-                        verify_layer_out(ENC_LAYERNORM2_VERIF, int_res_read, mem_map.at(ENC_LN2_MEM), EMB_DEPTH);
-                    } else if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) {
-                        verify_layer_out(MLP_HEAD_LAYERNORM_VERIF, int_res_read, mem_map.at(ENC_LN3_MEM), 1);
+                    if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) { verify_layer_out(ENC_LAYERNORM1_VERIF, int_res_read, mem_map.at(ENC_LN1_MEM), EMB_DEPTH);
+                    } else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) { verify_layer_out(ENC_LAYERNORM2_VERIF, int_res_read, mem_map.at(ENC_LN2_MEM), EMB_DEPTH);
+                    } else if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) { verify_layer_out(MLP_HEAD_LAYERNORM_VERIF, int_res_read, mem_map.at(ENC_LN3_MEM), 1);
                     }
                     current_inf_step = static_cast<INFERENCE_STEP> (static_cast<int> (current_inf_step) + 1);
                 } else { gen_cnt_7b.inc(); }

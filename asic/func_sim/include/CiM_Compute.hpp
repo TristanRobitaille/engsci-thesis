@@ -303,13 +303,13 @@ class CiM_Compute {
 
             // Scale and center
 #if DISTRIBUTED_ARCH
-            for (uint16_t i = 0; i < NUM_PATCHES+1; i++) { // Go through each rows in given column
+            for (uint16_t i = 0; i < NUM_PATCHES+1; i++) { // Go through each row in given column
                 compute_temp_fp_1 = comp_fx_t { static_cast<in1_storage_fx_t>(int_res_read(input_addr + DOUBLE_WIDTH*i)) };
                 float result = static_cast<float>(compute_temp_fp_2 * compute_temp_fp_1 + compute_temp_fp_3);
                 int_res_write(result, input_addr + DOUBLE_WIDTH*i, DOUBLE_WIDTH);
             }
 #elif CENTRALIZED_ARCH
-            for (uint16_t i = 0; i < num_rows; i++) { // Go through each rows in given column
+            for (uint16_t i = 0; i < num_rows; i++) { // Go through each row in given column
                 compute_temp_fp_1 = comp_fx_t { static_cast<in1_storage_fx_t>(int_res_read(input_addr + i*EMB_DEPTH)) }; // Go down column
                 float result = static_cast<float>(compute_temp_fp_2 * compute_temp_fp_1 + compute_temp_fp_3);
                 int_res_write(result, input_addr + i*EMB_DEPTH, DOUBLE_WIDTH);

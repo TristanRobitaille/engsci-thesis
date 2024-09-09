@@ -97,7 +97,7 @@ module cim_centralized #()(
                     if (soc_ctrl_i.new_sleep_epoch) cim_state <= INFERENCE_RUNNING;
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) begin
+                    if (current_inf_step == POS_EMB_COMPRESSION_STEP) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -218,10 +218,26 @@ module cim_centralized #()(
                     end
 
                     cnt_7b_i.inc <= ln_io.start;
-
                     if (ln_io.done && (int'(cnt_7b_i.cnt) == NUM_PATCHES+1)) begin
                         cnt_7b_i.rst_n <= 1'b0;
                         current_inf_step <= ENC_LAYERNORM_1_2ND_HALF_STEP;
+                    end
+                end
+                ENC_LAYERNORM_1_2ND_HALF_STEP: begin
+                    if ((ln_io.done || (cnt_7b_i.cnt == 0 && ~ln_io.busy)) && ~ln_io.start && (int'(cnt_7b_i.cnt) != EMB_DEPTH)) begin
+                        IntResAddr_t input_starting_addr = mem_map[ENC_LN1_MEM] + IntResAddr_t'(cnt_7b_i.cnt);
+                        IntResAddr_t output_starting_addr = input_starting_addr;
+                        ParamAddr_t gamma_addr = param_addr_map_bias[ENC_LAYERNORM_1_GAMMA] + ParamAddr_t'(cnt_7b_i.cnt);
+                        ParamAddr_t beta_addr = param_addr_map_bias[ENC_LAYERNORM_1_BETA] + ParamAddr_t'(cnt_7b_i.cnt);
+                        start_layernorm(SECOND_HALF, input_starting_addr, output_starting_addr, beta_addr, gamma_addr,
+                                        int_res_width[LN_INPUT_WIDTH], int_res_format[LN_INPUT_FORMAT], int_res_width[LN_OUTPUT_WIDTH],
+                                        int_res_format[LN_OUTPUT_FORMAT], params_format[LN_PARAM_FORMAT]);
+                    end
+
+                    cnt_7b_i.inc <= ln_io.start;
+                    if (ln_io.done && (int'(cnt_7b_i.cnt) == EMB_DEPTH)) begin
+                        cnt_7b_i.rst_n <= 1'b0;
+                        current_inf_step <= POS_EMB_COMPRESSION_STEP;
                     end
                 end
                 default: begin

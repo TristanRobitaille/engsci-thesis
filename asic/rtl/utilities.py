@@ -179,7 +179,7 @@ def twos_complement_to_float(input_data, bit_width:int=const.N_COMP):
     if input_data[0] == '1': integer_value -= (1 << bit_width)
     return float(integer_value / 2**const.Q_COMP)
 
-async def write_one_word_cent(dut, addr:int, data:int, device:str, data_format, data_width:const.DataWidth=const.DataWidth.SINGLE_WIDTH):
+async def write_one_word_cent(dut, addr:int, data:int, device:str, data_format, data_width:const.DataWidth) -> None:
     if device == "params": data_fx = FXnum(data, FXfamily(const.N_STO_PARAMS-data_format.value, data_format.value))
     elif device == "int_res": 
         if data_width == const.DataWidth.SINGLE_WIDTH: 
@@ -208,7 +208,7 @@ async def write_one_word_cent(dut, addr:int, data:int, device:str, data_format, 
         await RisingEdge(dut.clk)
         dut.int_res_write_en.value = 0
 
-async def read_one_word_cent(dut, addr:int, device:str, data_format, data_width:const.DataWidth=const.DataWidth.SINGLE_WIDTH):
+async def read_one_word_cent(dut, addr:int, device:str, data_format, data_width:const.DataWidth) -> float:
     await RisingEdge(dut.clk)
     if device == "params":
         assert (data_width.value == const.DataWidth.SINGLE_WIDTH.value), "Params memory only compatible with SINGLE_WIDTH!"
