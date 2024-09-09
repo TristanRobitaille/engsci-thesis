@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Mon Sep  9 15:00:55 2024
+[*] Mon Sep  9 20:46:07 2024
 [*]
 [dumpfile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/sim/sim_build/dump.fst"
-[dumpfile_mtime] "Mon Sep  9 14:57:17 2024"
-[dumpfile_size] 20695729
+[dumpfile_mtime] "Mon Sep  9 20:45:45 2024"
+[dumpfile_size] 23375347
 [savefile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/sim/cim_centralized.gtkw"
 [timestart] 0
-[size] 1512 916
+[size] 1728 1387
 [pos] -1 -1
-*-31.152128 7380000000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+*-30.252129 4920000000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -41,7 +41,7 @@
 [sst_width] 253
 [signals_width] 297
 [sst_expanded] 1
-[sst_vpaned_height] 453
+[sst_vpaned_height] 458
 @28
 clk
 @200

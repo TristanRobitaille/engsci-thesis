@@ -41,7 +41,7 @@ async def test_MAC(dut, activation, param_type, int_res_width, int_res_format, p
         if (param_type == const.MACParamType.INTERMEDIATE_RES):
             await utilities.write_one_word_cent(dut=dut, addr=start_addr_2+i, data=in_2, device="int_res", data_width=int_res_width, data_format=int_res_format)
         elif (param_type == const.MACParamType.MODEL_PARAM):
-            await utilities.write_one_word_cent(dut=dut, addr=start_addr_2+i, data=in_2, device="params", data_format=param_format)
+            await utilities.write_one_word_cent(dut=dut, addr=start_addr_2+i, data=in_2, device="params", data_format=param_format, data_width=const.DataWidth.SINGLE_WIDTH)
         
         expected_result += FXnum(in_1, const.num_Q_comp)*FXnum(in_2, const.num_Q_comp)
 
@@ -49,7 +49,7 @@ async def test_MAC(dut, activation, param_type, int_res_width, int_res_format, p
     if not activation == const.ActivationType.NO_ACTIVATION:
         bias = utilities.random_input(-MAX_VAL_MAC, MAX_VAL_MAC)
         bias_addr = random.randint(0, const.CIM_PARAMS_BANK_SIZE_NUM_WORD*const.CIM_PARAMS_NUM_BANKS - 1 - MAX_LEN)    
-        await utilities.write_one_word_cent(dut=dut, addr=bias_addr, data=bias, device="params", data_format=param_format)
+        await utilities.write_one_word_cent(dut=dut, addr=bias_addr, data=bias, device="params", data_format=param_format, data_width=const.DataWidth.SINGLE_WIDTH)
         dut.bias_addr.value = bias_addr
 
     if activation == const.ActivationType.LINEAR_ACTIVATION:
@@ -79,8 +79,8 @@ async def MAC_test_no_activation(dut):
                     for param_format in [const.FxFormatParams.PARAMS_FX_4_X, const.FxFormatParams.PARAMS_FX_5_X]:
                         if (data_width == const.DataWidth.DOUBLE_WIDTH): int_res_format = const.FxFormatIntRes.INT_RES_DW_FX
                         for _ in range(NUM_TESTS): await test_MAC(dut,
-                                                                activation=activation,
-                                                                param_type=mac_param_type,
-                                                                int_res_width=data_width,
-                                                                int_res_format=int_res_format,
-                                                                param_format=param_format)
+                                                                  activation=activation,
+                                                                  param_type=mac_param_type,
+                                                                  int_res_width=data_width,
+                                                                  int_res_format=int_res_format,
+                                                                  param_format=param_format)

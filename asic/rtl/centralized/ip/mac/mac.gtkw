@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Mon Sep  2 17:08:25 2024
+[*] Mon Sep  9 20:26:21 2024
 [*]
 [dumpfile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/ip/mac/sim_build/dump.fst"
-[dumpfile_mtime] "Mon Sep  2 17:07:34 2024"
-[dumpfile_size] 1742768
+[dumpfile_mtime] "Mon Sep  9 20:26:15 2024"
+[dumpfile_size] 1189332
 [savefile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/ip/mac/mac.gtkw"
-[timestart] 4236600
-[size] 1512 916
+[timestart] 231212800
+[size] 1728 1387
 [pos] -1 -1
-*-15.933569 4380000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+*-15.933569 231330000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -39,9 +39,9 @@
 [treeopen] mac_tb.
 [treeopen] mac_tb.mac.
 [sst_width] 253
-[signals_width] 389
+[signals_width] 390
 [sst_expanded] 1
-[sst_vpaned_height] 432
+[sst_vpaned_height] 825
 @28
 clk
 @200
@@ -49,16 +49,33 @@ clk
 @28
 mac_tb.start
 mac_tb.done
-@100000028
-mac_tb.mac.state[2:0]
 @24
 mac_tb.io_extra.bias_addr[14:0]
 @420
 mac_tb.mac.compute_temp[38:0]
+mac_tb.mac.compute_temp_2[38:0]
 mac_tb.computation_result[38:0]
 @100000028
 mac_tb.mac.io_extra.activation[1:0]
 mac_tb.mac.io_extra.param_type[1:0]
+@24
+mac_tb.mac.io_extra.len[6:0]
+@100000028
+mac_tb.mac.state[3:0]
+@c00024
+mac_tb.mac.index[6:0]
+@28
+(0)mac_tb.mac.index[6:0]
+(1)mac_tb.mac.index[6:0]
+(2)mac_tb.mac.index[6:0]
+(3)mac_tb.mac.index[6:0]
+(4)mac_tb.mac.index[6:0]
+(5)mac_tb.mac.index[6:0]
+(6)mac_tb.mac.index[6:0]
+@1401200
+-group_end
+@28
+mac_tb.mac.delay_signal[2:0]
 @200
 -
 -INT RES WRITE
@@ -71,7 +88,7 @@ mac_tb.int_res.write.data_width
 mac_tb.int_res.write.format[2:0]
 @200
 -INT RES READ
-@29
+@28
 mac_tb.mac.int_res_read.en
 @24
 mac_tb.int_res.read.addr[15:0]
@@ -90,6 +107,8 @@ mac_tb.params.write.data[38:0]
 mac_tb.param_write.format[1:0]
 @200
 -PARAM READ
+@28
+mac_tb.params.read.en
 @c00024
 mac_tb.params.read.addr[14:0]
 @28
@@ -131,5 +150,25 @@ mac_tb.MAC_mult_io.start
 mac_tb.MAC_mult_io.in_1[38:0]
 mac_tb.MAC_mult_io.in_2[38:0]
 mac_tb.MAC_mult_io.out[38:0]
+@200
+-DIV
+@28
+mac_tb.mac.div_io.start
+mac_tb.mac.div_io.done
+@420
+mac_tb.mac.div_io.in_1[38:0]
+mac_tb.mac.div_io.in_2[38:0]
+mac_tb.mac.div_io.out[38:0]
+@200
+-EXP
+@28
+mac_tb.mac.exp_io.start
+mac_tb.mac.exp_io.done
+@420
+mac_tb.mac.exp_io.in_1[38:0]
+@421
+mac_tb.mac.exp_io.out[38:0]
+@420
+mac_tb.mac.add_out_flipped[38:0]
 [pattern_trace] 1
 [pattern_trace] 0
