@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Sat Sep  7 22:32:17 2024
+[*] Mon Sep  9 03:20:31 2024
 [*]
 [dumpfile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/sim/sim_build/dump.fst"
-[dumpfile_mtime] "Sat Sep  7 22:32:08 2024"
-[dumpfile_size] 18685088
+[dumpfile_mtime] "Mon Sep  9 03:06:31 2024"
+[dumpfile_size] 20233403
 [savefile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/sim/cim_centralized.gtkw"
-[timestart] 6181455000
+[timestart] 6175570000
 [size] 1512 916
 [pos] -1 -1
-*-17.652130 6182380000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+*-23.052128 6196950000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -38,7 +38,6 @@
 [markername] ZZ
 [treeopen] cim_centralized_tb.
 [treeopen] cim_centralized_tb.cim_centralized.
-[treeopen] cim_centralized_tb.cim_centralized.int_res_u.
 [sst_width] 253
 [signals_width] 297
 [sst_expanded] 1
@@ -230,5 +229,16 @@ cim_centralized_tb.cim_centralized.add.io.out[38:0]
 (38)cim_centralized_tb.cim_centralized.add.io.out[38:0]
 @1401200
 -group_end
+@200
+-LAYERNORM
+@28
+cim_centralized_tb.cim_centralized.layernorm.io.start
+cim_centralized_tb.cim_centralized.layernorm.io.busy
+cim_centralized_tb.cim_centralized.layernorm.io.done
+@25
+cim_centralized_tb.cim_centralized.ln_io_extra.start_addr_1[15:0]
+cim_centralized_tb.cim_centralized.ln_io_extra.start_addr_2[15:0]
+cim_centralized_tb.cim_centralized.ln_io_extra.start_addr_3[15:0]
+cim_centralized_tb.cim_centralized.ln_io_extra.start_addr_4[15:0]
 [pattern_trace] 1
 [pattern_trace] 0

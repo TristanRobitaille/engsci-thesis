@@ -1,3 +1,6 @@
+`ifndef _compute_ip_interface_vh_
+`define _compute_ip_interface_vh_
+
 import Defines::*;
 
 interface ComputeIPInterface;
@@ -28,14 +31,15 @@ interface ComputeIPInterface;
     ParamType_t param_type;
     Activation_t activation;
     ParamAddr_t bias_addr;
-    IntResAddr_t start_addr_1, start_addr_2, start_addr_3;
+    IntResAddr_t start_addr_1, start_addr_2, start_addr_3, start_addr_4;
     modport extra (
         input half_select,
         input len,
         input param_type,
         input activation,
         input bias_addr,
-        input start_addr_1, start_addr_2, start_addr_3
+        input start_addr_1, start_addr_2, start_addr_3, start_addr_4
     );
 
 endinterface
+`endif

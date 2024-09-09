@@ -1,6 +1,8 @@
 `ifndef _memory_interface_vh_
 `define _memory_interface_vh_
 
+import Defines::*;
+
 interface MemoryInterface # (
     parameter type Data_t,
     parameter type Addr_t,

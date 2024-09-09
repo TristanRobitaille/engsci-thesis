@@ -12,16 +12,23 @@ from cocotb.triggers import RisingEdge
 #----- CONSTANTS -----#
 LEN_FIRST_HALF = 64
 LEN_SECOND_HALF = utilities.NUM_PATCHES + 1
-MAX_LEN = 8
+MAX_LEN = 64
 NUM_TESTS = 5
 MAX_VAL = 4
-TOLERANCE = 0.05
+TOLERANCE = 0.01
 
 #----- FUNCTIONS -----#
 async def test_run(dut, int_res_format:const.FxFormatIntRes, params_format:const.FxFormatParams, int_res_width:const.DataWidth):
     # Prepare MAC
     start_addr = random.randint(0, const.CIM_INT_RES_BANK_SIZE_NUM_WORD*const.CIM_INT_RES_NUM_BANKS - MAX_LEN - 1)
+    output_addr = random.randint(0, const.CIM_INT_RES_BANK_SIZE_NUM_WORD*const.CIM_INT_RES_NUM_BANKS - MAX_LEN - 1)
+
+    # Fix address if there's an overlap
+    if ((start_addr + MAX_LEN) > output_addr): start_addr = output_addr - MAX_LEN
+    elif ((output_addr + MAX_LEN) > start_addr): output_addr = start_addr - MAX_LEN
+
     dut.start_addr.value = start_addr
+    dut.output_addr.value = output_addr
     dut.half_select.value = const.LayerNormHalfSelect.FIRST_HALF.value
     dut.int_res_read_format.value = const.int_res_fx_rtl_enum[int_res_format]
     dut.int_res_read_data_width.value = int_res_width.value
@@ -54,9 +61,9 @@ async def test_run(dut, int_res_format:const.FxFormatIntRes, params_format:const
 
     # Check results for 1st half
     for i in range(LEN_FIRST_HALF):
-        received = await utilities.read_one_word_cent(dut=dut, addr=start_addr+i, device="int_res", data_format=int_res_format, data_width=int_res_width)
+        received = await utilities.read_one_word_cent(dut=dut, addr=output_addr+i, device="int_res", data_format=int_res_format, data_width=int_res_width)
         expected_result = float(mem_copy[i])
-        assert received == pytest.approx(expected_result, rel=TOLERANCE, abs=0.01), f"Expected: {expected_result}, received: {received}"
+        assert received == pytest.approx(expected_result, rel=TOLERANCE, abs=0.01), f"Expected: {expected_result}, received: {received} at index {i}"
 
     print(f"LayerNorm 1st half passed!")
     for _ in range (1000): await cocotb.triggers.ClockCycles(dut.clk, 1)
@@ -80,9 +87,9 @@ async def test_run(dut, int_res_format:const.FxFormatIntRes, params_format:const
         dut.start.value = 0
 
     for i in range(LEN_SECOND_HALF):
-        received = await utilities.read_one_word_cent(dut=dut, addr=start_addr+i, device="int_res", data_format=int_res_format, data_width=int_res_width)
+        received = await utilities.read_one_word_cent(dut=dut, addr=output_addr+i, device="int_res", data_format=int_res_format, data_width=int_res_width)
         expected_result = float(mem_copy[i])
-        assert received == pytest.approx(expected_result, rel=TOLERANCE, abs=0.01), f"Expected: {expected_result}, received: {received}"
+        assert received == pytest.approx(expected_result, rel=TOLERANCE, abs=0.01), f"Expected: {expected_result}, received: {received} at index {i}"
 
     print(f"LayerNorm 2nd half passed!")
     await cocotb.triggers.ClockCycles(dut.clk, 10)

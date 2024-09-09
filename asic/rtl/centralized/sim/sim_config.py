@@ -49,6 +49,7 @@ def test_dff_verilog():
             os.path.join(ip_dir, "divider/divider.sv"),
             os.path.join(ip_dir, "exp/exp.sv"),
             os.path.join(ip_dir, "mac/mac.sv"),
+            os.path.join(ip_dir, "sqrt/sqrt.sv"),
             os.path.join(ip_dir, "softmax/softmax.sv"),
             os.path.join(ip_dir, "layernorm/layernorm.sv"),
             # Main

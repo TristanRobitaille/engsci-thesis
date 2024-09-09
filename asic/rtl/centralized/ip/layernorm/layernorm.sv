@@ -83,6 +83,8 @@ module layernorm (
         param_read.format <= param_format;
     endtask
 
+    // TODO as of 2024/09/08: Change output indexing for second half to increment by EMB_DEPTH instead of 1 to match C++ centralized
+
     /*----- LOGIC -----*/
     localparam  LEN_FIRST_HALF = 64, // LEN_FIRST_HALF must be a power of 2 since we divide by bit shifting
                 LEN_SECOND_HALF = 61;
@@ -102,7 +104,7 @@ module layernorm (
                 IDLE : begin
                     if (io.start) begin
                         state <= (io_extra.half_select == FIRST_HALF) ? LOOP_SUM : GAMMA_LOAD;
-                        if (io_extra.half_select == SECOND_HALF) read_param(ParamAddr_t'(io_extra.start_addr_3), casts.params_read_format);
+                        if (io_extra.half_select == SECOND_HALF) read_param(ParamAddr_t'(io_extra.start_addr_4), casts.params_read_format);
                         io.busy <= 1'b1;
                     end else begin
                         io.done <= 1'b0;
@@ -145,7 +147,7 @@ module layernorm (
                             gen_reg_3b <= 'd0;
                             index <= index + 'd1;
                             compute_temp_2 <= add_io.out;
-                            if (mult_io.start) write_int_res(io_extra.start_addr_1 + IntResAddr_t'(index), mult_io.out, casts.int_res_write_width, casts.int_res_write_format);
+                            if (mult_io.start) write_int_res(io_extra.start_addr_2 + IntResAddr_t'(index), mult_io.out, casts.int_res_write_width, casts.int_res_write_format);
                         end
                     end else begin
                         index <= 'd0;
@@ -181,7 +183,7 @@ module layernorm (
                     gen_reg_3b <= gen_reg_3b + 'd1;
                     if (gen_reg_3b == 'd1) begin
                         compute_temp_2 <= param_read.data; // Gamma
-                        read_param(ParamAddr_t'(io_extra.start_addr_2), casts.params_read_format);
+                        read_param(ParamAddr_t'(io_extra.start_addr_3), casts.params_read_format);
                         state <= BETA_LOAD;
                     end
                 end
@@ -195,7 +197,7 @@ module layernorm (
                 SECOND_HALF_LOOP: begin
                     if (index < LEN_SECOND_HALF) begin
                         if (gen_reg_3b == 'd0) begin
-                            read_int_res(io_extra.start_addr_1 + IntResAddr_t'(index), casts.int_res_read_width, casts.int_res_read_format);
+                            read_int_res(io_extra.start_addr_2 + IntResAddr_t'(index), casts.int_res_read_width, casts.int_res_read_format);
                             if (int_res_read.en) gen_reg_3b <= 'd1;
                         end else if (gen_reg_3b == 'd1) begin
                             start_mult(compute_temp_2, int_res_read.data); // Gamma
@@ -204,7 +206,7 @@ module layernorm (
                             start_add(mult_io.out, compute_temp_3); // Beta
                             if (add_io.start) gen_reg_3b <= 'd3;
                         end else if (gen_reg_3b == 'd3) begin
-                            write_int_res(io_extra.start_addr_1 + IntResAddr_t'(index), add_io.out, casts.int_res_write_width, casts.int_res_write_format);
+                            write_int_res(io_extra.start_addr_2 + IntResAddr_t'(index), add_io.out, casts.int_res_write_width, casts.int_res_write_format);
                             gen_reg_3b <= 'd4;
                         end else begin
                             gen_reg_3b <= 'd0;

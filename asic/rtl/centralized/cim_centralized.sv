@@ -25,14 +25,18 @@ module cim_centralized #()(
     MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t) param_read_i ();
     MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t) param_read_mac_i ();
     MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t) param_read_cim_i ();
+    MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t) param_read_ln_i ();
 
     MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_read_i ();
     MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_write_i ();
     MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_read_cim_i ();
     MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_read_mac_i ();
+    MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_read_ln_i ();
     MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_write_cim_i ();
+    MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_write_ln_i ();
 
     MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) mac_casts_i ();
+    MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) ln_casts_i ();
 
     params_mem params_u   (.clk, .rst_n, .write(param_write_tb_i),.read(param_read_i)); // Only testbench writes to params
     int_res_mem int_res_u (.clk, .rst_n, .write(int_res_write_i), .read(int_res_read_i));
@@ -42,23 +46,32 @@ module cim_centralized #()(
     ComputeIPInterface add_io_cim();
     ComputeIPInterface add_io_exp();
     ComputeIPInterface add_io_mac();
+    ComputeIPInterface add_io_ln();
     ComputeIPInterface mult_io();
     ComputeIPInterface mult_io_exp();
     ComputeIPInterface mult_io_mac();
+    ComputeIPInterface mult_io_ln();
     ComputeIPInterface div_io();
     ComputeIPInterface div_io_mac();
+    ComputeIPInterface div_io_ln();
     ComputeIPInterface exp_io();
     ComputeIPInterface exp_io_mac();
+    ComputeIPInterface sqrt_io();
     ComputeIPInterface mac_io();
     ComputeIPInterface mac_io_extra();
+    ComputeIPInterface ln_io();
+    ComputeIPInterface ln_io_extra();
 
     adder add       (.clk, .rst_n, .io(add_io));
     multiplier mult (.clk, .rst_n, .io(mult_io));
     divider div     (.clk, .rst_n, .io(div_io));
     exp exp         (.clk, .rst_n, .io(exp_io), .adder_io(add_io_exp), .mult_io(mult_io_exp));
+    sqrt sqrt       (.clk, .rst_n, .io(sqrt_io));
     mac mac         (.clk, .rst_n, .io(mac_io), .io_extra(mac_io_extra),
                      .casts(mac_casts_i), .param_read(param_read_mac_i), .int_res_read(int_res_read_mac_i),
                      .add_io(add_io_mac), .mult_io(mult_io_mac), .div_io(div_io_mac), .exp_io(exp_io_mac));
+    layernorm layernorm (.clk, .rst_n, .io(ln_io), .io_extra(ln_io_extra), .add_io(add_io_ln), .mult_io(mult_io_ln), .div_io(div_io_ln), .sqrt_io,
+                         .casts(ln_casts_i), .param_read(param_read_ln_i), .int_res_read(int_res_read_ln_i), .int_res_write(int_res_write_ln_i));
 
     // ----- GLOBAL SIGNALS ----- //
     logic rst_n;
@@ -84,7 +97,7 @@ module cim_centralized #()(
                     if (soc_ctrl_i.new_sleep_epoch) cim_state <= INFERENCE_RUNNING;
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == ENC_LAYERNORM_1_1ST_HALF_STEP) begin
+                    if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -120,10 +133,10 @@ module cim_centralized #()(
                     /* cnt_7b_i holds current parameters row
                        cnt_9b_i holds current patch */
 
-                    if ((mac_io.done || (cnt_7b_i.cnt == 0 && ~mac_io.busy)) && (int'(cnt_7b_i.cnt) != 63)) begin
+                    if ((mac_io.done || (cnt_7b_i.cnt == 0 && ~mac_io.busy)) && (int'(cnt_7b_i.cnt) != EMB_DEPTH-1)) begin
                         IntResAddr_t patch_addr = mem_map[EEG_INPUT_MEM] + IntResAddr_t'(int'(cnt_9b_i.cnt) << $clog2(EMB_DEPTH));
                         ParamAddr_t param_addr  = param_addr_map[PATCH_PROJ_KERNEL_PARAMS] + ParamAddr_t'(int'(cnt_7b_i.cnt) << $clog2(EMB_DEPTH));
-                        ParamAddr_t bias_addr   = param_addr_map_bias[PATCH_PROJ_BIAS_OFF] + ParamAddr_t'(cnt_7b_i.cnt);
+                        ParamAddr_t bias_addr   = param_addr_map_bias[PATCH_PROJ_BIAS] + ParamAddr_t'(cnt_7b_i.cnt);
                         start_mac(patch_addr, IntResAddr_t'(param_addr), bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, VectorLen_t'(PATCH_LEN), int_res_format[EEG_FORMAT],
                                   int_res_width[EEG_WIDTH], params_format[PATCH_PROJ_PARAM_FORMAT]);
                     end
@@ -152,7 +165,7 @@ module cim_centralized #()(
                         cnt_9b_i.rst_n <= 1'b0;
                         current_inf_step <= POS_EMB_STEP;
                     end else begin
-                        ParamAddr_t read_addr = param_addr_map_bias[CLASS_TOKEN_OFF] + ParamAddr_t'(cnt_7b_i.cnt);
+                        ParamAddr_t read_addr = param_addr_map_bias[CLASS_TOKEN] + ParamAddr_t'(cnt_7b_i.cnt);
                         IntResAddr_t write_addr = mem_map[CLASS_TOKEN_MEM] + IntResAddr_t'(cnt_9b_i.cnt);
                         if (cnt_7b_i.inc) read_params(read_addr, params_format[CLASS_EMB_TOKEN_PARAM_FORMAT]);
                         if (cnt_9b_i.inc) write_int_res(write_addr, param_read_i.data, int_res_width[CLASS_EMB_TOKEN_WIDTH], int_res_format[CLASS_EMB_TOKEN_FORMAT]);
@@ -196,6 +209,20 @@ module cim_centralized #()(
                     end
                 end
                 ENC_LAYERNORM_1_1ST_HALF_STEP: begin
+                    if ((ln_io.done || (cnt_7b_i.cnt == 0 && ~ln_io.busy)) && ~ln_io.start && (int'(cnt_7b_i.cnt) != NUM_PATCHES+1)) begin
+                        IntResAddr_t input_starting_addr = mem_map[POS_EMB_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt);
+                        IntResAddr_t output_starting_addr = mem_map[ENC_LN1_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt);
+                        start_layernorm(FIRST_HALF, input_starting_addr, output_starting_addr, param_addr_map_bias[ENC_LAYERNORM_1_BETA], param_addr_map_bias[ENC_LAYERNORM_1_GAMMA],
+                                        int_res_width[LN_INPUT_WIDTH], int_res_format[LN_INPUT_FORMAT], int_res_width[LN_OUTPUT_WIDTH],
+                                        int_res_format[LN_OUTPUT_FORMAT], params_format[LN_PARAM_FORMAT]);
+                    end
+
+                    cnt_7b_i.inc <= ln_io.start;
+
+                    if (ln_io.done && (int'(cnt_7b_i.cnt) == NUM_PATCHES+1)) begin
+                        cnt_7b_i.rst_n <= 1'b0;
+                        current_inf_step <= ENC_LAYERNORM_1_2ND_HALF_STEP;
+                    end
                 end
                 default: begin
                 end
@@ -215,45 +242,59 @@ module cim_centralized #()(
 
         // Read
         param_read_i.data_width = SINGLE_WIDTH;
-        param_read_i.en = param_read_mac_i.en | param_read_cim_i.en;
+        param_read_i.en = param_read_mac_i.en | param_read_cim_i.en | param_read_ln_i.en;
         param_read_mac_i.data = param_read_i.data;
+        param_read_ln_i.data = param_read_i.data;
         if (param_read_mac_i.en) begin // MAC
             param_read_i.addr = param_read_mac_i.addr;
             param_read_i.format = param_read_mac_i.format;
         end else if (param_read_cim_i.en) begin
             param_read_i.addr = param_read_cim_i.addr;
             param_read_i.format = param_read_cim_i.format;
+        end else if (param_read_ln_i.en) begin
+            param_read_i.addr = param_read_ln_i.addr;
+            param_read_i.format = param_read_ln_i.format;
         end
     end
 
-    always_comb begin : int_res_mem_MUX // TODO: Why does it claim that no latch is inferred if I use always_latch?
+    always_latch begin : int_res_mem_MUX
         // Write
         int_res_write_i.chip_en = 1'b1;
-        int_res_write_i.en = int_res_write_tb_i.en | int_res_write_cim_i.en;
-        if (int_res_write_tb_i.en) begin // Testbench
+        int_res_write_i.en = int_res_write_tb_i.en | int_res_write_cim_i.en | int_res_write_ln_i.en;
+        if (int_res_write_tb_i.en) begin
             int_res_write_i.addr = int_res_write_tb_i.addr;
             int_res_write_i.data = int_res_write_tb_i.data;
             int_res_write_i.format = int_res_write_tb_i.format;
             int_res_write_i.data_width = int_res_write_tb_i.data_width;
-        end else if (int_res_write_cim_i.en) begin // CiM
+        end else if (int_res_write_cim_i.en) begin
             int_res_write_i.addr = int_res_write_cim_i.addr;
             int_res_write_i.data = int_res_write_cim_i.data;
             int_res_write_i.format = int_res_write_cim_i.format;
             int_res_write_i.data_width = int_res_write_cim_i.data_width;
+        end else if (int_res_write_ln_i.en) begin
+            int_res_write_i.addr = int_res_write_ln_i.addr;
+            int_res_write_i.data = int_res_write_ln_i.data;
+            int_res_write_i.format = int_res_write_ln_i.format;
+            int_res_write_i.data_width = int_res_write_ln_i.data_width;
         end
 
         // Read
-        int_res_read_i.en = int_res_read_mac_i.en | int_res_read_cim_i.en;
+        int_res_read_i.en = int_res_read_mac_i.en | int_res_read_cim_i.en | int_res_read_ln_i.en;
         int_res_read_mac_i.data = int_res_read_i.data;
         int_res_read_cim_i.data = int_res_read_i.data;
+        int_res_read_ln_i.data = int_res_read_i.data;
         if (int_res_read_mac_i.en) begin // MAC
             int_res_read_i.addr = int_res_read_mac_i.addr;
             int_res_read_i.data_width = int_res_read_mac_i.data_width;
             int_res_read_i.format = int_res_read_mac_i.format;
-        end else begin
+        end else if (int_res_read_cim_i.en) begin
             int_res_read_i.addr = int_res_read_cim_i.addr;
             int_res_read_i.data_width = int_res_read_cim_i.data_width;
             int_res_read_i.format = int_res_read_cim_i.format;
+        end else if (int_res_read_ln_i.en) begin
+            int_res_read_i.addr = int_res_read_ln_i.addr;
+            int_res_read_i.data_width = int_res_read_ln_i.data_width;
+            int_res_read_i.format = int_res_read_ln_i.format;
         end
     end
 
@@ -267,15 +308,20 @@ module cim_centralized #()(
         end else if (add_io_cim.start) begin
             add_io.in_1 = add_io_cim.in_1;
             add_io.in_2 = add_io_cim.in_2;
+        end else if (add_io_ln.start) begin
+            add_io.in_1 = add_io_ln.in_1;
+            add_io.in_2 = add_io_ln.in_2;
         end
 
-        add_io.start = add_io_exp.start | add_io_mac.start | add_io_cim.start;
+        add_io.start = add_io_exp.start | add_io_mac.start | add_io_cim.start | add_io_ln.start;
         add_io_exp.out = add_io.out;
         add_io_exp.done = add_io.done;
         add_io_mac.out = add_io.out;
         add_io_mac.done = add_io.done;
         add_io_cim.out = add_io.out;
         add_io_cim.done = add_io.done;
+        add_io_ln.out = add_io.out;
+        add_io_ln.done = add_io.done;
     end
 
     always_latch begin : mult_io_MUX
@@ -285,25 +331,36 @@ module cim_centralized #()(
         end else if (mult_io_mac.start) begin
             mult_io.in_1 = mult_io_mac.in_1;
             mult_io.in_2 = mult_io_mac.in_2;
+        end else if (mult_io_ln.start) begin
+            mult_io.in_1 = mult_io_ln.in_1;
+            mult_io.in_2 = mult_io_ln.in_2;
         end
 
-        mult_io.start = mult_io_exp.start | mult_io_mac.start;
+        mult_io.start = mult_io_exp.start | mult_io_mac.start | mult_io_ln.start;
         mult_io_exp.out = mult_io.out;
         mult_io_exp.done = mult_io.done;
         mult_io_mac.out = mult_io.out;
         mult_io_mac.done = mult_io.done;
+        mult_io_ln.out = mult_io.out;
+        mult_io_ln.done = mult_io.done;
     end
 
     always_latch begin : div_io_MUX
         if (div_io_mac.start) begin
             div_io.in_1 = div_io_mac.in_1;
             div_io.in_2 = div_io_mac.in_2;
+        end else if (div_io_ln.start) begin
+            div_io.in_1 = div_io_ln.in_1;
+            div_io.in_2 = div_io_ln.in_2;
         end
 
-        div_io.start = div_io_mac.start;
+        div_io.start = div_io_mac.start | div_io_ln.start;
         div_io_mac.out = div_io.out;
         div_io_mac.busy = div_io.busy;
         div_io_mac.done = div_io.done;
+        div_io_ln.out = div_io.out;
+        div_io_ln.busy = div_io.busy;
+        div_io_ln.done = div_io.done;
     end
 
     always_latch begin : exp_io_MUX
@@ -334,6 +391,7 @@ module cim_centralized #()(
 
         mac_io.start <= 1'b0;
         add_io_cim.start <= 1'b0;
+        ln_io.start <= 1'b0;
     endtask
 
     task automatic reset();
@@ -391,16 +449,30 @@ module cim_centralized #()(
         add_io_cim.in_2 <= in_2;
     endtask
 
+    task start_layernorm(input HalfSelect_t half_select, input IntResAddr_t input_starting_addr, input IntResAddr_t output_starting_addr, input ParamAddr_t beta_addr, input ParamAddr_t gamma_addr, input DataWidth_t input_width, input FxFormatIntRes_t input_format, input DataWidth_t output_width, input FxFormatIntRes_t output_format, input FxFormatParams_t param_format);
+        ln_io.start <= 1'b1;
+        ln_io_extra.half_select <= half_select;
+        ln_io_extra.start_addr_1 <= input_starting_addr;
+        ln_io_extra.start_addr_2 <= output_starting_addr;
+        ln_io_extra.start_addr_3 <= IntResAddr_t'(beta_addr);
+        ln_io_extra.start_addr_4 <= IntResAddr_t'(gamma_addr);
+        ln_casts_i.int_res_read_format <= input_format;
+        ln_casts_i.int_res_write_format <= output_format;
+        ln_casts_i.int_res_read_width <= input_width;
+        ln_casts_i.int_res_write_width <= output_width;
+        ln_casts_i.params_read_format <= param_format;
+    endtask
+
     // ----- ASSERTIONS ----- //
     always_ff @ (posedge clk) begin : compute_mux_assertions
-        assert (~(int_res_write_tb_i.en & int_res_write_cim_i.en)) else $fatal("More than one source is trying to write to intermediate result memory simulatenously!");
-        assert (~(int_res_read_cim_i.en & int_res_read_mac_i.en)) else $fatal("More than one source is trying to read from intermediate results memory simulatenously!");
-        assert (~(param_read_cim_i.en & param_read_mac_i.en)) else $fatal("More than one source is trying to read from parameters result memory simulatenously!");
+        assert (~(int_res_write_tb_i.en & int_res_write_cim_i.en & int_res_write_ln_i.en)) else $fatal("More than one source are trying to write to intermediate result memory simulatenously!");
+        assert (~(int_res_read_cim_i.en & int_res_read_mac_i.en & int_res_read_ln_i.en)) else $fatal("More than one source are trying to read from intermediate results memory simulatenously!");
+        assert (~(param_read_cim_i.en & param_read_mac_i.en & param_read_ln_i.en)) else $fatal("More than one source are trying to read from parameters result memory simulatenously!");
 
-        assert (~(add_io_exp.start & add_io_mac.start & add_io_cim.start)) else $fatal("More than one source is trying to start an add!");
-        assert (~(mult_io_exp.start & mult_io_mac.start)) else $fatal("More than one source is trying to start a mult!");
-        assert (~(div_io_mac.start & 0)) else $fatal("More than one source is trying to start a div!");
-        assert (~(exp_io_mac.start & 0)) else $fatal("More than one source is trying to start an exp!");
+        assert (~(add_io_exp.start & add_io_mac.start & add_io_cim.start & add_io_ln.start)) else $fatal("More than one source are trying to start an add!");
+        assert (~(mult_io_exp.start & mult_io_mac.start & mult_io_ln.start)) else $fatal("More than one source are trying to start a mult!");
+        assert (~(div_io_mac.start & div_io_ln.start)) else $fatal("More than one source are trying to start a div!");
+        assert (~(exp_io_mac.start & 0)) else $fatal("More than one source are trying to start an exp!");
     end
 endmodule
 

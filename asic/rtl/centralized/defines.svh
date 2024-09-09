@@ -158,23 +158,23 @@ package Defines;
     } ParamStep_t;
 
     typedef enum int {
-        PATCH_PROJ_BIAS_OFF,
-        CLASS_TOKEN_OFF,
-        ENC_LAYERNORM_1_GAMMA_OFF,
-        ENC_LAYERNORM_1_BETA_OFF,
+        PATCH_PROJ_BIAS,
+        CLASS_TOKEN,
+        ENC_LAYERNORM_1_GAMMA,
+        ENC_LAYERNORM_1_BETA,
         ENC_Q_DENSE_BIAS_0FF,
         ENC_K_DENSE_BIAS_0FF,
         ENC_V_DENSE_BIAS_0FF,
-        ENC_INV_SQRT_NUM_HEADS_OFF,
-        ENC_COMB_HEAD_BIAS_OFF,
-        ENC_LAYERNORM_2_GAMMA_OFF,
-        ENC_LAYERNORM_2_BETA_OFF,
-        ENC_MLP_DENSE_1_BIAS_OFF,
-        ENC_MLP_DENSE_2_BIAS_OFF,
-        ENC_LAYERNORM_3_GAMMA_OFF,
-        ENC_LAYERNORM_3_BETA_OFF,
-        MLP_HEAD_DENSE_1_BIAS_OFF,
-        MLP_HEAD_DENSE_2_BIAS_OFF,
+        ENC_INV_SQRT_NUM_HEADS,
+        ENC_COMB_HEAD_BIAS,
+        ENC_LAYERNORM_2_GAMMA,
+        ENC_LAYERNORM_2_BETA,
+        ENC_MLP_DENSE_1_BIAS,
+        ENC_MLP_DENSE_2_BIAS,
+        ENC_LAYERNORM_3_GAMMA,
+        ENC_LAYERNORM_3_BETA,
+        MLP_HEAD_DENSE_1_BIAS,
+        MLP_HEAD_DENSE_2_BIAS,
         NUM_PARAM_BIAS_STEP
     } ParamBiasStep_t;
 
@@ -216,23 +216,23 @@ package Defines;
     };
 
     const ParamAddr_t param_addr_map_bias [NUM_PARAM_BIAS_STEP] = '{
-        param_addr_map[NUM_PARAM_STEP-1],       // PATCH_PROJ_BIAS_OFF
-        param_addr_map[NUM_PARAM_STEP-1] + 64,  // CLASS_TOKEN_OFF
-        param_addr_map[NUM_PARAM_STEP-1] + 128, // ENC_LAYERNORM_1_GAMMA_OFF
-        param_addr_map[NUM_PARAM_STEP-1] + 192, // ENC_LAYERNORM_1_BETA_OFF
+        param_addr_map[NUM_PARAM_STEP-1],       // PATCH_PROJ_BIAS
+        param_addr_map[NUM_PARAM_STEP-1] + 64,  // CLASS_TOKEN
+        param_addr_map[NUM_PARAM_STEP-1] + 128, // ENC_LAYERNORM_1_GAMMA
+        param_addr_map[NUM_PARAM_STEP-1] + 192, // ENC_LAYERNORM_1_BETA
         param_addr_map[NUM_PARAM_STEP-1] + 256, // ENC_Q_DENSE_BIAS_0FF
         param_addr_map[NUM_PARAM_STEP-1] + 320, // ENC_K_DENSE_BIAS_0FF
         param_addr_map[NUM_PARAM_STEP-1] + 384, // ENC_V_DENSE_BIAS_0FF
-        param_addr_map[NUM_PARAM_STEP-1] + 448, // ENC_INV_SQRT_NUM_HEADS_OFF
-        param_addr_map[NUM_PARAM_STEP-1] + 449, // ENC_COMB_HEAD_BIAS_OFF
-        param_addr_map[NUM_PARAM_STEP-1] + 513, // ENC_LAYERNORM_2_GAMMA_OFF
-        param_addr_map[NUM_PARAM_STEP-1] + 577, // ENC_LAYERNORM_2_BETA_OFF
-        param_addr_map[NUM_PARAM_STEP-1] + 641, // ENC_MLP_DENSE_1_BIAS_OFF
-        param_addr_map[NUM_PARAM_STEP-1] + 673, // ENC_MLP_DENSE_2_BIAS_OFF
-        param_addr_map[NUM_PARAM_STEP-1] + 737, // ENC_LAYERNORM_3_GAMMA_OFF
-        param_addr_map[NUM_PARAM_STEP-1] + 801, // ENC_LAYERNORM_3_BETA_OFF
-        param_addr_map[NUM_PARAM_STEP-1] + 865, // MLP_HEAD_DENSE_1_BIAS_OFF
-        param_addr_map[NUM_PARAM_STEP-1] + 897  // MLP_HEAD_DENSE_2_BIAS_OFF
+        param_addr_map[NUM_PARAM_STEP-1] + 448, // ENC_INV_SQRT_NUM_HEADS
+        param_addr_map[NUM_PARAM_STEP-1] + 449, // ENC_COMB_HEAD_BIAS
+        param_addr_map[NUM_PARAM_STEP-1] + 513, // ENC_LAYERNORM_2_GAMMA
+        param_addr_map[NUM_PARAM_STEP-1] + 577, // ENC_LAYERNORM_2_BETA
+        param_addr_map[NUM_PARAM_STEP-1] + 641, // ENC_MLP_DENSE_1_BIAS
+        param_addr_map[NUM_PARAM_STEP-1] + 673, // ENC_MLP_DENSE_2_BIAS
+        param_addr_map[NUM_PARAM_STEP-1] + 737, // ENC_LAYERNORM_3_GAMMA
+        param_addr_map[NUM_PARAM_STEP-1] + 801, // ENC_LAYERNORM_3_BETA
+        param_addr_map[NUM_PARAM_STEP-1] + 865, // MLP_HEAD_DENSE_1_BIAS
+        param_addr_map[NUM_PARAM_STEP-1] + 897  // MLP_HEAD_DENSE_2_BIAS
     };
 
     /* ----- CASTS ----- */
@@ -241,6 +241,8 @@ package Defines;
         PATCH_PROJ_OUTPUT_WIDTH,
         CLASS_EMB_TOKEN_WIDTH,
         POS_EMB_WIDTH,
+        LN_INPUT_WIDTH,
+        LN_OUTPUT_WIDTH,
         NUM_INT_RES_WIDTHS
     } IntResWidth_t;
 
@@ -249,6 +251,8 @@ package Defines;
         PATCH_PROJ_OUTPUT_FORMAT,
         CLASS_EMB_TOKEN_FORMAT,
         POS_EMB_FORMAT,
+        LN_INPUT_FORMAT,
+        LN_OUTPUT_FORMAT,
         NUM_INT_RES_FORMATS
     } IntResFormat_t;
 
@@ -256,6 +260,7 @@ package Defines;
         PATCH_PROJ_PARAM_FORMAT,
         CLASS_EMB_TOKEN_PARAM_FORMAT,
         POS_EMB_PARAM_FORMAT,
+        LN_PARAM_FORMAT,
         NUM_PARAMS_FORMATS
     } ParamFormat_t;
 
@@ -263,20 +268,25 @@ package Defines;
         DOUBLE_WIDTH, // EEG_WIDTH
         DOUBLE_WIDTH, // PATCH_PROJ_OUTPUT_WIDTH
         DOUBLE_WIDTH, // CLASS_TOKEN_WIDTH
-        DOUBLE_WIDTH  // POS_EMB_WIDTH
+        DOUBLE_WIDTH, // POS_EMB_WIDTH
+        DOUBLE_WIDTH, // LN_INPUT_WIDTH
+        DOUBLE_WIDTH  // LN_OUTPUT_WIDTH
     };
 
     const FxFormatIntRes_t int_res_format [NUM_INT_RES_FORMATS] = '{
         INT_RES_DW_FX, // EEG_FORMAT
         INT_RES_DW_FX, // PATCH_PROJ_OUTPUT_FORMAT
         INT_RES_DW_FX, // CLASS_EMB_TOKEN_FORMAT
-        INT_RES_DW_FX  // POS_EMB_FORMAT
+        INT_RES_DW_FX, // POS_EMB_FORMAT
+        INT_RES_DW_FX, // LN_INPUT_FORMAT
+        INT_RES_DW_FX  // LN_OUTPUT_FORMAT
     };
 
     const FxFormatParams_t params_format [NUM_PARAMS_FORMATS] = '{
         PARAMS_FX_2_X, // PATCH_PROJ_PARAM_FORMAT
         PARAMS_FX_2_X, // CLASS_EMB_TOKEN_PARAM_FORMAT
-        PARAMS_FX_2_X  // POS_EMB_PARAM_FORMAT
+        PARAMS_FX_2_X, // POS_EMB_PARAM_FORMAT
+        PARAMS_FX_3_X  // LN_PARAM_FORMAT
     };
 
 endpackage

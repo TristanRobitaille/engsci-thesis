@@ -106,7 +106,8 @@ module mac (
                     end
                 end
                 BASIC_MAC: begin
-                    // Highly-pipelined MAC
+                    // Pipelined MAC
+                    // TODO: Can save one cycle by reading both inputs in parallel when multiplying with model parameters
                     if (input_currently_reading == 0) begin // Read input 2
                         index <= index + 1;
                         input_currently_reading <= 1'b1;

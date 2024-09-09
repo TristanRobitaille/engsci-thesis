@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Sun Sep  1 07:14:03 2024
+[*] Sun Sep  8 16:58:21 2024
 [*]
 [dumpfile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/ip/layernorm/sim_build/dump.fst"
-[dumpfile_mtime] "Sun Sep  1 07:13:40 2024"
-[dumpfile_size] 38774
+[dumpfile_mtime] "Sun Sep  8 16:52:12 2024"
+[dumpfile_size] 94145
 [savefile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/ip/layernorm/layernorm.gtkw"
-[timestart] 26952900
+[timestart] 0
 [size] 1512 916
 [pos] -1 -1
-*-16.200001 27110000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+*-18.600000 32056900 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -37,10 +37,11 @@
 [markername] YY
 [markername] ZZ
 [treeopen] layernorm_tb.
+[treeopen] layernorm_tb.layernom.
 [sst_width] 253
-[signals_width] 247
+[signals_width] 306
 [sst_expanded] 1
-[sst_vpaned_height] 372
+[sst_vpaned_height] 492
 @28
 layernorm_tb.clk
 @200
@@ -48,6 +49,8 @@ layernorm_tb.clk
 @28
 layernorm_tb.start
 layernorm_tb.done
+@23
+output_addr[15:0]
 @24
 layernorm_tb.layernom.gen_reg_3b[2:0]
 @100000028
@@ -60,18 +63,19 @@ layernorm_tb.layernom.compute_temp_2[38:0]
 layernorm_tb.layernom.compute_temp_3[38:0]
 @100000028
 layernorm_tb.layernom.io_extra.half_select
-@100000029
 layernorm_tb.half_select
 @200
 -INT_RES_READ
 @28
-layernorm_tb.tb_int_res_read.en
-@100000028
-layernorm_tb.tb_int_res_read.format[2:0]
-layernorm_tb.tb_int_res_read.data_width
+layernorm_tb.int_res_read.en
+@24
+layernorm_tb.int_res_read.addr[15:0]
 @420
-layernorm_tb.tb_int_res_read.addr[15:0]
-layernorm_tb.tb_int_res_read.data[38:0]
+layernorm_tb.int_res_read.data[38:0]
+@100000028
+layernorm_tb.int_res_read.format[2:0]
+layernorm_tb.int_res_read.int_res_read_format[2:0]
+layernorm_tb.int_res_read.int_res_read_width
 @200
 -INT_RES_WRITE
 @28
@@ -95,6 +99,8 @@ layernorm_tb.add_io.out[38:0]
 @28
 layernorm_tb.mult_io.start
 @420
+layernorm_tb.mult.io.in_1[38:0]
+layernorm_tb.mult.io.in_2[38:0]
 layernorm_tb.mult_io.out[38:0]
 @200
 -SQRT
@@ -104,9 +110,5 @@ layernorm_tb.sqrt.io.done
 @420
 layernorm_tb.sqrt.io.in_1[38:0]
 layernorm_tb.sqrt.io.out[38:0]
-@28
-layernorm_tb.int_res_write_en
-@100000028
-layernorm_tb.int_res_write.format[2:0]
 [pattern_trace] 1
 [pattern_trace] 0

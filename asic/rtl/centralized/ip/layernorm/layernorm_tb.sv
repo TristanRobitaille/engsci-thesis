@@ -4,8 +4,8 @@ module layernorm_tb # () (
     // LayerNorm control
     input wire start,
     input VectorLen_t len,
+    input IntResAddr_t start_addr, output_addr,
     input ParamAddr_t beta_addr, gamma_addr,
-    input IntResAddr_t start_addr,
     input HalfSelect_t half_select,
     output wire done, busy,
 
@@ -135,8 +135,9 @@ module layernorm_tb # () (
         busy = io.busy;
         io_extra.half_select = half_select;
         io_extra.start_addr_1 = IntResAddr_t'(start_addr);
-        io_extra.start_addr_2 = IntResAddr_t'(beta_addr);
-        io_extra.start_addr_3 = IntResAddr_t'(gamma_addr);
+        io_extra.start_addr_2 = IntResAddr_t'(output_addr);
+        io_extra.start_addr_3 = IntResAddr_t'(beta_addr);
+        io_extra.start_addr_4 = IntResAddr_t'(gamma_addr);
     end
 
     always_comb begin : tb_mem_casts_assign
