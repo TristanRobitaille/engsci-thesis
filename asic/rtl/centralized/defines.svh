@@ -243,6 +243,7 @@ package Defines;
         POS_EMB_WIDTH,
         LN_INPUT_WIDTH,
         LN_OUTPUT_WIDTH,
+        POS_EMB_COMPRESSION_WIDTH,
         NUM_INT_RES_WIDTHS
     } IntResWidth_t;
 
@@ -253,6 +254,7 @@ package Defines;
         POS_EMB_FORMAT,
         LN_INPUT_FORMAT,
         LN_OUTPUT_FORMAT,
+        POS_EMB_COMPRESSION_FORMAT,
         NUM_INT_RES_FORMATS
     } IntResFormat_t;
 
@@ -270,16 +272,18 @@ package Defines;
         DOUBLE_WIDTH, // CLASS_TOKEN_WIDTH
         DOUBLE_WIDTH, // POS_EMB_WIDTH
         DOUBLE_WIDTH, // LN_INPUT_WIDTH
-        DOUBLE_WIDTH  // LN_OUTPUT_WIDTH
+        DOUBLE_WIDTH, // LN_OUTPUT_WIDTH
+        SINGLE_WIDTH  // POS_EMB_COMPRESSION_WIDTH
     };
 
     const FxFormatIntRes_t int_res_format [NUM_INT_RES_FORMATS] = '{
-        INT_RES_DW_FX, // EEG_FORMAT
-        INT_RES_DW_FX, // PATCH_PROJ_OUTPUT_FORMAT
-        INT_RES_DW_FX, // CLASS_EMB_TOKEN_FORMAT
-        INT_RES_DW_FX, // POS_EMB_FORMAT
-        INT_RES_DW_FX, // LN_INPUT_FORMAT
-        INT_RES_DW_FX  // LN_OUTPUT_FORMAT
+        INT_RES_DW_FX,     // EEG_FORMAT
+        INT_RES_DW_FX,     // PATCH_PROJ_OUTPUT_FORMAT
+        INT_RES_DW_FX,     // CLASS_EMB_TOKEN_FORMAT
+        INT_RES_DW_FX,     // POS_EMB_FORMAT
+        INT_RES_DW_FX,     // LN_INPUT_FORMAT
+        INT_RES_SW_FX_5_X, // POS_EMB_COMPRESSION_FORMAT // TODO: Need to fine-tune this value using fixed-point accuracy study
+        INT_RES_DW_FX      // LN_OUTPUT_FORMAT
     };
 
     const FxFormatParams_t params_format [NUM_PARAMS_FORMATS] = '{

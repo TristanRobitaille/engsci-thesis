@@ -82,6 +82,13 @@ module cim_centralized #()(
     // ----- CONSTANTS -----//
     assign rst_n = soc_ctrl_i.rst_n;
 
+    // ----- BYPASS ----- //
+    CompFx_t adder_in_1_reg;
+    always_comb begin : adder_bypass
+        if ((current_inf_step == POS_EMB_COMPRESSION_STEP) & delay_line_2b[0]) add_io_cim.in_1 = add_io.out;
+        else add_io_cim.in_1 = adder_in_1_reg;
+    end
+
     // ----- FSM ----- //
     always_ff @ (posedge clk) begin : main_fsm
         if (~rst_n) begin
@@ -97,7 +104,7 @@ module cim_centralized #()(
                     if (soc_ctrl_i.new_sleep_epoch) cim_state <= INFERENCE_RUNNING;
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == POS_EMB_COMPRESSION_STEP) begin
+                    if (current_inf_step == ENC_MHSA_Q_STEP) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -236,8 +243,24 @@ module cim_centralized #()(
 
                     cnt_7b_i.inc <= ln_io.start;
                     if (ln_io.done && (int'(cnt_7b_i.cnt) == EMB_DEPTH)) begin
+                        start_add(CompFx_t'(0), CompFx_t'(0));
                         cnt_7b_i.rst_n <= 1'b0;
                         current_inf_step <= POS_EMB_COMPRESSION_STEP;
+                    end
+                end
+                POS_EMB_COMPRESSION_STEP: begin
+                    delay_line_2b[0] <= 1'b1;
+                    delay_line_2b[1] <= int_res_read_i.en;
+
+                    if (delay_line_2b[0]) read_int_res(IntResAddr_t'(add_io.out), int_res_width[LN_OUTPUT_WIDTH], int_res_format[LN_OUTPUT_FORMAT]);
+                    if (delay_line_2b[1]) write_int_res(IntResAddr_t'(add_io.out-2), int_res_read_i.data, int_res_width[POS_EMB_COMPRESSION_WIDTH], int_res_format[POS_EMB_COMPRESSION_FORMAT]); // TODO: Need to fine-tune format using fixed-point accuracy study
+
+                    // Update index control (just add ADD)
+                    start_add(add_io.out, CompFx_t'(1));
+
+                    if (int'(add_io.out) == EMB_DEPTH*(NUM_PATCHES+1)+1) begin
+                        current_inf_step <= ENC_MHSA_Q_STEP;
+                        delay_line_2b <= 'b0;
                     end
                 end
                 default: begin
@@ -461,7 +484,7 @@ module cim_centralized #()(
 
     task start_add(CompFx_t in_1, CompFx_t in_2);
         add_io_cim.start <= 1'b1;
-        add_io_cim.in_1 <= in_1;
+        adder_in_1_reg <= in_1;
         add_io_cim.in_2 <= in_2;
     endtask
 

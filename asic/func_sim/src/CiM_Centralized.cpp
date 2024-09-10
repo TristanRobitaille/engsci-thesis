@@ -672,7 +672,7 @@ bool CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_base_file
                     uint32_t add_addr;
                     if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) { add_addr = mem_map.at(POS_EMB_MEM) + gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_9b.get_cnt(); }
                     else { add_addr = mem_map.at(ENC_MHSA_OUT_MEM) + gen_cnt_7b.get_cnt(); }
-                    computation_result += int_res_read(add_addr);
+                    computation_result += static_cast<float> ( sw_fx_5_x_t { int_res_read(add_addr) } );
                     mac_or_add = MAC_OP;
                     generic_done = true;
                 } else {

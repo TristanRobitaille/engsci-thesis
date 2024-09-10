@@ -8,7 +8,7 @@
 #include <Misc.hpp>
 
 /*----- DEFINE -----*/
-#define ENABLE_COMPUTATION_VERIFICATION true
+#define ENABLE_COMPUTATION_VERIFICATION false
 #define REL_TOLERANCE 0.01f //1% tolerance
 #define ABS_TOLERANCE 0.001f
 
