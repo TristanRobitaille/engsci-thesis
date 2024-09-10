@@ -98,13 +98,13 @@ module cim_centralized #()(
                 IDLE_CIM: begin
                     current_inf_step <= PATCH_PROJ_STEP;
                     if (soc_ctrl_i.start_eeg_load) cim_state <= EEG_LOAD;
-                    if (soc_ctrl_i.new_sleep_epoch) cim_state <= INFERENCE_RUNNING;
+                    if (soc_ctrl_i.new_sleep_epoch) start_inference();
                 end
                 EEG_LOAD: begin
-                    if (soc_ctrl_i.new_sleep_epoch) cim_state <= INFERENCE_RUNNING;
+                    if (soc_ctrl_i.new_sleep_epoch) start_inference();
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == ENC_MHSA_Q_STEP) begin
+                    if (current_inf_step == ENC_MHSA_K_STEP) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -140,9 +140,12 @@ module cim_centralized #()(
                     /* cnt_7b_i holds current parameters row
                        cnt_9b_i holds current patch */
 
-                    if ((mac_io.done || (cnt_7b_i.cnt == 0 && ~mac_io.busy)) && (int'(cnt_7b_i.cnt) != EMB_DEPTH-1)) begin
+                    delay_line_2b[0] <= cnt_7b_i.inc | cnt_9b_i.inc;
+                    delay_line_2b[1] <= delay_line_2b[0];
+
+                    if (delay_line_2b[1]) begin
                         IntResAddr_t patch_addr = mem_map[EEG_INPUT_MEM] + IntResAddr_t'(int'(cnt_9b_i.cnt) << $clog2(EMB_DEPTH));
-                        ParamAddr_t param_addr  = param_addr_map[PATCH_PROJ_KERNEL_PARAMS] + ParamAddr_t'(int'(cnt_7b_i.cnt) << $clog2(EMB_DEPTH));
+                        ParamAddr_t param_addr  = param_addr_map[PATCH_PROJ_KERNEL_PARAMS] + ParamAddr_t'(int'(EMB_DEPTH*cnt_7b_i.cnt));
                         ParamAddr_t bias_addr   = param_addr_map_bias[PATCH_PROJ_BIAS] + ParamAddr_t'(cnt_7b_i.cnt);
                         start_mac(patch_addr, IntResAddr_t'(param_addr), bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, VectorLen_t'(PATCH_LEN), int_res_format[EEG_FORMAT],
                                   int_res_width[EEG_WIDTH], params_format[PATCH_PROJ_PARAM_FORMAT]);
@@ -260,7 +263,59 @@ module cim_centralized #()(
 
                     if (int'(add_io.out) == EMB_DEPTH*(NUM_PATCHES+1)+1) begin
                         current_inf_step <= ENC_MHSA_Q_STEP;
-                        delay_line_2b <= 'b0;
+                        delay_line_2b <= {1'b1, 1'b0};
+                    end
+                end
+                ENC_MHSA_Q_STEP: begin
+                    /* cnt_7b_i holds current parameters row
+                       cnt_9b_i holds current patch */
+
+                    // Variables
+                    int input_height, kernel_width;
+                    IntResAddr_t data_row_addr;
+                    ParamAddr_t kernel_col_addr, bias_addr;
+                    FxFormatIntRes_t input_format, output_format;
+                    DataWidth_t input_width, output_width;
+                    FxFormatParams_t input_params_format;
+                    if (1 == 0) begin
+                        // TODO: Fill with correct values from other steps
+                    end else begin
+                        kernel_width =  ;
+                        input_height = NUM_PATCHES + 1;
+                        input_format = int_res_format[QKV_INPUT_FORMAT];
+                        input_width = int_res_width[QKV_INPUT_WIDTH];
+                        output_format = int_res_format[QKV_OUTPUT_FORMAT];
+                        output_width = int_res_width[QKV_OUTPUT_WIDTH];
+                        input_params_format = params_format[QKV_PARAMS_FORMAT];
+                        if (current_inf_step == ENC_MHSA_Q_STEP) begin
+                            kernel_col_addr = param_addr_map[ENC_Q_DENSE_PARAMS] + ParamAddr_t'(EMB_DEPTH*cnt_9b_i.cnt);
+                            bias_addr = param_addr_map_bias[ENC_Q_DENSE_BIAS] + ParamAddr_t'(cnt_9b_i.cnt);
+                            data_row_addr = mem_map[ENC_LN1_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt);
+                        end
+                    end
+
+                    // Execute
+                    if (delay_line_2b[1]) begin
+                        start_mac(data_row_addr, IntResAddr_t'(kernel_col_addr), bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, VectorLen_t'(EMB_DEPTH), input_format, input_width, input_params_format);
+                    end
+
+                    // Control
+                    delay_line_2b[0] <= cnt_7b_i.inc | cnt_9b_i.inc;
+                    delay_line_2b[1] <= delay_line_2b[0];
+
+                    if (mac_io.done) begin
+                        IntResAddr_t int_res_write_addr;
+                        if (current_inf_step == ENC_MHSA_Q_STEP) int_res_write_addr = mem_map[ENC_Q_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt + int'(cnt_9b_i.cnt));
+                        write_int_res(int_res_write_addr, mac_io.out, output_width, output_format);
+
+                        // Update index control
+                        if (int'(cnt_7b_i.cnt) == input_height-1) begin
+                            cnt_7b_i.rst_n <= 1'b0;
+                            if (int'(cnt_9b_i.cnt) == EMB_DEPTH-1) begin
+                                cnt_9b_i.rst_n <= 1'b0;
+                                current_inf_step <= InferenceStep_t'(int'(current_inf_step) + 1);
+                            end else cnt_9b_i.inc <= 1'b1;
+                        end else cnt_7b_i.inc <= 1'b1;
                     end
                 end
                 default: begin
@@ -448,7 +503,12 @@ module cim_centralized #()(
         add_io_cim.start <= 1'b0;
     endtask
 
-    task write_int_res(input IntResAddr_t addr, input CompFx_t data, input DataWidth_t width, input FxFormatIntRes_t int_res_format);
+    task automatic start_inference();
+        delay_line_2b[1] <= 1;
+        cim_state <= INFERENCE_RUNNING;
+    endtask
+
+    task automatic write_int_res(input IntResAddr_t addr, input CompFx_t data, input DataWidth_t width, input FxFormatIntRes_t int_res_format);
         int_res_write_cim_i.en <= 1'b1;
         int_res_write_cim_i.addr <= addr;
         int_res_write_cim_i.data <= data;
@@ -456,20 +516,20 @@ module cim_centralized #()(
         int_res_write_cim_i.format <= int_res_format;
     endtask
 
-    task read_params(input ParamAddr_t addr, input FxFormatParams_t format);
+    task automatic read_params(input ParamAddr_t addr, input FxFormatParams_t format);
         param_read_cim_i.en <= 1'b1;
         param_read_cim_i.addr <= addr;
         param_read_cim_i.format <= format;
     endtask
 
-    task read_int_res(input IntResAddr_t addr, input DataWidth_t width, input FxFormatIntRes_t int_res_format);
+    task automatic read_int_res(input IntResAddr_t addr, input DataWidth_t width, input FxFormatIntRes_t int_res_format);
         int_res_read_cim_i.en <= 1'b1;
         int_res_read_cim_i.addr <= addr;
         int_res_read_cim_i.data_width <= width;
         int_res_read_cim_i.format <= int_res_format;
     endtask
 
-    task start_mac(input IntResAddr_t addr_1, input IntResAddr_t addr_2, input ParamAddr_t bias_addr, input ParamType_t param_type, input Activation_t act, input VectorLen_t len, input FxFormatIntRes_t int_res_input_format, input DataWidth_t int_res_read_width, input FxFormatParams_t params_read_format);
+    task automatic start_mac(input IntResAddr_t addr_1, input IntResAddr_t addr_2, input ParamAddr_t bias_addr, input ParamType_t param_type, input Activation_t act, input VectorLen_t len, input FxFormatIntRes_t int_res_input_format, input DataWidth_t int_res_read_width, input FxFormatParams_t params_read_format);
         mac_io.start <= 1'b1;
         mac_io_extra.start_addr_1 <= addr_1;
         mac_io_extra.start_addr_2 <= addr_2;
@@ -482,13 +542,13 @@ module cim_centralized #()(
         mac_casts_i.params_read_format <= params_read_format;
     endtask
 
-    task start_add(CompFx_t in_1, CompFx_t in_2);
+    task automatic start_add(CompFx_t in_1, CompFx_t in_2);
         add_io_cim.start <= 1'b1;
         adder_in_1_reg <= in_1;
         add_io_cim.in_2 <= in_2;
     endtask
 
-    task start_layernorm(input HalfSelect_t half_select, input IntResAddr_t input_starting_addr, input IntResAddr_t output_starting_addr, input ParamAddr_t beta_addr, input ParamAddr_t gamma_addr, input DataWidth_t input_width, input FxFormatIntRes_t input_format, input DataWidth_t output_width, input FxFormatIntRes_t output_format, input FxFormatParams_t param_format);
+    task automatic start_layernorm(input HalfSelect_t half_select, input IntResAddr_t input_starting_addr, input IntResAddr_t output_starting_addr, input ParamAddr_t beta_addr, input ParamAddr_t gamma_addr, input DataWidth_t input_width, input FxFormatIntRes_t input_format, input DataWidth_t output_width, input FxFormatIntRes_t output_format, input FxFormatParams_t param_format);
         ln_io.start <= 1'b1;
         ln_io_extra.half_select <= half_select;
         ln_io_extra.start_addr_1 <= input_starting_addr;

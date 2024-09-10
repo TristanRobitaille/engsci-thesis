@@ -162,9 +162,9 @@ package Defines;
         CLASS_TOKEN,
         ENC_LAYERNORM_1_GAMMA,
         ENC_LAYERNORM_1_BETA,
-        ENC_Q_DENSE_BIAS_0FF,
-        ENC_K_DENSE_BIAS_0FF,
-        ENC_V_DENSE_BIAS_0FF,
+        ENC_Q_DENSE_BIAS,
+        ENC_K_DENSE_BIAS,
+        ENC_V_DENSE_BIAS,
         ENC_INV_SQRT_NUM_HEADS,
         ENC_COMB_HEAD_BIAS,
         ENC_LAYERNORM_2_GAMMA,
@@ -220,9 +220,9 @@ package Defines;
         param_addr_map[NUM_PARAM_STEP-1] + 64,  // CLASS_TOKEN
         param_addr_map[NUM_PARAM_STEP-1] + 128, // ENC_LAYERNORM_1_GAMMA
         param_addr_map[NUM_PARAM_STEP-1] + 192, // ENC_LAYERNORM_1_BETA
-        param_addr_map[NUM_PARAM_STEP-1] + 256, // ENC_Q_DENSE_BIAS_0FF
-        param_addr_map[NUM_PARAM_STEP-1] + 320, // ENC_K_DENSE_BIAS_0FF
-        param_addr_map[NUM_PARAM_STEP-1] + 384, // ENC_V_DENSE_BIAS_0FF
+        param_addr_map[NUM_PARAM_STEP-1] + 256, // ENC_Q_DENSE_BIAS
+        param_addr_map[NUM_PARAM_STEP-1] + 320, // ENC_K_DENSE_BIAS
+        param_addr_map[NUM_PARAM_STEP-1] + 384, // ENC_V_DENSE_BIAS
         param_addr_map[NUM_PARAM_STEP-1] + 448, // ENC_INV_SQRT_NUM_HEADS
         param_addr_map[NUM_PARAM_STEP-1] + 449, // ENC_COMB_HEAD_BIAS
         param_addr_map[NUM_PARAM_STEP-1] + 513, // ENC_LAYERNORM_2_GAMMA
@@ -244,6 +244,8 @@ package Defines;
         LN_INPUT_WIDTH,
         LN_OUTPUT_WIDTH,
         POS_EMB_COMPRESSION_WIDTH,
+        QKV_INPUT_WIDTH,
+        QKV_OUTPUT_WIDTH,
         NUM_INT_RES_WIDTHS
     } IntResWidth_t;
 
@@ -255,6 +257,8 @@ package Defines;
         LN_INPUT_FORMAT,
         LN_OUTPUT_FORMAT,
         POS_EMB_COMPRESSION_FORMAT,
+        QKV_INPUT_FORMAT,
+        QKV_OUTPUT_FORMAT,
         NUM_INT_RES_FORMATS
     } IntResFormat_t;
 
@@ -263,6 +267,7 @@ package Defines;
         CLASS_EMB_TOKEN_PARAM_FORMAT,
         POS_EMB_PARAM_FORMAT,
         LN_PARAM_FORMAT,
+        QKV_PARAMS_FORMAT,
         NUM_PARAMS_FORMATS
     } ParamFormat_t;
 
@@ -273,7 +278,9 @@ package Defines;
         DOUBLE_WIDTH, // POS_EMB_WIDTH
         DOUBLE_WIDTH, // LN_INPUT_WIDTH
         DOUBLE_WIDTH, // LN_OUTPUT_WIDTH
-        SINGLE_WIDTH  // POS_EMB_COMPRESSION_WIDTH
+        SINGLE_WIDTH, // POS_EMB_COMPRESSION_WIDTH
+        DOUBLE_WIDTH, // QKV_INPUT_WIDTH
+        SINGLE_WIDTH  // QKV_OUTPUT_WIDTH
     };
 
     const FxFormatIntRes_t int_res_format [NUM_INT_RES_FORMATS] = '{
@@ -283,14 +290,17 @@ package Defines;
         INT_RES_DW_FX,     // POS_EMB_FORMAT
         INT_RES_DW_FX,     // LN_INPUT_FORMAT
         INT_RES_SW_FX_5_X, // POS_EMB_COMPRESSION_FORMAT // TODO: Need to fine-tune this value using fixed-point accuracy study
-        INT_RES_DW_FX      // LN_OUTPUT_FORMAT
+        INT_RES_DW_FX,     // LN_OUTPUT_FORMAT
+        INT_RES_DW_FX,     // QKV_INPUT_FORMAT
+        INT_RES_SW_FX_5_X  // QKV_OUTPUT_FORMAT
     };
 
     const FxFormatParams_t params_format [NUM_PARAMS_FORMATS] = '{
         PARAMS_FX_2_X, // PATCH_PROJ_PARAM_FORMAT
         PARAMS_FX_2_X, // CLASS_EMB_TOKEN_PARAM_FORMAT
         PARAMS_FX_2_X, // POS_EMB_PARAM_FORMAT
-        PARAMS_FX_3_X  // LN_PARAM_FORMAT
+        PARAMS_FX_3_X, // LN_PARAM_FORMAT
+        PARAMS_FX_2_X  // QKV_PARAMS_FORMAT
     };
 
 endpackage
