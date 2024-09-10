@@ -475,8 +475,8 @@ bool CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_base_file
                 // Save data
                 uint32_t addr;
                 if (current_inf_step == ENC_MHSA_Q_STEP) { addr = mem_map.at(ENC_Q_MEM) + EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_9b.get_cnt(); }
-                else if (current_inf_step == ENC_MHSA_V_STEP) { addr = mem_map.at(ENC_V_MEM) + EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_9b.get_cnt(); }
                 else if (current_inf_step == ENC_MHSA_K_STEP) { addr = mem_map.at(ENC_K_MEM) + EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_9b.get_cnt(); }
+                else if (current_inf_step == ENC_MHSA_V_STEP) { addr = mem_map.at(ENC_V_MEM) + EMB_DEPTH*gen_cnt_7b.get_cnt() + gen_cnt_9b.get_cnt(); }
                 else if (current_inf_step == MLP_DENSE_1_STEP) { addr = mem_map.at(ENC_MLP_DENSE1_MEM) + MLP_DIM*gen_cnt_7b.get_cnt() + gen_cnt_9b.get_cnt(); }
                 else if (current_inf_step == MLP_HEAD_DENSE_1_STEP) { addr = mem_map.at(MLP_HEAD_DENSE_1_OUT_MEM) + gen_cnt_9b.get_cnt(); }
                 else if (current_inf_step == MLP_HEAD_DENSE_2_STEP) { addr = mem_map.at(MLP_HEAD_DENSE_2_OUT_MEM) + gen_cnt_9b.get_cnt(); }
