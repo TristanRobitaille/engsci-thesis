@@ -48,6 +48,7 @@ module cim_centralized #()(
     ComputeIPInterface add_io_mac();
     ComputeIPInterface add_io_ln();
     ComputeIPInterface mult_io();
+    ComputeIPInterface mult_io_cim();
     ComputeIPInterface mult_io_exp();
     ComputeIPInterface mult_io_mac();
     ComputeIPInterface mult_io_ln();
@@ -106,7 +107,7 @@ module cim_centralized #()(
                     if (soc_ctrl_i.new_sleep_epoch) start_inference();
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == ENC_MHSA_QK_T_STEP) begin
+                    if (current_inf_step == ENC_MHSA_SOFTMAX_STEP) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -336,6 +337,59 @@ module cim_centralized #()(
                         current_inf_step <= InferenceStep_t'(int'(current_inf_step) + 1);
                     end
                 end
+                ENC_MHSA_QK_T_STEP: begin
+                    /* gen_cnt_7b holds x
+                    gen_cnt_9b holds y
+                    gen_cnt_4b holds z
+
+                    for z in 0...(NUM_HEADS-1):
+                        for y in 0...(NUM_PATCHES):
+                            for x 0...(NUM_PATCHES):
+                    */
+
+                    read_params(param_addr_map_bias[ENC_INV_SQRT_NUM_HEADS], params_format[ENC_INV_SQRT_NUM_HEADS_FORMAT]);
+                    delay_line_2b[0] <= mult_io_cim.start;
+                    delay_line_2b[1] <= 'b0;
+
+                    // Execute
+                    if ((delay_line_2b[1] | delay_line_2b[0]) & ~done) begin
+                        IntResAddr_t Q_addr   = mem_map[ENC_Q_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_9b_i.cnt + NUM_HEADS*cnt_4b_i.cnt);
+                        IntResAddr_t K_T_addr = mem_map[ENC_K_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt + NUM_HEADS*cnt_4b_i.cnt);
+                        start_mac(Q_addr, K_T_addr, ParamAddr_t'(0), INTERMEDIATE_RES, NO_ACTIVATION, VectorLen_t'(NUM_HEADS), int_res_format[QK_T_OUTPUT_FORMAT], int_res_width[QK_T_OUTPUT_WIDTH], FxFormatParams_t'(0));
+                    end
+
+                    if (mac_io.done) start_mult(mac_io.out, param_read_i.data); // Multiply by inverse of number of heads (read in previous step and remains on the params bus)
+
+                    if (delay_line_2b[0] & ~done) begin
+                        IntResAddr_t int_res_write_addr = mem_map[ENC_QK_T_MEM] + IntResAddr_t'(cnt_7b_i.cnt) + IntResAddr_t'((NUM_PATCHES+1)*cnt_9b_i.cnt) + IntResAddr_t'((NUM_PATCHES+1)*(NUM_PATCHES+1)*cnt_4b_i.cnt) - IntResAddr_t'(1); // -1 to account for the counter having been increment by one to start a new MAC
+                        write_int_res(int_res_write_addr, mult_io.out, int_res_width[QK_T_OUTPUT_WIDTH], int_res_format[QK_T_OUTPUT_FORMAT]);
+                    end
+
+                    // Control
+                    if (mac_io.done) begin
+                        if (int'(cnt_7b_i.cnt) == NUM_PATCHES) begin
+                            cnt_7b_i.rst_n <= 1'b0;
+                            if (int'(cnt_9b_i.cnt) == NUM_PATCHES) begin
+                                cnt_9b_i.rst_n <= 1'b0;
+                                if (int'(cnt_4b_i.cnt) == NUM_HEADS-1) begin
+                                    cnt_4b_i.rst_n <= 1'b0;
+                                    done <= 1'b1;
+                                end else cnt_4b_i.inc <= 1'b1; // z++
+                            end else cnt_9b_i.inc <= 1'b1; // y++
+                        end else cnt_7b_i.inc <= 1'b1; // x++
+                    end
+
+                    // Exit control
+                    if (done & mult_io.done) begin
+                        IntResAddr_t int_res_write_addr = mem_map[ENC_QK_T_MEM] + IntResAddr_t'(NUM_PATCHES) + IntResAddr_t'((NUM_PATCHES+1)*60) + IntResAddr_t'((NUM_PATCHES+1)*(NUM_PATCHES+1)*(NUM_HEADS-1));
+                        done <= 1'b0;
+                        cnt_7b_i.rst_n <= 1'b0;
+                        current_inf_step <= ENC_MHSA_SOFTMAX_STEP;
+                        write_int_res(int_res_write_addr, mult_io.out, int_res_width[QK_T_OUTPUT_WIDTH], int_res_format[QK_T_OUTPUT_FORMAT]);
+                    end
+                end
+                ENC_MHSA_SOFTMAX_STEP: begin
+                end
                 default: begin
                 end
             endcase
@@ -446,9 +500,12 @@ module cim_centralized #()(
         end else if (mult_io_ln.start) begin
             mult_io.in_1 = mult_io_ln.in_1;
             mult_io.in_2 = mult_io_ln.in_2;
+        end else if (mult_io_cim.start) begin
+            mult_io.in_1 = mult_io_cim.in_1;
+            mult_io.in_2 = mult_io_cim.in_2;
         end
 
-        mult_io.start = mult_io_exp.start | mult_io_mac.start | mult_io_ln.start;
+        mult_io.start = mult_io_exp.start | mult_io_mac.start | mult_io_ln.start | mult_io_cim.start;
         mult_io_exp.out = mult_io.out;
         mult_io_exp.done = mult_io.done;
         mult_io_mac.out = mult_io.out;
@@ -501,8 +558,9 @@ module cim_centralized #()(
         int_res_read_cim_i.en <= 1'b0;
         int_res_write_cim_i.en <= 1'b0;
 
-        mac_io.start <= 1'b0;
         add_io_cim.start <= 1'b0;
+        mult_io_cim.start <= 1'b0;
+        mac_io.start <= 1'b0;
         ln_io.start <= 1'b0;
     endtask
 
@@ -566,6 +624,12 @@ module cim_centralized #()(
         add_io_cim.in_2 <= in_2;
     endtask
 
+    task automatic start_mult(CompFx_t in_1, CompFx_t in_2);
+        mult_io_cim.start <= 1'b1;
+        mult_io_cim.in_1 <= in_1;
+        mult_io_cim.in_2 <= in_2;
+    endtask
+
     task automatic start_layernorm(input HalfSelect_t half_select, input IntResAddr_t input_starting_addr, input IntResAddr_t output_starting_addr, input ParamAddr_t beta_addr, input ParamAddr_t gamma_addr, input DataWidth_t input_width, input FxFormatIntRes_t input_format, input DataWidth_t output_width, input FxFormatIntRes_t output_format, input FxFormatParams_t param_format);
         ln_io.start <= 1'b1;
         ln_io_extra.half_select <= half_select;
@@ -587,7 +651,7 @@ module cim_centralized #()(
         assert (~(param_read_cim_i.en & param_read_mac_i.en & param_read_ln_i.en)) else $fatal("More than one source are trying to read from parameters result memory simulatenously!");
 
         assert (~(add_io_exp.start & add_io_mac.start & add_io_cim.start & add_io_ln.start)) else $fatal("More than one source are trying to start an add!");
-        assert (~(mult_io_exp.start & mult_io_mac.start & mult_io_ln.start)) else $fatal("More than one source are trying to start a mult!");
+        assert (~(mult_io_exp.start & mult_io_mac.start & mult_io_ln.start & mult_io_cim.start)) else $fatal("More than one source are trying to start a mult!");
         assert (~(div_io_mac.start & div_io_ln.start)) else $fatal("More than one source are trying to start a div!");
         assert (~(exp_io_mac.start & 0)) else $fatal("More than one source are trying to start an exp!");
     end

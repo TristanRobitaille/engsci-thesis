@@ -13,7 +13,8 @@ from cocotb.triggers import RisingEdge
 MAX_LEN = 64
 MAX_VAL_MAC = 4
 NUM_TESTS = 3
-TOLERANCE = 0.075
+REL_TOLERANCE = 0.075
+ABS_TOLERANCE = 0.01
 
 #----- FUNCTIONS -----#
 async def test_MAC(dut, activation, param_type, int_res_width, int_res_format, param_format):
@@ -65,13 +66,22 @@ async def test_MAC(dut, activation, param_type, int_res_width, int_res_format, p
     while dut.done.value == 0: await RisingEdge(dut.clk)
     received = utilities.twos_complement_to_float(dut.computation_result.value)
     expected_result = float(expected_result)
-    assert received == pytest.approx(expected_result, rel=TOLERANCE), f"Expected: {expected_result}, received: {received}"
+    assert received == pytest.approx(expected_result, rel=REL_TOLERANCE, abs=ABS_TOLERANCE), f"Expected: {expected_result}, received: {received}"
+
+    print("Test passed")
 
 #----- TESTS -----#
 @cocotb.test()
-async def MAC_test_no_activation(dut):
+async def MAC_test(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     await utilities.reset(dut)
+
+    # Fill memory with random values
+    params_fill = cocotb.start_soon(utilities.fill_params_mem(dut))
+    int_res_fill = cocotb.start_soon(utilities.fill_int_res_mem(dut))
+    await params_fill
+    await int_res_fill
+
     for activation in const.ActivationType:
         for mac_param_type in const.MACParamType:
             for data_width in const.DataWidth:

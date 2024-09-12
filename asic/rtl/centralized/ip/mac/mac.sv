@@ -81,7 +81,7 @@ module mac (
 
     /*----- LOGIC -----*/
     logic input_currently_reading;
-    logic [2:0] delay_signal;
+    logic [3:0] delay_signal;
     VectorLen_t index;
     CompFx_t compute_temp, compute_temp_2, add_in_2_reg;
 
@@ -108,14 +108,10 @@ module mac (
                         compute_temp_2 <= 'd0;
                         io.busy <= 1'b1;
                     end else begin
-                        io.done <= 1'b0;
+                        io.done <= io.busy;
                         io.busy <= 1'b0;
                         index <= 'd0;
                         delay_signal <= 'b0;
-                        if (io.busy) begin // Reset their output
-                            start_add('d0, 'd0);
-                            start_mult('d0, 'd0);
-                        end
                     end
                 end
                 BASIC_MAC_MODEL_PARAM: begin
@@ -131,6 +127,9 @@ module mac (
                 end
                 BASIC_MAC_INTERMEDIATE_RES: begin
                     // Pipelined MAC for multiplying two intermediate results vectors
+                    delay_signal[2] <= delay_signal[1] | delay_signal[2]; // Latch high 
+                    delay_signal[3] <= mult_io.done | delay_signal[3]; // Latch high 
+
                     if (~delay_signal[0]) begin // Read input 1
                         delay_signal[0] <= 1'b1;
                         delay_signal[1] <= 1'b0;
@@ -144,20 +143,21 @@ module mac (
                         if (index <= io_extra.len) read_int_res(io_extra.start_addr_2 + IntResAddr_t'(index), casts.int_res_read_width, casts.int_res_read_format);
                     end
 
-                    if (delay_signal[1]) begin
+                    if (delay_signal[2] & delay_signal[1]) begin
                         if (index == (io_extra.len+3)) begin
                             state <= BASIC_MAC_DONE;
                             compute_temp <= add_io.out;
                         end else start_mult(compute_temp, compute_temp_2);
                     end
 
-                    if (mult_io.start & (index <= io_extra.len+3)) start_add(mult_io.out, add_io.out);
+                    if (mult_io.start & delay_signal[3] & (index <= io_extra.len+3)) start_add(mult_io.out, add_io.out);
                 end
                 BASIC_MAC_DONE: begin
                     if (io_extra.activation == NO_ACTIVATION) begin
                         io.out <= add_io.out;
-                        io.done <= 1'b1;
                         state <= IDLE;
+                        start_add('d0, 'd0); // Reset
+                        start_mult('d0, 'd0); // Reset
                     end else begin // Linear activation or SWISH activation
                         read_param(io_extra.bias_addr, casts.params_read_format);
                         if (delay_signal[1]) begin
@@ -174,8 +174,9 @@ module mac (
                     delay_signal[2] <= delay_signal[1]; // Need to delay signal by 1 cycle while we wait for add
                     if (add_io.start & delay_signal[2]) begin
                         io.out <= add_io.out;
-                        io.done <= 1'b1;
                         state <= IDLE;
+                        start_add('d0, 'd0); // Reset
+                        start_mult('d0, 'd0); // Reset
                     end
                 end
                 SWISH_ACTIVATION_ADD: begin
@@ -202,8 +203,11 @@ module mac (
                 SWISH_ACTIVATION_FINAL_ADD: begin
                     delay_signal[1:0] <= {delay_signal[0], add_io.start};
                     io.out <= add_io.out;
-                    io.done <= delay_signal[1];
-                    state <= (delay_signal[1]) ? IDLE : SWISH_ACTIVATION_FINAL_ADD;
+                    if (delay_signal[1]) begin
+                        start_add('d0, 'd0); // Reset
+                        start_mult('d0, 'd0); // Reset
+                        state <= IDLE;
+                    end
                 end
                 default: begin
                     state <= IDLE;

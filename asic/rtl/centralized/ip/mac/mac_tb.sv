@@ -135,7 +135,9 @@ module mac_tb # () (
         end
         mult_io.start = (MAC_mult_io.start || exp_mult_io.start);
         MAC_mult_io.out = mult_io.out;
+        MAC_mult_io.done = mult_io.done;
         exp_mult_io.out = mult_io.out;
+        exp_mult_io.done = mult_io.done;
     end
 
     // MAC module instantiation

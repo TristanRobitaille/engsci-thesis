@@ -11,19 +11,6 @@ from cocotb.clock import Clock
 CLK_FREQ_MHZ = 100
 
 # ----- HELPERS ----- #
-async def fill_params_mem(dut):
-    for addr in range(const.CIM_PARAMS_NUM_BANKS * const.CIM_PARAMS_BANK_SIZE_NUM_WORD):
-        data_format = const.FxFormatParams.PARAMS_FX_4_X # Default for all params
-        data = random.uniform(-2**(data_format.value-1)+1, 2**(data_format.value-1)-1)
-        await utilities.write_one_word_cent(dut, addr=addr, data=data, device="params", data_format=data_format, data_width=const.DataWidth.SINGLE_WIDTH)
-
-async def fill_int_res_mem(dut):
-    for addr in range(const.CIM_INT_RES_NUM_BANKS * const.CIM_INT_RES_BANK_SIZE_NUM_WORD):
-        data_format = const.FxFormatIntRes.INT_RES_SW_FX_5_X # Default for all int res
-        data_width = const.DataWidth.SINGLE_WIDTH # Default for all int res
-        data = random.uniform(-2**(data_format.value-1)+1, 2**(data_format.value-1)-1)
-        await utilities.write_one_word_cent(dut, addr=addr, data=data, device="int_res", data_format=data_format, data_width=data_width)
-
 async def load_eeg(dut):
     dut.soc_ctrl_start_eeg_load.value = 1
     await RisingEdge(dut.clk)
@@ -48,8 +35,8 @@ async def inference_tb(dut):
     dut.soc_ctrl_rst_n.value = 1
 
     # Fill memory concurrently
-    params_fill = cocotb.start_soon(fill_params_mem(dut))
-    int_res_fill = cocotb.start_soon(fill_int_res_mem(dut))
+    params_fill = cocotb.start_soon(utilities.fill_params_mem(dut))
+    int_res_fill = cocotb.start_soon(utilities.fill_int_res_mem(dut))
     await params_fill
     await int_res_fill
 

@@ -18,11 +18,6 @@ MAX_VAL = 4
 TOLERANCE = 0.01
 
 #----- FUNCTIONS -----#
-async def fill_int_res_mem(dut, data_format=const.FxFormatIntRes, data_width=const.DataWidth):
-    for addr in range(const.CIM_INT_RES_NUM_BANKS * const.CIM_INT_RES_BANK_SIZE_NUM_WORD):
-        data = random.uniform(-2**(data_format.value-1)+1, 2**(data_format.value-1)-1)
-        await utilities.write_one_word_cent(dut, addr=addr, data=data, device="int_res", data_format=data_format, data_width=data_width)
-
 async def test_run(dut, int_res_format:const.FxFormatIntRes, params_format:const.FxFormatParams, int_res_width:const.DataWidth):
     # Prepare MAC
     start_addr = random.randint(0, const.CIM_INT_RES_BANK_SIZE_NUM_WORD*const.CIM_INT_RES_NUM_BANKS - MAX_LEN - 1)
@@ -42,7 +37,7 @@ async def test_run(dut, int_res_format:const.FxFormatIntRes, params_format:const
     # Fill memory with random values and compute expected value
     mean = FXnum(0, const.num_Q_comp)
     mem_copy = []
-    await fill_int_res_mem(dut, data_format=int_res_format, data_width=int_res_width)
+    await utilities.fill_int_res_mem(dut, data_format=int_res_format, data_width=int_res_width)
     for i in range(LEN_FIRST_HALF):
         data = await utilities.read_one_word_cent(dut=dut, addr=start_addr+i, device="int_res", data_format=int_res_format, data_width=int_res_width)
         mem_copy.append(data)

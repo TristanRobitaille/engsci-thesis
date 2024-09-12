@@ -231,6 +231,16 @@ async def read_one_word_cent(dut, addr:int, device:str, data_format, data_width:
         await RisingEdge(dut.clk)
         return twos_complement_to_float(dut.int_res_read_data.value)
 
+async def fill_params_mem(dut, data_format:const.FxFormatParams=const.FxFormatParams.PARAMS_FX_4_X):
+    for addr in range(const.CIM_PARAMS_NUM_BANKS * const.CIM_PARAMS_BANK_SIZE_NUM_WORD):
+        data = random.uniform(-2**(data_format.value-1)+1, 2**(data_format.value-1)-1)
+        await write_one_word_cent(dut, addr=addr, data=data, device="params", data_format=data_format, data_width=const.DataWidth.SINGLE_WIDTH)
+
+async def fill_int_res_mem(dut, data_format:const.FxFormatIntRes=const.FxFormatIntRes.INT_RES_SW_FX_5_X, data_width:const.DataWidth=const.DataWidth.SINGLE_WIDTH):
+    for addr in range(const.CIM_INT_RES_NUM_BANKS * const.CIM_INT_RES_BANK_SIZE_NUM_WORD):
+        data = random.uniform(-2**(data_format.value-1)+1, 2**(data_format.value-1)-1)
+        await write_one_word_cent(dut, addr=addr, data=data, device="int_res", data_format=data_format, data_width=data_width)
+
 #----- EEG -----#
 eeg_index = 0
 async def send_eeg_from_adc(dut, eeg_file):

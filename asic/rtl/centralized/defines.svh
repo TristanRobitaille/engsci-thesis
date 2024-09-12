@@ -246,6 +246,7 @@ package Defines;
         POS_EMB_COMPRESSION_WIDTH,
         QKV_INPUT_WIDTH,
         QKV_OUTPUT_WIDTH,
+        QK_T_OUTPUT_WIDTH,
         NUM_INT_RES_WIDTHS
     } IntResWidth_t;
 
@@ -259,6 +260,7 @@ package Defines;
         POS_EMB_COMPRESSION_FORMAT,
         QKV_INPUT_FORMAT,
         QKV_OUTPUT_FORMAT,
+        QK_T_OUTPUT_FORMAT,
         NUM_INT_RES_FORMATS
     } IntResFormat_t;
 
@@ -268,6 +270,7 @@ package Defines;
         POS_EMB_PARAM_FORMAT,
         LN_PARAM_FORMAT,
         QKV_PARAMS_FORMAT,
+        ENC_INV_SQRT_NUM_HEADS_FORMAT,
         NUM_PARAMS_FORMATS
     } ParamFormat_t;
 
@@ -280,7 +283,8 @@ package Defines;
         DOUBLE_WIDTH, // LN_OUTPUT_WIDTH
         SINGLE_WIDTH, // POS_EMB_COMPRESSION_WIDTH
         DOUBLE_WIDTH, // QKV_INPUT_WIDTH
-        SINGLE_WIDTH  // QKV_OUTPUT_WIDTH
+        SINGLE_WIDTH, // QKV_OUTPUT_WIDTH
+        SINGLE_WIDTH  // QK_T_OUTPUT_WIDTH
     };
 
     const FxFormatIntRes_t int_res_format [NUM_INT_RES_FORMATS] = '{
@@ -292,7 +296,8 @@ package Defines;
         INT_RES_SW_FX_5_X, // POS_EMB_COMPRESSION_FORMAT // TODO: Need to fine-tune this value using fixed-point accuracy study
         INT_RES_DW_FX,     // LN_OUTPUT_FORMAT
         INT_RES_DW_FX,     // QKV_INPUT_FORMAT
-        INT_RES_SW_FX_5_X  // QKV_OUTPUT_FORMAT
+        INT_RES_SW_FX_5_X, // QKV_OUTPUT_FORMAT
+        INT_RES_SW_FX_6_X  // QK_T_OUTPUT_FORMAT
     };
 
     const FxFormatParams_t params_format [NUM_PARAMS_FORMATS] = '{
@@ -300,7 +305,8 @@ package Defines;
         PARAMS_FX_2_X, // CLASS_EMB_TOKEN_PARAM_FORMAT
         PARAMS_FX_2_X, // POS_EMB_PARAM_FORMAT
         PARAMS_FX_3_X, // LN_PARAM_FORMAT
-        PARAMS_FX_2_X  // QKV_PARAMS_FORMAT
+        PARAMS_FX_2_X, // QKV_PARAMS_FORMAT
+        PARAMS_FX_4_X  // ENC_INV_SQRT_NUM_HEADS_FORMAT
     };
 
 endpackage
