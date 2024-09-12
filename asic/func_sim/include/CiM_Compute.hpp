@@ -17,7 +17,7 @@ class CiM_Compute {
         comp_fx_t compute_temp_fp_3;
         uint16_t _num_compute_done; // [Not in ASIC] Counter used to track the number of computations done in a given inference step
         uint16_t _compute_process_cnt; // [Not in ASIC] Counter used to track the progress of the current computation (used to simulate the delay in the computation to match the real hardware)
-        float softmax_exp_int_res[PATCH_LEN];
+        float softmax_exp_int_res[NUM_PATCHES+1];
 
     public:
         /*----- ENUM -----*/

@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Sun Sep  1 19:46:06 2024
+[*] Thu Sep 12 05:20:37 2024
 [*]
 [dumpfile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/ip/softmax/sim_build/dump.fst"
-[dumpfile_mtime] "Sun Sep  1 19:43:53 2024"
-[dumpfile_size] 10713
+[dumpfile_mtime] "Thu Sep 12 05:20:28 2024"
+[dumpfile_size] 40594
 [savefile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/ip/softmax/softmax.gtkw"
-[timestart] 1698100
-[size] 1512 916
-[pos] -1 -1
-*-15.800001 1870000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[timestart] 573967800
+[size] 1712 1387
+[pos] 413 -1
+*-16.400002 574160600 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -39,9 +39,9 @@
 [treeopen] softmax_tb.
 [treeopen] softmax_tb.add.
 [sst_width] 253
-[signals_width] 218
+[signals_width] 363
 [sst_expanded] 1
-[sst_vpaned_height] 269
+[sst_vpaned_height] 575
 @28
 clk
 @200
@@ -55,9 +55,13 @@ busy
 done
 @421
 softmax_tb.softmax.compute_temp[38:0]
+@24
+softmax_tb.softmax.index[6:0]
 @200
+>10100
 -INT_RES_WRITE
 @28
+>0
 softmax_tb.int_res_write.en
 @420
 softmax_tb.int_res_write.addr[15:0]
@@ -102,5 +106,12 @@ softmax_tb.div_io.done
 softmax_tb.div_io.in_1[38:0]
 softmax_tb.div_io.in_2[38:0]
 softmax_tb.div_io.out[38:0]
+softmax_tb.softmax.softmax_exp_int_res[0][38:0]
+softmax_tb.softmax.softmax_exp_int_res[1][38:0]
+softmax_tb.softmax.softmax_exp_int_res[2][38:0]
+softmax_tb.softmax.softmax_exp_int_res[3][38:0]
+softmax_tb.softmax.softmax_exp_int_res[4][38:0]
+softmax_tb.softmax.softmax_exp_int_res[59][38:0]
+softmax_tb.softmax.softmax_exp_int_res[60][38:0]
 [pattern_trace] 1
 [pattern_trace] 0

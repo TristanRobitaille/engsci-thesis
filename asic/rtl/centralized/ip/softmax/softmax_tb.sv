@@ -21,13 +21,13 @@ module softmax_tb # () (
         tb_int_res_write.chip_en = int_res_chip_en;
         tb_int_res_write.addr = int_res_write_addr;
         tb_int_res_write.data = int_res_write_data;
-        tb_int_res_write.data_width = int_res_write_data_width;
-        tb_int_res_write.format = int_res_write_format;
+        tb_int_res_write.data_width = int_res_read_data_width;
+        tb_int_res_write.format = int_res_read_format;
 
         tb_int_res_read.en = int_res_read_en;
         tb_int_res_read.addr = int_res_read_addr;
-        tb_int_res_read.data_width = int_res_read_data_width;
-        tb_int_res_read.format = int_res_read_format;
+        tb_int_res_read.data_width = int_res_write_data_width;
+        tb_int_res_read.format = int_res_write_format;
         int_res_read_data = tb_int_res_read.data;
     end
 
@@ -121,8 +121,10 @@ module softmax_tb # () (
     MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t)  casts ();
 
     always_comb begin : mem_casts_assigns
-        casts.int_res_read_width = int_res_write_data_width;
-        casts.int_res_read_format = int_res_write_format;
+        casts.int_res_read_width = int_res_read_data_width;
+        casts.int_res_read_format = int_res_read_format;
+        casts.int_res_write_width = int_res_write_data_width;
+        casts.int_res_write_format = int_res_write_format;
     end
 
     ComputeIPInterface io();

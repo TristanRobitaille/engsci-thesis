@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Mon Sep  9 23:36:59 2024
+[*] Thu Sep 12 15:19:36 2024
 [*]
 [dumpfile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/sim/sim_build/dump.fst"
-[dumpfile_mtime] "Mon Sep  9 23:35:47 2024"
-[dumpfile_size] 23537582
+[dumpfile_mtime] "Thu Sep 12 15:17:32 2024"
+[dumpfile_size] 125237794
 [savefile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/sim/cim_centralized.gtkw"
-[timestart] 4926055500
+[timestart] 0
 [size] 1728 1387
 [pos] -1 -1
-*-15.852129 4926205400 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+*-32.652130 32090000000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -38,10 +38,11 @@
 [markername] ZZ
 [treeopen] cim_centralized_tb.
 [treeopen] cim_centralized_tb.cim_centralized.
+[treeopen] cim_centralized_tb.cim_centralized.div.
 [sst_width] 253
 [signals_width] 297
 [sst_expanded] 1
-[sst_vpaned_height] 458
+[sst_vpaned_height] 890
 @28
 clk
 @200
@@ -230,10 +231,33 @@ cim_centralized_tb.cim_centralized.add.io.out[38:0]
 @1401200
 -group_end
 @200
+-EXP
+@28
+cim_centralized_tb.cim_centralized.exp.io.start
+cim_centralized_tb.cim_centralized.exp.io.done
+@420
+cim_centralized_tb.cim_centralized.exp.io.in_1[38:0]
+cim_centralized_tb.cim_centralized.exp.io.out[38:0]
+@200
+-DIV
+@28
+cim_centralized_tb.cim_centralized.div.io.start
+cim_centralized_tb.cim_centralized.div.io.done
+@421
+cim_centralized_tb.cim_centralized.div.io.in_1[38:0]
+cim_centralized_tb.cim_centralized.div.io.in_2[38:0]
+cim_centralized_tb.cim_centralized.div.io.out[38:0]
+@200
 -LAYERNORM
 @28
 cim_centralized_tb.cim_centralized.layernorm.io.start
-cim_centralized_tb.cim_centralized.layernorm.io.busy
 cim_centralized_tb.cim_centralized.layernorm.io.done
+@200
+-SOFTMAX
+@28
+cim_centralized_tb.cim_centralized.softmax_io.start
+cim_centralized_tb.cim_centralized.softmax_io.done
+@24
+cim_centralized_tb.cim_centralized.softmax.io_extra.start_addr_1[15:0]
 [pattern_trace] 1
 [pattern_trace] 0

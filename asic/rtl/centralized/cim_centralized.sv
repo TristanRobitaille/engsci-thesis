@@ -32,11 +32,14 @@ module cim_centralized #()(
     MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_read_cim_i ();
     MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_read_mac_i ();
     MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_read_ln_i ();
+    MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_read_softmax_i ();
     MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_write_cim_i ();
     MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_write_ln_i ();
+    MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_write_softmax_i ();
 
-    MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) mac_casts_i ();
-    MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) ln_casts_i ();
+    MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) casts_mac_i ();
+    MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) casts_ln_i ();
+    MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) casts_softmax_i ();
 
     params_mem params_u   (.clk, .rst_n, .write(param_write_tb_i),.read(param_read_i)); // Only testbench writes to params
     int_res_mem int_res_u (.clk, .rst_n, .write(int_res_write_i), .read(int_res_read_i));
@@ -47,21 +50,27 @@ module cim_centralized #()(
     ComputeIPInterface add_io_exp();
     ComputeIPInterface add_io_mac();
     ComputeIPInterface add_io_ln();
+    ComputeIPInterface add_io_softmax();
     ComputeIPInterface mult_io();
     ComputeIPInterface mult_io_cim();
     ComputeIPInterface mult_io_exp();
     ComputeIPInterface mult_io_mac();
     ComputeIPInterface mult_io_ln();
+    ComputeIPInterface mult_io_softmax();
     ComputeIPInterface div_io();
     ComputeIPInterface div_io_mac();
     ComputeIPInterface div_io_ln();
+    ComputeIPInterface div_io_softmax();
     ComputeIPInterface exp_io();
     ComputeIPInterface exp_io_mac();
+    ComputeIPInterface exp_io_softmax();
     ComputeIPInterface sqrt_io();
     ComputeIPInterface mac_io();
     ComputeIPInterface mac_io_extra();
     ComputeIPInterface ln_io();
     ComputeIPInterface ln_io_extra();
+    ComputeIPInterface softmax_io();
+    ComputeIPInterface softmax_io_extra();
 
     adder add       (.clk, .rst_n, .io(add_io));
     multiplier mult (.clk, .rst_n, .io(mult_io));
@@ -69,10 +78,12 @@ module cim_centralized #()(
     exp exp         (.clk, .rst_n, .io(exp_io), .adder_io(add_io_exp), .mult_io(mult_io_exp));
     sqrt sqrt       (.clk, .rst_n, .io(sqrt_io));
     mac mac         (.clk, .rst_n, .io(mac_io), .io_extra(mac_io_extra),
-                     .casts(mac_casts_i), .param_read(param_read_mac_i), .int_res_read(int_res_read_mac_i),
+                     .casts(casts_mac_i), .param_read(param_read_mac_i), .int_res_read(int_res_read_mac_i),
                      .add_io(add_io_mac), .mult_io(mult_io_mac), .div_io(div_io_mac), .exp_io(exp_io_mac));
     layernorm layernorm (.clk, .rst_n, .io(ln_io), .io_extra(ln_io_extra), .add_io(add_io_ln), .mult_io(mult_io_ln), .div_io(div_io_ln), .sqrt_io,
-                         .casts(ln_casts_i), .param_read(param_read_ln_i), .int_res_read(int_res_read_ln_i), .int_res_write(int_res_write_ln_i));
+                         .casts(casts_ln_i), .param_read(param_read_ln_i), .int_res_read(int_res_read_ln_i), .int_res_write(int_res_write_ln_i));
+    softmax softmax (.clk, .rst_n, .io(softmax_io), .io_extra(softmax_io_extra), .add_io(add_io_softmax), .mult_io(mult_io_softmax), .div_io(div_io_softmax), .exp_io(exp_io_softmax),
+                     .casts(casts_softmax_i), .int_res_read(int_res_read_softmax_i), .int_res_write(int_res_write_softmax_i));
 
     // ----- GLOBAL SIGNALS ----- //
     logic rst_n, done;
@@ -107,7 +118,7 @@ module cim_centralized #()(
                     if (soc_ctrl_i.new_sleep_epoch) start_inference();
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == ENC_MHSA_SOFTMAX_STEP) begin
+                    if (current_inf_step == ENC_MHSA_MULT_V_STEP) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -383,12 +394,40 @@ module cim_centralized #()(
                     if (done & mult_io.done) begin
                         IntResAddr_t int_res_write_addr = mem_map[ENC_QK_T_MEM] + IntResAddr_t'(NUM_PATCHES) + IntResAddr_t'((NUM_PATCHES+1)*60) + IntResAddr_t'((NUM_PATCHES+1)*(NUM_PATCHES+1)*(NUM_HEADS-1));
                         done <= 1'b0;
+                        delay_line_2b[0] <= 'b1;
                         cnt_7b_i.rst_n <= 1'b0;
                         current_inf_step <= ENC_MHSA_SOFTMAX_STEP;
                         write_int_res(int_res_write_addr, mult_io.out, int_res_width[QK_T_OUTPUT_WIDTH], int_res_format[QK_T_OUTPUT_FORMAT]);
                     end
                 end
                 ENC_MHSA_SOFTMAX_STEP: begin
+                    // Variables
+                    int num_rows;
+                    if (current_inf_step == ENC_MHSA_SOFTMAX_STEP) num_rows = NUM_HEADS*(NUM_PATCHES+1);
+                    else num_rows = 1;
+
+                    // Execute
+                    delay_line_2b[0] <= 'b0;
+                    if ((softmax_io.done | delay_line_2b[0]) & ~done) begin
+                        if (current_inf_step == ENC_MHSA_SOFTMAX_STEP) begin
+                            IntResAddr_t addr = mem_map[ENC_QK_T_MEM] + IntResAddr_t'((NUM_PATCHES+1)*cnt_9b_i.cnt);
+                            start_softmax(addr, VectorLen_t'(NUM_PATCHES+1), int_res_format[QK_T_OUTPUT_FORMAT], int_res_width[QK_T_OUTPUT_WIDTH], int_res_format[MHSA_SOFTMAX_OUTPUT_FORMAT], int_res_width[MHSA_SOFTMAX_OUTPUT_WIDTH]);
+                        end else begin end// TODO: Start softmax
+                    end
+
+                    // Control
+                    if (softmax_io.start) begin
+                        if (int'(cnt_9b_i.cnt) == num_rows-1) begin
+                            cnt_9b_i.rst_n <= 1'b0;
+                            done <= 1'b1;
+                        end else cnt_9b_i.inc <= 1'b1;
+                    end
+
+                    // Exit control
+                    if (done & softmax_io.done) begin
+                        current_inf_step <= InferenceStep_t'(int'(current_inf_step) + 1);
+                        done <= 1'b0;
+                    end
                 end
                 default: begin
                 end
@@ -426,7 +465,7 @@ module cim_centralized #()(
     always_latch begin : int_res_mem_MUX
         // Write
         int_res_write_i.chip_en = 1'b1;
-        int_res_write_i.en = int_res_write_tb_i.en | int_res_write_cim_i.en | int_res_write_ln_i.en;
+        int_res_write_i.en = int_res_write_tb_i.en | int_res_write_cim_i.en | int_res_write_ln_i.en | int_res_write_softmax_i.en;
         if (int_res_write_tb_i.en) begin
             int_res_write_i.addr = int_res_write_tb_i.addr;
             int_res_write_i.data = int_res_write_tb_i.data;
@@ -442,13 +481,19 @@ module cim_centralized #()(
             int_res_write_i.data = int_res_write_ln_i.data;
             int_res_write_i.format = int_res_write_ln_i.format;
             int_res_write_i.data_width = int_res_write_ln_i.data_width;
+        end else if (int_res_write_softmax_i.en) begin
+            int_res_write_i.addr = int_res_write_softmax_i.addr;
+            int_res_write_i.data = int_res_write_softmax_i.data;
+            int_res_write_i.format = int_res_write_softmax_i.format;
+            int_res_write_i.data_width = int_res_write_softmax_i.data_width;
         end
 
         // Read
-        int_res_read_i.en = int_res_read_mac_i.en | int_res_read_cim_i.en | int_res_read_ln_i.en;
+        int_res_read_i.en = int_res_read_mac_i.en | int_res_read_cim_i.en | int_res_read_ln_i.en | int_res_read_softmax_i.en;
         int_res_read_mac_i.data = int_res_read_i.data;
         int_res_read_cim_i.data = int_res_read_i.data;
         int_res_read_ln_i.data = int_res_read_i.data;
+        int_res_read_softmax_i.data = int_res_read_i.data;
         if (int_res_read_mac_i.en) begin // MAC
             int_res_read_i.addr = int_res_read_mac_i.addr;
             int_res_read_i.data_width = int_res_read_mac_i.data_width;
@@ -461,6 +506,10 @@ module cim_centralized #()(
             int_res_read_i.addr = int_res_read_ln_i.addr;
             int_res_read_i.data_width = int_res_read_ln_i.data_width;
             int_res_read_i.format = int_res_read_ln_i.format;
+        end else if (int_res_read_softmax_i.en) begin
+            int_res_read_i.addr = int_res_read_softmax_i.addr;
+            int_res_read_i.data_width = int_res_read_softmax_i.data_width;
+            int_res_read_i.format = int_res_read_softmax_i.format;
         end
     end
 
@@ -477,9 +526,12 @@ module cim_centralized #()(
         end else if (add_io_ln.start) begin
             add_io.in_1 = add_io_ln.in_1;
             add_io.in_2 = add_io_ln.in_2;
+        end else if (add_io_softmax.start) begin
+            add_io.in_1 = add_io_softmax.in_1;
+            add_io.in_2 = add_io_softmax.in_2;
         end
 
-        add_io.start = add_io_exp.start | add_io_mac.start | add_io_cim.start | add_io_ln.start;
+        add_io.start = add_io_exp.start | add_io_mac.start | add_io_cim.start | add_io_ln.start | add_io_softmax.start;
         add_io_exp.out = add_io.out;
         add_io_exp.done = add_io.done;
         add_io_mac.out = add_io.out;
@@ -488,6 +540,8 @@ module cim_centralized #()(
         add_io_cim.done = add_io.done;
         add_io_ln.out = add_io.out;
         add_io_ln.done = add_io.done;
+        add_io_softmax.out = add_io.out;
+        add_io_softmax.done = add_io.done;
     end
 
     always_latch begin : mult_io_MUX
@@ -503,15 +557,20 @@ module cim_centralized #()(
         end else if (mult_io_cim.start) begin
             mult_io.in_1 = mult_io_cim.in_1;
             mult_io.in_2 = mult_io_cim.in_2;
+        end else if (mult_io_softmax.start) begin
+            mult_io.in_1 = mult_io_softmax.in_1;
+            mult_io.in_2 = mult_io_softmax.in_2;
         end
 
-        mult_io.start = mult_io_exp.start | mult_io_mac.start | mult_io_ln.start | mult_io_cim.start;
+        mult_io.start = mult_io_exp.start | mult_io_mac.start | mult_io_ln.start | mult_io_cim.start | mult_io_softmax.start;
         mult_io_exp.out = mult_io.out;
         mult_io_exp.done = mult_io.done;
         mult_io_mac.out = mult_io.out;
         mult_io_mac.done = mult_io.done;
         mult_io_ln.out = mult_io.out;
         mult_io_ln.done = mult_io.done;
+        mult_io_softmax.out = mult_io.out;
+        mult_io_softmax.done = mult_io.done;
     end
 
     always_latch begin : div_io_MUX
@@ -521,27 +580,35 @@ module cim_centralized #()(
         end else if (div_io_ln.start) begin
             div_io.in_1 = div_io_ln.in_1;
             div_io.in_2 = div_io_ln.in_2;
+        end else if (div_io_softmax.start) begin
+            div_io.in_1 = div_io_softmax.in_1;
+            div_io.in_2 = div_io_softmax.in_2;
         end
 
-        div_io.start = div_io_mac.start | div_io_ln.start;
+        div_io.start = div_io_mac.start | div_io_ln.start | div_io_softmax.start;
         div_io_mac.out = div_io.out;
         div_io_mac.busy = div_io.busy;
         div_io_mac.done = div_io.done;
         div_io_ln.out = div_io.out;
         div_io_ln.busy = div_io.busy;
         div_io_ln.done = div_io.done;
+        div_io_softmax.out = div_io.out;
+        div_io_softmax.busy = div_io.busy;
+        div_io_softmax.done = div_io.done;
     end
 
     always_latch begin : exp_io_MUX
-        if (exp_io_mac.start) begin
-            exp_io.in_1 = exp_io_mac.in_1;
-        end
+        if (exp_io_mac.start) exp_io.in_1 = exp_io_mac.in_1;
+        else if (exp_io_softmax.start) exp_io.in_1 = exp_io_softmax.in_1;
 
         exp_io.in_2 = CompFx_t'(0);
-        exp_io.start = exp_io_mac.start;
+        exp_io.start = exp_io_mac.start | exp_io_softmax.start;
         exp_io_mac.out = exp_io.out;
         exp_io_mac.busy = exp_io.busy;
         exp_io_mac.done = exp_io.done;
+        exp_io_softmax.out = exp_io.out;
+        exp_io_softmax.busy = exp_io.busy;
+        exp_io_softmax.done = exp_io.done;
     end
 
     // ----- TASKS ----- //
@@ -562,6 +629,7 @@ module cim_centralized #()(
         mult_io_cim.start <= 1'b0;
         mac_io.start <= 1'b0;
         ln_io.start <= 1'b0;
+        softmax_io.start <= 1'b0;
     endtask
 
     task automatic reset();
@@ -613,9 +681,9 @@ module cim_centralized #()(
         mac_io_extra.activation <= act;
         mac_io_extra.len <= len;
         mac_io_extra.bias_addr <= bias_addr;
-        mac_casts_i.int_res_read_format <= int_res_input_format;
-        mac_casts_i.int_res_read_width <= int_res_read_width;
-        mac_casts_i.params_read_format <= params_read_format;
+        casts_mac_i.int_res_read_format <= int_res_input_format;
+        casts_mac_i.int_res_read_width <= int_res_read_width;
+        casts_mac_i.params_read_format <= params_read_format;
     endtask
 
     task automatic start_add(CompFx_t in_1, CompFx_t in_2);
@@ -637,17 +705,27 @@ module cim_centralized #()(
         ln_io_extra.start_addr_2 <= output_starting_addr;
         ln_io_extra.start_addr_3 <= IntResAddr_t'(beta_addr);
         ln_io_extra.start_addr_4 <= IntResAddr_t'(gamma_addr);
-        ln_casts_i.int_res_read_format <= input_format;
-        ln_casts_i.int_res_write_format <= output_format;
-        ln_casts_i.int_res_read_width <= input_width;
-        ln_casts_i.int_res_write_width <= output_width;
-        ln_casts_i.params_read_format <= param_format;
+        casts_ln_i.int_res_read_format <= input_format;
+        casts_ln_i.int_res_write_format <= output_format;
+        casts_ln_i.int_res_read_width <= input_width;
+        casts_ln_i.int_res_write_width <= output_width;
+        casts_ln_i.params_read_format <= param_format;
+    endtask
+
+    task automatic start_softmax(input IntResAddr_t input_starting_addr, input VectorLen_t len, input FxFormatIntRes_t input_format, input DataWidth_t input_width, input FxFormatIntRes_t output_format, input DataWidth_t output_width);
+        softmax_io.start <= 1'b1;
+        softmax_io_extra.start_addr_1 <= input_starting_addr;
+        softmax_io_extra.len <= len;
+        casts_softmax_i.int_res_read_format <= input_format;
+        casts_softmax_i.int_res_write_format <= output_format;
+        casts_softmax_i.int_res_read_width <= input_width;
+        casts_softmax_i.int_res_write_width <= output_width;
     endtask
 
     // ----- ASSERTIONS ----- //
     always_ff @ (posedge clk) begin : compute_mux_assertions
-        assert (~(int_res_write_tb_i.en & int_res_write_cim_i.en & int_res_write_ln_i.en)) else $fatal("More than one source are trying to write to intermediate result memory simulatenously!");
-        assert (~(int_res_read_cim_i.en & int_res_read_mac_i.en & int_res_read_ln_i.en)) else $fatal("More than one source are trying to read from intermediate results memory simulatenously!");
+        assert (~(int_res_write_tb_i.en & int_res_write_cim_i.en & int_res_write_ln_i.en & int_res_write_softmax_i.en)) else $fatal("More than one source are trying to write to intermediate result memory simulatenously!");
+        assert (~(int_res_read_cim_i.en & int_res_read_mac_i.en & int_res_read_ln_i.en & int_res_read_softmax_i.en)) else $fatal("More than one source are trying to read from intermediate results memory simulatenously!");
         assert (~(param_read_cim_i.en & param_read_mac_i.en & param_read_ln_i.en)) else $fatal("More than one source are trying to read from parameters result memory simulatenously!");
 
         assert (~(add_io_exp.start & add_io_mac.start & add_io_cim.start & add_io_ln.start)) else $fatal("More than one source are trying to start an add!");

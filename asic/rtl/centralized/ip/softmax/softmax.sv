@@ -26,6 +26,9 @@ module softmax (
     output ComputeIPInterface.basic_out exp_io
 );
 
+    /*----- MEMORY -----*/
+    CompFx_t softmax_exp_int_res [0:NUM_PATCHES+1-1];
+
     /*----- TASKS -----*/
     task set_default_values();
         int_res_read.en <= 1'b0;
@@ -70,9 +73,8 @@ module softmax (
     endtask
 
     /*----- LOGIC -----*/
-    logic add_refresh_delayed, mult_refresh_delayed, exp_done_delayed, int_res_en_delayed;
-    logic [1:0] div_loop_timekeep;
-    IntResAddr_t index;
+    logic [2:0] delay_line_3b;
+    VectorLen_t index;
     CompFx_t compute_temp;
     enum logic [2:0] {IDLE, EXP, INVERT_DIV, DIV} state;
 
@@ -87,56 +89,47 @@ module softmax (
                     if (io.start) read_int_res(io_extra.start_addr_1, casts.int_res_read_width, casts.int_res_read_format);
                     state <= (io.start) ? EXP : IDLE;
                     index <= 'd0;
-                    div_loop_timekeep <= 'd0;
+                    delay_line_3b <= 'd0;
                     io.busy <= io.start;
                     io.done <= 1'b0;
-                    mult_refresh_delayed <= 1'b0;
-                    add_refresh_delayed <= 1'b0;
-                    exp_done_delayed <= 1'b0;
-                    int_res_en_delayed <= 1'b0;
                     compute_temp <= 'd0;
                 end
                 EXP: begin
-                    IntResAddr_t addr = (exp_done_delayed) ? io_extra.start_addr_1 + index : int_res_read.addr;
-                    if (exp_io.done) write_int_res(addr, exp_io.out, casts.int_res_read_width, casts.int_res_read_format);
-                    if (exp_done_delayed) read_int_res(addr, casts.int_res_read_width, casts.int_res_read_format);
+                    IntResAddr_t addr = (delay_line_3b[1]) ? io_extra.start_addr_1 + IntResAddr_t'(index) : int_res_read.addr;
+                    if (exp_io.done) softmax_exp_int_res[index[5:0]] <= exp_io.out;
+                    if (delay_line_3b[1]) read_int_res(addr, casts.int_res_read_width, casts.int_res_read_format);
 
                     // Read next word
-                    int_res_en_delayed <= int_res_read.en;
+                    delay_line_3b[2] <= int_res_read.en;
                     
-                    if ((index == IntResAddr_t'(io_extra.len)) && add_refresh_delayed) begin // Done
+                    if ((index == io_extra.len) & delay_line_3b[0]) begin // Done
                         index <= 'd0;
                         state <= INVERT_DIV;
-                    end else index <= (exp_io.done && (index < IntResAddr_t'(io_extra.len))) ? index + 'd1 : index;
+                    end else index <= (exp_io.done & (index < io_extra.len)) ? index + 'd1 : index;
 
                     // Start exponent once we've read new word
-                    exp_done_delayed <= exp_io.done;
-                    exp_io.start <= int_res_en_delayed && (index < IntResAddr_t'(io_extra.len));
+                    delay_line_3b[1] <= exp_io.done;
+                    exp_io.start <= delay_line_3b[2] & (index < io_extra.len);
                     exp_io.in_1 <= int_res_read.data;
 
                     // Start add to compute_temp once we've finished exp
-                    add_refresh_delayed <= add_io.start;
+                    delay_line_3b[0] <= add_io.start;
                     if (exp_io.done) start_add(compute_temp, exp_io.out);
-                    if (add_refresh_delayed) compute_temp <= add_io.out;
+                    if (delay_line_3b[0]) compute_temp <= add_io.out;
                 end
                 INVERT_DIV: begin
                     // Compute 1/compute_temp so we can multiply by that in the next step rather than doing a division for each element in the vector
-                    if (div_loop_timekeep == 'd0) start_div(('d1 << Q_COMP), compute_temp);
-                    if (div_io.done) read_int_res(io_extra.start_addr_1, casts.int_res_read_width, casts.int_res_read_format);
-                    div_loop_timekeep <= 'd2; // To start cycle in DIV
-                    state <= (int_res_read.en) ? DIV : INVERT_DIV;
-                    int_res_en_delayed <= int_res_read.en;
+                    if (~div_io.busy & ~div_io.done) start_div(('d1 << Q_COMP), compute_temp);
+                    if (div_io.done) state <= DIV;
                 end
                 DIV: begin
-                    if (int_res_write.en) read_int_res(io_extra.start_addr_1 + index, casts.int_res_read_width, casts.int_res_read_format);
-                    if (int_res_en_delayed) start_mult(div_io.out, int_res_read.data);
-                    if (mult_io.done) write_int_res(io_extra.start_addr_1 + index, mult_io.out, casts.int_res_read_width, casts.int_res_read_format);
+                    start_mult(div_io.out, softmax_exp_int_res[index[5:0]]);
+                    if (mult_io.done) write_int_res(io_extra.start_addr_1 + IntResAddr_t'(int'(index) - int'(2)), mult_io.out, casts.int_res_write_width, casts.int_res_write_format);
 
-                    int_res_en_delayed <= int_res_read.en;
-                    index <= (mult_io.done) ? index + 'd1 : index;
-                    state <= (index == IntResAddr_t'(io_extra.len)) ? IDLE : DIV;
-                    io.done <= (index == IntResAddr_t'(io_extra.len));
-                    mult_refresh_delayed <= mult_io.start;
+                    delay_line_3b[0] <= mult_io.done;
+                    index <= index + 'd1;
+                    state <= (index == io_extra.len+2) ? IDLE : DIV;
+                    io.done <= (index == io_extra.len+2);
                 end
                 //synopsys translate_off
                 default: begin
