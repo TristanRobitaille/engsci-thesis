@@ -134,9 +134,9 @@ class CiM_Compute {
 
         template <typename in1_storage_fx_t, typename in2_storage_fx_t>
 #if DISTRIBUTED_ARCH
-        void MAC(uint32_t in1_start_addr, uint32_t in2_start_addr, uint16_t len, uint32_t bias_addr, INPUT_TYPE param_type, ACTIVATION activation, DATA_WIDTH data_width, DIRECTION dir_in2=HORIZONTAL, uint16_t width=1) {
+        void MAC(uint32_t in1_start_addr, uint32_t in2_start_addr, uint16_t len, uint32_t bias_addr, INPUT_TYPE param_type, ACTIVATION activation, DATA_WIDTH data_width, DIRECTION dir_in2=HORIZONTAL, uint16_t matrix_width=1) {
 #elif CENTRALIZED_ARCH
-        void MAC(uint32_t in1_start_addr, uint32_t in2_start_addr, uint16_t len, uint32_t bias_addr, INPUT_TYPE param_type, ACTIVATION activation, DIRECTION dir_in2=HORIZONTAL, uint16_t width=1) {
+        void MAC(uint32_t in1_start_addr, uint32_t in2_start_addr, uint16_t len, uint32_t bias_addr, INPUT_TYPE param_type, ACTIVATION activation, DIRECTION dir_in2=HORIZONTAL, uint16_t matrix_width=1) {
 #endif
             /* Dot-product between two vectors with selectable activation function. data_width only applies to intermediate results. width is used when dir_in2 is VERTICAL.*/
             if (compute_in_progress == true) { throw runtime_error("Computation already in progress when trying to start MAC!"); }
@@ -160,7 +160,7 @@ class CiM_Compute {
                 comp_fx_t input2;
 
                 if (param_type == INTERMEDIATE_RES) {
-                    uint32_t in2_addr = (dir_in2 == HORIZONTAL) ? in2_start_addr + i : in2_start_addr + i*width;
+                    uint32_t in2_addr = (dir_in2 == HORIZONTAL) ? in2_start_addr + i : in2_start_addr + i*matrix_width;
                     input2 = comp_fx_t { static_cast<in2_storage_fx_t>(int_res_read(in2_addr)) };
                 } else if (param_type == MODEL_PARAM) { // Params are always stored in single-width
                     uint32_t in2_addr = in2_start_addr + params_cnt;

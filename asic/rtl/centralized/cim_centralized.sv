@@ -118,7 +118,7 @@ module cim_centralized #()(
                     if (soc_ctrl_i.new_sleep_epoch) start_inference();
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == ENC_MHSA_MULT_V_STEP) begin
+                    if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -161,8 +161,8 @@ module cim_centralized #()(
                         IntResAddr_t patch_addr = mem_map[EEG_INPUT_MEM] + IntResAddr_t'(int'(cnt_9b_i.cnt) << $clog2(EMB_DEPTH));
                         ParamAddr_t param_addr  = param_addr_map[PATCH_PROJ_KERNEL_PARAMS] + ParamAddr_t'(int'(EMB_DEPTH*cnt_7b_i.cnt));
                         ParamAddr_t bias_addr   = param_addr_map_bias[PATCH_PROJ_BIAS] + ParamAddr_t'(cnt_7b_i.cnt);
-                        start_mac(patch_addr, IntResAddr_t'(param_addr), bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, VectorLen_t'(PATCH_LEN), int_res_format[EEG_FORMAT],
-                                  int_res_width[EEG_WIDTH], params_format[PATCH_PROJ_PARAM_FORMAT]);
+                        start_mac(patch_addr, IntResAddr_t'(param_addr), bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, VectorLen_t'(PATCH_LEN), VectorLen_t'(0), HORIZONTAL,
+                                  int_res_format[EEG_FORMAT], int_res_width[EEG_WIDTH], params_format[PATCH_PROJ_PARAM_FORMAT]);
                     end
 
                     if (mac_io.done) begin
@@ -317,9 +317,7 @@ module cim_centralized #()(
                     end
 
                     // Execute
-                    if (delay_line_2b[1]) begin
-                        start_mac(data_row_addr, IntResAddr_t'(kernel_col_addr), bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, VectorLen_t'(EMB_DEPTH), input_format, input_width, input_params_format);
-                    end
+                    if (delay_line_2b[1]) start_mac(data_row_addr, IntResAddr_t'(kernel_col_addr), bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, VectorLen_t'(EMB_DEPTH), VectorLen_t'(0), HORIZONTAL, input_format, input_width, input_params_format);
 
                     // Control
                     delay_line_2b[0] <= cnt_7b_i.inc | cnt_9b_i.inc;
@@ -349,9 +347,9 @@ module cim_centralized #()(
                     end
                 end
                 ENC_MHSA_QK_T_STEP: begin
-                    /* gen_cnt_7b holds x
-                    gen_cnt_9b holds y
-                    gen_cnt_4b holds z
+                    /* cnt_7b holds x
+                    cnt_9b holds y
+                    cnt_4b holds z
 
                     for z in 0...(NUM_HEADS-1):
                         for y in 0...(NUM_PATCHES):
@@ -366,7 +364,7 @@ module cim_centralized #()(
                     if ((delay_line_2b[1] | delay_line_2b[0]) & ~done) begin
                         IntResAddr_t Q_addr   = mem_map[ENC_Q_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_9b_i.cnt + NUM_HEADS*cnt_4b_i.cnt);
                         IntResAddr_t K_T_addr = mem_map[ENC_K_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt + NUM_HEADS*cnt_4b_i.cnt);
-                        start_mac(Q_addr, K_T_addr, ParamAddr_t'(0), INTERMEDIATE_RES, NO_ACTIVATION, VectorLen_t'(NUM_HEADS), int_res_format[QK_T_OUTPUT_FORMAT], int_res_width[QK_T_OUTPUT_WIDTH], FxFormatParams_t'(0));
+                        start_mac(Q_addr, K_T_addr, ParamAddr_t'(0), INTERMEDIATE_RES, NO_ACTIVATION, VectorLen_t'(NUM_HEADS), VectorLen_t'(0), HORIZONTAL, int_res_format[QK_T_OUTPUT_FORMAT], int_res_width[QK_T_OUTPUT_WIDTH], FxFormatParams_t'(0));
                     end
 
                     if (mac_io.done) start_mult(mac_io.out, param_read_i.data); // Multiply by inverse of number of heads (read in previous step and remains on the params bus)
@@ -425,8 +423,57 @@ module cim_centralized #()(
 
                     // Exit control
                     if (done & softmax_io.done) begin
-                        current_inf_step <= InferenceStep_t'(int'(current_inf_step) + 1);
+                        current_inf_step <= InferenceStep_t'(int'(current_inf_step) + 1); 
+                        delay_line_2b[0] <= 'b1;
                         done <= 1'b0;
+                    end
+                end
+                ENC_MHSA_MULT_V_STEP: begin
+                 /* cnt_7b holds x
+                    cnt_9b holds y
+                    cnt_4b holds z
+
+                    for z in 0...(NUM_HEADS-1):
+                        for y in 0...(NUM_PATCHES):
+                            for x 0...(EMB_DEPTH/NUM_HEADS-1):
+                    */
+
+                    // Execute
+                    if (delay_line_2b[1]) begin
+                        IntResAddr_t QK_T_addr = mem_map[ENC_QK_T_MEM] + IntResAddr_t'((NUM_PATCHES+1)*cnt_9b_i.cnt) + IntResAddr_t'((NUM_PATCHES+1)*(NUM_PATCHES+1)*cnt_4b_i.cnt);
+                        IntResAddr_t V_addr    = mem_map[ENC_V_MEM]    + IntResAddr_t'(cnt_7b_i.cnt) + IntResAddr_t'(NUM_HEADS*cnt_4b_i.cnt);
+                        start_mac(QK_T_addr, V_addr, ParamAddr_t'(0), INTERMEDIATE_RES, NO_ACTIVATION, VectorLen_t'(NUM_PATCHES+1), VectorLen_t'(EMB_DEPTH), VERTICAL, int_res_format[MHSA_SOFTMAX_OUTPUT_FORMAT], int_res_width[MHSA_SOFTMAX_OUTPUT_WIDTH], FxFormatParams_t'(0));
+                    end
+
+                    // Control
+                    delay_line_2b[0] <= cnt_7b_i.inc | cnt_9b_i.inc | cnt_4b_i.inc;
+                    delay_line_2b[1] <= delay_line_2b[0];
+
+                    // Control
+                    if (mac_io.done) begin
+                        IntResAddr_t int_res_write_addr = mem_map[ENC_V_MULT_MEM] + IntResAddr_t'(cnt_7b_i.cnt) + IntResAddr_t'(EMB_DEPTH*cnt_9b_i.cnt) + IntResAddr_t'((EMB_DEPTH/NUM_HEADS)*cnt_4b_i.cnt);
+                        write_int_res(int_res_write_addr, mac_io.out, int_res_width[MULT_V_OUTPUT_WIDTH], int_res_format[MULT_V_OUTPUT_FORMAT]);
+
+                        if (int'(cnt_7b_i.cnt) == (EMB_DEPTH/NUM_HEADS-1)) begin
+                            cnt_7b_i.rst_n <= 1'b0;
+                            if (int'(cnt_9b_i.cnt) == NUM_PATCHES) begin
+                                cnt_9b_i.rst_n <= 1'b0;
+                                if (int'(cnt_4b_i.cnt) == NUM_HEADS-1) begin
+                                    cnt_4b_i.rst_n <= 1'b0;
+                                    done <= 1'b1;
+                                end else cnt_4b_i.inc <= 1'b1; // z++
+                            end else cnt_9b_i.inc <= 1'b1; // y++
+                        end else cnt_7b_i.inc <= 1'b1; // x++
+                    end
+
+                    // Exit control
+                    if (done) begin
+                        IntResAddr_t int_res_write_addr = mem_map[ENC_V_MULT_MEM] + IntResAddr_t'(EMB_DEPTH/NUM_HEADS-1) + IntResAddr_t'(EMB_DEPTH*NUM_PATCHES) + IntResAddr_t'((EMB_DEPTH/NUM_HEADS)*(NUM_HEADS-1));
+                        write_int_res(int_res_write_addr, mac_io.out, int_res_width[MULT_V_OUTPUT_WIDTH], int_res_format[MULT_V_OUTPUT_FORMAT]);
+                        done <= 1'b0;
+                        delay_line_2b[0] <= 'b1;
+                        cnt_7b_i.rst_n <= 1'b0;
+                        current_inf_step <= ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP;
                     end
                 end
                 default: begin
@@ -673,14 +720,16 @@ module cim_centralized #()(
         int_res_read_cim_i.format <= int_res_format;
     endtask
 
-    task automatic start_mac(input IntResAddr_t addr_1, input IntResAddr_t addr_2, input ParamAddr_t bias_addr, input ParamType_t param_type, input Activation_t act, input VectorLen_t len, input FxFormatIntRes_t int_res_input_format, input DataWidth_t int_res_read_width, input FxFormatParams_t params_read_format);
+    task automatic start_mac(input IntResAddr_t addr_1, input IntResAddr_t addr_2, input ParamAddr_t bias_addr, input ParamType_t param_type, input Activation_t act, input VectorLen_t len, input VectorLen_t matrix_width, input Direction_t dir, input FxFormatIntRes_t int_res_input_format, input DataWidth_t int_res_read_width, input FxFormatParams_t params_read_format);
         mac_io.start <= 1'b1;
         mac_io_extra.start_addr_1 <= addr_1;
         mac_io_extra.start_addr_2 <= addr_2;
         mac_io_extra.param_type <= param_type;
         mac_io_extra.activation <= act;
         mac_io_extra.len <= len;
+        mac_io_extra.matrix_width <= matrix_width;
         mac_io_extra.bias_addr <= bias_addr;
+        mac_io_extra.direction <= dir;
         casts_mac_i.int_res_read_format <= int_res_input_format;
         casts_mac_i.int_res_read_width <= int_res_read_width;
         casts_mac_i.params_read_format <= params_read_format;

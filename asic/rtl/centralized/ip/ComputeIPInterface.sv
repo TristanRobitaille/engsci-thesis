@@ -26,18 +26,20 @@ interface ComputeIPInterface;
     );
 
     // Extra signals for composite IP
-    VectorLen_t len;
+    VectorLen_t len, matrix_width;
     HalfSelect_t half_select;
     ParamType_t param_type;
     Activation_t activation;
     ParamAddr_t bias_addr;
+    Direction_t direction;
     IntResAddr_t start_addr_1, start_addr_2, start_addr_3, start_addr_4;
     modport extra (
         input half_select,
-        input len,
+        input len, matrix_width,
         input param_type,
         input activation,
         input bias_addr,
+        input direction,
         input start_addr_1, start_addr_2, start_addr_3, start_addr_4
     );
 

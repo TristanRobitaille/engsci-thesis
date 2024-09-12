@@ -29,12 +29,13 @@ module adder (
     assign io.out = sum[N_COMP-1:0]; // Essentially AP_TRN (truncation towards minus infinity)
     assign io.overflow = io.done & (in_1_q[N_COMP-1] == in_2_q[N_COMP-1]) & (in_1_q[N_COMP-1] != io.out[N_COMP-1]);
 
-    // Note: Verilator does not support assertions well
-    always @(posedge clk) begin : adder_assertions
-        if (io.overflow) begin
-            $display("Overflow detected in adder at time %d (in_1: %d, in_2: %d, out: %d)", $time, io.in_1, io.in_2, io.out);
+    `ifdef OVERFLOW_WARNING
+        always @(posedge clk) begin : adder_assertions
+            if (io.overflow) begin
+                $display("Overflow detected in adder at time %d (in_1: %d, in_2: %d, out: %d)", $time, io.in_1, io.in_2, io.out);
+            end
         end
-    end
+    `endif
 endmodule // adder
 
 `endif

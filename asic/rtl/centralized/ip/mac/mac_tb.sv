@@ -5,7 +5,8 @@ module mac_tb # () (
 
     // MAC control
     input wire start,
-    input VectorLen_t len,
+    input VectorLen_t len, mac_matrix_width,
+    input Direction_t mac_direction,
     input ParamAddr_t bias_addr,
     input ParamType_t param_type,
     input Activation_t activation,
@@ -165,6 +166,8 @@ module mac_tb # () (
         io_extra.start_addr_1 = start_addr_1;
         io_extra.start_addr_2 = start_addr_2;
         io_extra.bias_addr = bias_addr;
+        io_extra.direction = mac_direction;
+        io_extra.matrix_width = mac_matrix_width;
         done = io.done;
         busy = io.busy;
         computation_result = io.out;

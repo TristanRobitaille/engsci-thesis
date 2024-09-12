@@ -28,6 +28,7 @@ module int_res_mem (
         case (format)
             INT_RES_SW_FX_1_X: return {{(N_COMP - Q_COMP - 1){sign}}, data[N_STO_INT_RES-1:0], {(Q_COMP - (N_STO_INT_RES - 1)){sign}}};
             INT_RES_SW_FX_2_X: return {{(N_COMP - Q_COMP - 2){sign}}, data[N_STO_INT_RES-1:0], {(Q_COMP - (N_STO_INT_RES - 2)){sign}}};
+            INT_RES_SW_FX_4_X: return {{(N_COMP - Q_COMP - 4){sign}}, data[N_STO_INT_RES-1:0], {(Q_COMP - (N_STO_INT_RES - 4)){sign}}};
             INT_RES_SW_FX_5_X: return {{(N_COMP - Q_COMP - 5){sign}}, data[N_STO_INT_RES-1:0], {(Q_COMP - (N_STO_INT_RES - 5)){sign}}};
             INT_RES_SW_FX_6_X: return {{(N_COMP - Q_COMP - 6){sign}}, data[N_STO_INT_RES-1:0], {(Q_COMP - (N_STO_INT_RES - 6)){sign}}};
             INT_RES_DW_FX:     return {{(N_COMP - Q_COMP - (2*N_STO_INT_RES-Q_STO_INT_RES_DOUBLE)){sign}}, data, {(Q_COMP - Q_STO_INT_RES_DOUBLE){sign}}};
@@ -40,6 +41,7 @@ module int_res_mem (
         case (format)
             INT_RES_SW_FX_1_X: return {sign, data[Q_COMP-1 : Q_COMP - (N_STO_INT_RES - 1)]};
             INT_RES_SW_FX_2_X: return {sign, data[Q_COMP+0 : Q_COMP - (N_STO_INT_RES - 2)]};
+            INT_RES_SW_FX_4_X: return {sign, data[Q_COMP+2 : Q_COMP - (N_STO_INT_RES - 4)]};
             INT_RES_SW_FX_5_X: return {sign, data[Q_COMP+3 : Q_COMP - (N_STO_INT_RES - 5)]};
             INT_RES_SW_FX_6_X: return {sign, data[Q_COMP+4 : Q_COMP - (N_STO_INT_RES - 6)]};
             default: return {sign, data[Q_COMP+3 : Q_COMP - (N_STO_INT_RES - 5)]};

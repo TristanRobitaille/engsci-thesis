@@ -2,7 +2,7 @@ import os
 import sys
 from cocotb_test.simulator import run
 
-RANDOM_SEED = 12345
+RANDOM_SEED = 1
 
 # Paths
 src_dir = "asic/rtl/centralized"

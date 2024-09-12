@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Mon Sep  9 20:26:21 2024
+[*] Thu Sep 12 17:55:58 2024
 [*]
 [dumpfile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/ip/mac/sim_build/dump.fst"
-[dumpfile_mtime] "Mon Sep  9 20:26:15 2024"
-[dumpfile_size] 1189332
+[dumpfile_mtime] "Thu Sep 12 17:52:02 2024"
+[dumpfile_size] 2040640
 [savefile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/ip/mac/mac.gtkw"
-[timestart] 231212800
+[timestart] 735199500
 [size] 1728 1387
 [pos] -1 -1
-*-15.933569 231330000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+*-15.033569 735290000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -61,6 +61,10 @@ mac_tb.mac.io_extra.param_type[1:0]
 @24
 mac_tb.mac.io_extra.len[6:0]
 @100000028
+mac_tb.mac.io_extra.direction
+@25
+mac_tb.mac.io_extra.matrix_width[6:0]
+@100000028
 mac_tb.mac.state[3:0]
 @c00024
 mac_tb.mac.index[6:0]
@@ -74,8 +78,6 @@ mac_tb.mac.index[6:0]
 (6)mac_tb.mac.index[6:0]
 @1401200
 -group_end
-@28
-mac_tb.mac.delay_signal[2:0]
 @200
 -
 -INT RES WRITE
@@ -166,9 +168,7 @@ mac_tb.mac.exp_io.start
 mac_tb.mac.exp_io.done
 @420
 mac_tb.mac.exp_io.in_1[38:0]
-@421
 mac_tb.mac.exp_io.out[38:0]
-@420
 mac_tb.mac.add_out_flipped[38:0]
 [pattern_trace] 1
 [pattern_trace] 0

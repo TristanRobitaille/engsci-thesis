@@ -33,9 +33,14 @@ class LayerNormHalfSelect(Enum):
     FIRST_HALF = 0
     SECOND_HALF = 1
 
+class MACDirection(Enum):
+    HORIZONTAL = 0
+    VERTICAL = 1
+
 class FxFormatIntRes(Enum): # Value is the number of integer bits
     INT_RES_SW_FX_1_X = 1
     INT_RES_SW_FX_2_X = 2
+    INT_RES_SW_FX_4_X = 4
     INT_RES_SW_FX_5_X = 5
     INT_RES_SW_FX_6_X = 6
     INT_RES_DW_FX = 10
@@ -50,9 +55,10 @@ class FxFormatParams(Enum): # Value is the number of integer bits
 int_res_fx_rtl_enum = {
     FxFormatIntRes.INT_RES_SW_FX_1_X: 0,
     FxFormatIntRes.INT_RES_SW_FX_2_X: 1,
-    FxFormatIntRes.INT_RES_SW_FX_5_X: 2,
-    FxFormatIntRes.INT_RES_SW_FX_6_X: 3,
-    FxFormatIntRes.INT_RES_DW_FX: 4
+    FxFormatIntRes.INT_RES_SW_FX_4_X: 2,
+    FxFormatIntRes.INT_RES_SW_FX_5_X: 3,
+    FxFormatIntRes.INT_RES_SW_FX_6_X: 4,
+    FxFormatIntRes.INT_RES_DW_FX: 5
 }
 
 params_fx_rtl_enum = {

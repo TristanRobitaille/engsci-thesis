@@ -73,12 +73,14 @@ module multiplier (
         end
     end
 
-    always_ff @ (posedge clk) begin : overflow_detection
-        if (io.overflow) begin
-            $display("Overflow detected in multiplier on previous posedge of time %t (in_1_q: %h, in_2_q: %h, out: %h)", $time, in_1_q, in_2_q, io.out);
+    `ifdef OVERFLOW_WARNING
+        always_ff @ (posedge clk) begin : overflow_detection
+            if (io.overflow) begin
+                $display("Overflow detected in multiplier on previous posedge of time %t (in_1_q: %h, in_2_q: %h, out: %h)", $time, in_1_q, in_2_q, io.out);
+            end
         end
-    end
-    
+    `endif
+   
 endmodule
 
 `endif

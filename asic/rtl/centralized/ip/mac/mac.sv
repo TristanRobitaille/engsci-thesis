@@ -136,11 +136,12 @@ module mac (
                         compute_temp <= int_res_read.data;
                         if (index <= io_extra.len) read_int_res(io_extra.start_addr_1 + IntResAddr_t'(index), casts.int_res_read_width, casts.int_res_read_format);
                     end else begin // Read input 2
+                        IntResAddr_t addr = (io_extra.direction == HORIZONTAL) ? io_extra.start_addr_2 + IntResAddr_t'(index): io_extra.start_addr_2 + IntResAddr_t'(index*io_extra.matrix_width);
                         index <= index + 1;
                         delay_signal[0] <= 1'b0;
                         delay_signal[1] <= 1'b1;
                         compute_temp_2 <= int_res_read.data;
-                        if (index <= io_extra.len) read_int_res(io_extra.start_addr_2 + IntResAddr_t'(index), casts.int_res_read_width, casts.int_res_read_format);
+                        if (index <= io_extra.len) read_int_res(addr, casts.int_res_read_width, casts.int_res_read_format);
                     end
 
                     if (delay_signal[2] & delay_signal[1]) begin

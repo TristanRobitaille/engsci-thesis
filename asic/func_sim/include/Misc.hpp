@@ -45,6 +45,7 @@ using params_fx_5_x_t   = ap_fixed<N_STO_PARAMS, 5, AP_TRN_ZERO, AP_WRAP>; // ]-
 
 using sw_fx_1_x_t       = ap_fixed<N_STO_INT_RES, 1, AP_TRN_ZERO, AP_WRAP>; // ]-1, 1[
 using sw_fx_2_x_t       = ap_fixed<N_STO_INT_RES, 2, AP_TRN_ZERO, AP_WRAP>; // ]-2, 2[
+using sw_fx_4_x_t       = ap_fixed<N_STO_INT_RES, 4, AP_TRN_ZERO, AP_WRAP>; // ]-8, 8[
 using sw_fx_5_x_t       = ap_fixed<N_STO_INT_RES, 5, AP_TRN_ZERO, AP_WRAP>; // ]-16, 16[
 using sw_fx_6_x_t       = ap_fixed<N_STO_INT_RES, 6, AP_TRN_ZERO, AP_WRAP>; // ]-32, 32[
 using dw_fx_x_t         = ap_fixed<2*N_STO_INT_RES, 8, AP_TRN_ZERO, AP_WRAP>; // TODO: Reduce num integer bits

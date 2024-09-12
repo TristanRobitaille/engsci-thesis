@@ -14,6 +14,8 @@ ip_dir = os.path.join(home_dir, ip_dir)
 sys.path.append(f"{home_dir}/asic/rtl/centralized/sim") # For constants from Centralized CiM testbench
 sys.path.append(f"{home_dir}/asic/rtl/") # For testbench utilities
 
+OVERFLOW_WARNING = False
+
 # Arguments
 ARGS = [
     # Verilator
@@ -27,8 +29,9 @@ ARGS = [
 
     # SV compilation
     "-DCENTRALIZED_ARCH=1",
-    "-DSTANDALONE_TB=1",
 ]
+
+if OVERFLOW_WARNING: ARGS.append("-DOVERFLOW_WARNING")
 
 # Run the simulation
 def test_dff_verilog():

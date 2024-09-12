@@ -657,7 +657,7 @@ bool CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_base_file
                     uint32_t input_addr = mem_map.at(ENC_V_MULT_MEM) + EMB_DEPTH*gen_cnt_9b.get_cnt();
                     uint32_t kernel_addr = param_addr_map[ENC_COMB_HEAD_PARAMS].addr + EMB_DEPTH*gen_cnt_7b.get_cnt();
                     uint32_t bias_addr = param_addr_map_bias[ENC_COMB_HEAD_BIAS_OFF].addr + gen_cnt_7b.get_cnt();
-                    MAC<dw_fx_x_t,params_fx_2_x_t>(input_addr, kernel_addr, EMB_DEPTH, bias_addr, MODEL_PARAM, LINEAR_ACTIVATION);
+                    MAC<sw_fx_4_x_t,params_fx_2_x_t>(input_addr, kernel_addr, EMB_DEPTH, bias_addr, MODEL_PARAM, LINEAR_ACTIVATION);
                 } else if (current_inf_step == MLP_DENSE_2_AND_SUM_STEP) {
                     uint32_t input_addr = mem_map.at(ENC_MLP_DENSE1_MEM); // Only one row
                     uint32_t kernel_addr = param_addr_map[ENC_MLP_DENSE_2_PARAMS].addr + MLP_DIM*gen_cnt_7b.get_cnt();
