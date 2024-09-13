@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Fri Sep 13 04:20:25 2024
+[*] Fri Sep 13 16:07:09 2024
 [*]
 [dumpfile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/sim/sim_build/dump.fst"
-[dumpfile_mtime] "Fri Sep 13 04:10:30 2024"
-[dumpfile_size] 158620357
+[dumpfile_mtime] "Fri Sep 13 16:04:50 2024"
+[dumpfile_size] 140485868
 [savefile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/sim/cim_centralized.gtkw"
-[timestart] 37408401900
+[timestart] 0
 [size] 3440 1387
 [pos] -1 -1
-*-16.152134 37408610000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+*-32.052135 38723896000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -38,11 +38,11 @@
 [markername] ZZ
 [treeopen] cim_centralized_tb.
 [treeopen] cim_centralized_tb.cim_centralized.
-[treeopen] cim_centralized_tb.cim_centralized.mac.
+[treeopen] cim_centralized_tb.cim_centralized.inference_fsm.
 [sst_width] 253
 [signals_width] 324
 [sst_expanded] 1
-[sst_vpaned_height] 786
+[sst_vpaned_height] 892
 @28
 clk
 @200
@@ -65,6 +65,21 @@ cim_centralized_tb.cim_centralized.cnt_9b_i.cnt[8:0]
 cim_centralized_tb.cim_centralized.cim_state[1:0]
 [color] 1
 cim_centralized_tb.cim_centralized.current_inf_step[4:0]
+@c00028
+[color] 1
+cim_centralized_tb.cim_centralized.delay_line_3b[2:0]
+@28
+[color] 1
+(0)cim_centralized_tb.cim_centralized.delay_line_3b[2:0]
+[color] 1
+(1)cim_centralized_tb.cim_centralized.delay_line_3b[2:0]
+[color] 1
+(2)cim_centralized_tb.cim_centralized.delay_line_3b[2:0]
+@1401200
+-group_end
+@28
+[color] 1
+cim_centralized_tb.cim_centralized.done
 @200
 -PARAMS READ
 @28
@@ -174,21 +189,6 @@ cim_centralized_tb.cim_centralized.int_res_write_i.data_width
 cim_centralized_tb.cim_centralized.mac.io.start
 [color] 3
 cim_centralized_tb.cim_centralized.mac.io.done
-[color] 3
-cim_centralized_tb.cim_centralized.mac.io.busy
-@100000028
-[color] 3
-cim_centralized_tb.cim_centralized.mac_io_extra.direction
-@24
-[color] 3
-cim_centralized_tb.cim_centralized.mac_io_extra.matrix_width[6:0]
-[color] 3
-cim_centralized_tb.cim_centralized.mac.io_extra.start_addr_1[15:0]
-[color] 3
-cim_centralized_tb.cim_centralized.mac.io_extra.start_addr_2[15:0]
-@25
-[color] 3
-cim_centralized_tb.cim_centralized.mac.io_extra.bias_addr[14:0]
 @420
 [color] 3
 cim_centralized_tb.cim_centralized.mac.io.out[38:0]
@@ -274,6 +274,11 @@ cim_centralized_tb.cim_centralized.div.io.out[38:0]
 @28
 cim_centralized_tb.cim_centralized.layernorm.io.start
 cim_centralized_tb.cim_centralized.layernorm.io.done
+@24
+cim_centralized_tb.cim_centralized.ln_io_extra.start_addr_1[15:0]
+cim_centralized_tb.cim_centralized.layernorm.io_extra.start_addr_2[15:0]
+@100000028
+cim_centralized_tb.cim_centralized.layernorm.state[3:0]
 @200
 -SOFTMAX
 @28

@@ -2,6 +2,7 @@ module cim_centralized_tb (
     input logic clk, soc_ctrl_rst_n, soc_ctrl_start_eeg_load,
     input logic soc_ctrl_new_eeg_data, soc_ctrl_new_sleep_epoch,
     input AdcData_t soc_ctrl_eeg,
+    output InferenceStep_t current_inf_step, // For testbench monitoring purposes only
     output logic soc_ctrl_inference_complete,
 
     // ----- Memory ---- //
@@ -53,6 +54,7 @@ module cim_centralized_tb (
     cim_centralized cim_centralized (
         .clk(clk),
         .soc_ctrl_i(soc_ctrl_i),
+        ._current_inf_step(current_inf_step),
 
         // ----- Memory ---- //
         .param_write_tb_i, .int_res_write_tb_i

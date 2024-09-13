@@ -5,6 +5,7 @@ import Defines::*;
 
 module cim_centralized #()(
     input wire clk,
+    output InferenceStep_t _current_inf_step,
     SoCInterface soc_ctrl_i,
 
     // ----- Memory ---- //
@@ -93,6 +94,7 @@ module cim_centralized #()(
 
     // ----- CONSTANTS -----//
     assign rst_n = soc_ctrl_i.rst_n;
+    assign _current_inf_step = current_inf_step;
 
     // ----- BYPASS ----- //
     CompFx_t adder_in_1_reg;
@@ -118,7 +120,7 @@ module cim_centralized #()(
                     if (soc_ctrl_i.new_sleep_epoch) start_inference();
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == ENC_LAYERNORM_2_1ST_HALF_STEP) begin
+                    if (current_inf_step == MLP_DENSE_1_STEP) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -150,7 +152,7 @@ module cim_centralized #()(
             end
         end else if (cim_state == INFERENCE_RUNNING) begin
             unique case (current_inf_step)
-                PATCH_PROJ_STEP: begin
+                PATCH_PROJ_STEP: begin : patch_proj
                     /* cnt_7b_i holds current parameters row
                        cnt_9b_i holds current patch */
 
@@ -179,7 +181,7 @@ module cim_centralized #()(
                         end else cnt_7b_i.inc <= 1'b1;
                     end
                 end
-                CLASS_TOKEN_CONCAT_STEP: begin
+                CLASS_TOKEN_CONCAT_STEP: begin : class_token_concat
                     cnt_7b_i.inc <= 1'b1;
                     delay_line_3b[0] <= cnt_7b_i.inc; // One cycle delay
                     cnt_9b_i.inc <= delay_line_3b[0];
@@ -195,7 +197,7 @@ module cim_centralized #()(
                         if (cnt_9b_i.inc) write_int_res(write_addr, param_read_i.data, int_res_width[CLASS_EMB_TOKEN_WIDTH], int_res_format[CLASS_EMB_TOKEN_FORMAT]);
                     end
                 end
-                POS_EMB_STEP: begin
+                POS_EMB_STEP: begin : pos_emb
                     /* gen_cnt_7b holds the column
                     gen_cnt_9b holds the row */
 
@@ -227,45 +229,84 @@ module cim_centralized #()(
                     // Done
                     if (int_res_addr_write == IntResAddr_t'(int'(mem_map[POS_EMB_MEM]) + EMB_DEPTH*(NUM_PATCHES+1) - 1)) begin
                         current_inf_step <= ENC_LAYERNORM_1_1ST_HALF_STEP;
-                        delay_line_3b <= 'b0;
+                        delay_line_3b <= 3'b001;
                         cnt_7b_i.rst_n <= 1'b0;
                         cnt_9b_i.rst_n <= 1'b0;
+                        done <= 1'b0;
                     end
                 end
-                ENC_LAYERNORM_1_1ST_HALF_STEP: begin
-                    if ((ln_io.done || (cnt_7b_i.cnt == 0 && ~ln_io.busy)) && ~ln_io.start && (int'(cnt_7b_i.cnt) != NUM_PATCHES+1)) begin
-                        IntResAddr_t input_starting_addr = mem_map[POS_EMB_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt);
-                        IntResAddr_t output_starting_addr = mem_map[ENC_LN1_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt);
-                        start_layernorm(FIRST_HALF, input_starting_addr, output_starting_addr, param_addr_map_bias[ENC_LAYERNORM_1_BETA], param_addr_map_bias[ENC_LAYERNORM_1_GAMMA],
+                ENC_LAYERNORM_1_1ST_HALF_STEP,
+                ENC_LAYERNORM_2_1ST_HALF_STEP: begin : layernorm_1st_half
+                    int num_rows;
+                    IntResAddr_t input_starting_addr, output_starting_addr;
+                    if (current_inf_step == ENC_LAYERNORM_3_1ST_HALF_STEP) num_rows = 1;
+                    else num_rows = NUM_PATCHES+1;
+
+                    if (~done & (delay_line_3b[1] | ln_io.done)) begin
+                        if (current_inf_step == ENC_LAYERNORM_1_1ST_HALF_STEP) begin
+                            input_starting_addr = mem_map[POS_EMB_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt);
+                            output_starting_addr = mem_map[ENC_LN1_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt);
+                        end else if (current_inf_step == ENC_LAYERNORM_2_1ST_HALF_STEP) begin
+                            input_starting_addr = mem_map[ENC_MHSA_OUT_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt);
+                            output_starting_addr = mem_map[ENC_LN2_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt);
+                        end else if (current_inf_step == ENC_LAYERNORM_3_1ST_HALF_STEP) begin
+                            input_starting_addr = mem_map[ENC_MLP_OUT_MEM];
+                            output_starting_addr = mem_map[ENC_LN3_MEM];
+                        end
+                        start_layernorm(FIRST_HALF, input_starting_addr, output_starting_addr, ParamAddr_t'(0), ParamAddr_t'(0),
                                         int_res_width[LN_INPUT_WIDTH], int_res_format[LN_INPUT_FORMAT], int_res_width[LN_OUTPUT_WIDTH],
                                         int_res_format[LN_OUTPUT_FORMAT], params_format[LN_PARAM_FORMAT]);
                     end
 
                     cnt_7b_i.inc <= ln_io.start;
-                    if (ln_io.done && (int'(cnt_7b_i.cnt) == NUM_PATCHES+1)) begin
+                    delay_line_3b[0] <= 1'b0;
+                    delay_line_3b[1] <= delay_line_3b[0];
+                    done <= (ln_io.start & (int'(cnt_7b_i.cnt) == num_rows-1)) | done;
+
+                    if (done & ln_io.done) begin
+                        done <= 1'b0;
                         cnt_7b_i.rst_n <= 1'b0;
-                        current_inf_step <= ENC_LAYERNORM_1_2ND_HALF_STEP;
+                        current_inf_step <= InferenceStep_t'(int'(current_inf_step) + 1);
+                        delay_line_3b[0] <= 1'b1;
                     end
                 end
-                ENC_LAYERNORM_1_2ND_HALF_STEP: begin
-                    if ((ln_io.done || (cnt_7b_i.cnt == 0 && ~ln_io.busy)) && ~ln_io.start && (int'(cnt_7b_i.cnt) != EMB_DEPTH)) begin
-                        IntResAddr_t input_starting_addr = mem_map[ENC_LN1_MEM] + IntResAddr_t'(cnt_7b_i.cnt);
-                        IntResAddr_t output_starting_addr = input_starting_addr;
-                        ParamAddr_t gamma_addr = param_addr_map_bias[ENC_LAYERNORM_1_GAMMA] + ParamAddr_t'(cnt_7b_i.cnt);
-                        ParamAddr_t beta_addr = param_addr_map_bias[ENC_LAYERNORM_1_BETA] + ParamAddr_t'(cnt_7b_i.cnt);
+                ENC_LAYERNORM_1_2ND_HALF_STEP,
+                ENC_LAYERNORM_2_2ND_HALF_STEP: begin : layernorm_2nd_half
+                    IntResAddr_t input_starting_addr, output_starting_addr;
+                    ParamAddr_t beta_addr, gamma_addr;
+
+                    delay_line_3b[0] <= 1'b0;
+                    delay_line_3b[1] <= delay_line_3b[0];
+
+                    if (~done & (delay_line_3b[1] | ln_io.done)) begin
+                        if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) begin
+                            input_starting_addr = mem_map[ENC_LN1_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt);
+                            beta_addr = param_addr_map_bias[ENC_LAYERNORM_1_BETA];
+                            gamma_addr = param_addr_map_bias[ENC_LAYERNORM_1_GAMMA];
+                        end else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) begin
+                            input_starting_addr = mem_map[ENC_LN2_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt);
+                            beta_addr = param_addr_map_bias[ENC_LAYERNORM_2_BETA];
+                            gamma_addr = param_addr_map_bias[ENC_LAYERNORM_2_GAMMA];
+                        end else if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) begin
+                            input_starting_addr = mem_map[ENC_LN3_MEM];
+                            beta_addr = param_addr_map_bias[ENC_LAYERNORM_3_BETA];
+                            gamma_addr = param_addr_map_bias[ENC_LAYERNORM_3_GAMMA];
+                        end
+                        output_starting_addr = input_starting_addr;
                         start_layernorm(SECOND_HALF, input_starting_addr, output_starting_addr, beta_addr, gamma_addr,
                                         int_res_width[LN_INPUT_WIDTH], int_res_format[LN_INPUT_FORMAT], int_res_width[LN_OUTPUT_WIDTH],
                                         int_res_format[LN_OUTPUT_FORMAT], params_format[LN_PARAM_FORMAT]);
                     end
 
                     cnt_7b_i.inc <= ln_io.start;
-                    if (ln_io.done && (int'(cnt_7b_i.cnt) == EMB_DEPTH)) begin
+                    done <= (ln_io.done & (int'(cnt_7b_i.cnt) == EMB_DEPTH-1)) | done;
+                    if (done & ln_io.done) begin
                         start_add(CompFx_t'(0), CompFx_t'(0));
                         cnt_7b_i.rst_n <= 1'b0;
-                        current_inf_step <= POS_EMB_COMPRESSION_STEP;
+                        current_inf_step <= InferenceStep_t'(int'(current_inf_step) + 1);;
                     end
                 end
-                POS_EMB_COMPRESSION_STEP: begin
+                POS_EMB_COMPRESSION_STEP: begin : pos_emb_compression
                     delay_line_3b[0] <= 1'b1;
                     delay_line_3b[1] <= int_res_read_i.en;
 
@@ -282,7 +323,7 @@ module cim_centralized #()(
                 end
                 ENC_MHSA_Q_STEP,
                 ENC_MHSA_K_STEP,
-                ENC_MHSA_V_STEP: begin
+                ENC_MHSA_V_STEP: begin : mhsa_qkv
                     /* cnt_7b_i holds current parameters row
                        cnt_9b_i holds current patch */
 
@@ -346,7 +387,7 @@ module cim_centralized #()(
                         current_inf_step <= InferenceStep_t'(int'(current_inf_step) + 1);
                     end
                 end
-                ENC_MHSA_QK_T_STEP: begin
+                ENC_MHSA_QK_T_STEP: begin : mhsa_qk_t
                     /* cnt_7b holds x
                     cnt_9b holds y
                     cnt_4b holds z
@@ -398,7 +439,7 @@ module cim_centralized #()(
                         write_int_res(int_res_write_addr, mult_io.out, int_res_width[QK_T_OUTPUT_WIDTH], int_res_format[QK_T_OUTPUT_FORMAT]);
                     end
                 end
-                ENC_MHSA_SOFTMAX_STEP: begin
+                ENC_MHSA_SOFTMAX_STEP: begin : softmax
                     // Variables
                     int num_rows;
                     if (current_inf_step == ENC_MHSA_SOFTMAX_STEP) num_rows = NUM_HEADS*(NUM_PATCHES+1);
@@ -428,7 +469,7 @@ module cim_centralized #()(
                         done <= 1'b0;
                     end
                 end
-                ENC_MHSA_MULT_V_STEP: begin
+                ENC_MHSA_MULT_V_STEP: begin : mult_v
                  /* cnt_7b holds x
                     cnt_9b holds y
                     cnt_4b holds z
@@ -476,7 +517,7 @@ module cim_centralized #()(
                         current_inf_step <= ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP;
                     end
                 end
-                ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP: begin
+                ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP: begin : post_mhsa_dense_and_input_sum
                     /*  cnt_7b_i holds x
                         cnt_9b_i holds y
 
@@ -523,9 +564,14 @@ module cim_centralized #()(
                             if (int'(cnt_9b_i.cnt) == input_height-1) begin
                                 cnt_9b_i.rst_n <= 1'b0;
                                 done <= 1'b1;
-                                current_inf_step <= InferenceStep_t'(int'(current_inf_step) + 1);
                             end else cnt_9b_i.inc <= 1'b1;
                         end else cnt_7b_i.inc <= 1'b1;
+                    end
+
+                    if (done & int_res_write_cim_i.en) begin
+                        done <= 1'b0;
+                        delay_line_3b[0] <= 'b1;
+                        current_inf_step <= InferenceStep_t'(int'(current_inf_step) + 1);
                     end
                 end
                 default: begin

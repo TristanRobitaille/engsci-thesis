@@ -16,8 +16,8 @@ module sqrt (
 );
 
     logic neg_rad;      // Negative radicand flag
-    logic [N_COMP-1:0] x, x_next; // Radicand copy
-    logic [N_COMP-1:0] q, q_next; // Intermediate root (quotient)
+    CompFx_t x, x_next; // Radicand copy
+    CompFx_t q, q_next; // Intermediate root (quotient)
     logic [N_COMP+1:0] acc, acc_next; // Accumulator (2 bits wider)
     logic [N_COMP+1:0] test_res;      // Sign test result (2 bits wider)
 
@@ -53,11 +53,19 @@ module sqrt (
             case (state)
                 IDLE: begin
                     io.done <= 0;
+`ifdef ALLOW_NEG_RAD_SQRT
+                    io.busy <= io.start;
+`else
                     io.busy <= (io.start & ~neg_rad);
+`endif
                     q <= 0;
                     count <= 0;
                     {acc, x} <= {{N_COMP{1'b0}}, io.in_1, 2'b0};
+`ifdef ALLOW_NEG_RAD_SQRT
+                    state <= (io.start) ? CALC : IDLE;
+`else
                     state <= (io.start & ~neg_rad) ? CALC : IDLE;
+`endif
                 end
                 CALC: begin
                     if (count == count_t'(CNT_THRESHOLD-1)) begin  // We're done
@@ -83,47 +91,4 @@ module sqrt (
     // synopsys translate_on
 endmodule
 
-
-//     logic [N_COMP-1:0] x, x_next;    // radicand copy
-//     logic [N_COMP-1:0] q, q_next;    // intermediate root (quotient)
-//     logic [N_COMP+1:0] ac, ac_next;  // accumulator (2 bits wider)
-//     logic [N_COMP+1:0] test_res;     // sign test result (2 bits wider)
-
-//     typedef logic [$clog2(N_COMP)-1:0] count_t;
-//     localparam ITER = (N_COMP + Q_COMP) >> 1;
-//     count_t i;            // iteration counter
-
-//     always_comb begin
-//         test_res = ac - {q, 2'b01};
-//         if (test_res[N_COMP+1] == 0) begin  // test_res ≥0? (check MSB)
-//             {ac_next, x_next} = {test_res[N_COMP-1:0], x, 2'b0};
-//             q_next = {q[N_COMP-2:0], 1'b1};
-//         end else begin
-//             {ac_next, x_next} = {ac[N_COMP-1:0], x, 2'b0};
-//             q_next = q << 1;
-//         end
-//     end
-
-//     always_ff @(posedge clk) begin
-//         if (io.start) begin
-//             io.busy <= 1;
-//             io.done <= 0;
-//             i <= 0;
-//             q <= 0;
-//             {ac, x} <= {{N_COMP{1'b0}}, io.in_1, 2'b0};
-//         end else if (io.busy) begin
-//             if (i == count_t'(ITER-1)) begin  // we're done
-//                 io.busy <= 0;
-//                 io.done <= 1;
-//                 io.out <= q_next;
-//             // rem <= ac_next[N_COMP+1:2];  // undo final shift
-//             end else begin  // next iteration
-//                 i <= i + 1;
-//                 x <= x_next;
-//                 ac <= ac_next;
-//                 q <= q_next;
-//             end
-//         end
-//     end
-// endmodule
 `endif

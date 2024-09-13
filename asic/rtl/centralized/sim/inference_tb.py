@@ -24,15 +24,25 @@ async def load_eeg(dut):
         dut.soc_ctrl_new_eeg_data.value = 0
         for _ in range(3): await RisingEdge(dut.clk)
 
+async def print_progress(dut):
+    current_step = 0
+    while True:
+        if const.InferenceStep(dut.current_inf_step.value) != current_step:
+            current_step = const.InferenceStep(dut.current_inf_step.value)
+            cocotb.log.info(f"Current step: {current_step}")
+        for _ in range(5000): await RisingEdge(dut.clk)
+
 # ----- TEST ----- #
 @cocotb.test()
 async def inference_tb(dut):
     cocotb.start_soon(Clock(dut.clk, 1/CLK_FREQ_MHZ, 'us').start())
-    
+
     # Reset
     dut.soc_ctrl_rst_n.value = 0
     await RisingEdge(dut.clk)
     dut.soc_ctrl_rst_n.value = 1
+
+    cocotb.start_soon(print_progress(dut))
 
     # Fill memory concurrently
     params_fill = cocotb.start_soon(utilities.fill_params_mem(dut))
