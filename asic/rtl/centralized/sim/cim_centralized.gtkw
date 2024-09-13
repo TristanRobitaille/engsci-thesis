@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Thu Sep 12 17:53:57 2024
+[*] Fri Sep 13 04:20:25 2024
 [*]
 [dumpfile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/sim/sim_build/dump.fst"
-[dumpfile_mtime] "Thu Sep 12 17:39:40 2024"
-[dumpfile_size] 136982238
+[dumpfile_mtime] "Fri Sep 13 04:10:30 2024"
+[dumpfile_size] 158620357
 [savefile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/sim/cim_centralized.gtkw"
-[timestart] 0
+[timestart] 37408401900
 [size] 3440 1387
 [pos] -1 -1
-*-32.952133 29420000000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+*-16.152134 37408610000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -52,8 +52,6 @@ clk
 cim_centralized_tb.soc_ctrl_i.new_sleep_epoch
 [color] 1
 cim_centralized_tb.soc_ctrl_new_sleep_epoch
-[color] 1
-cim_centralized_tb.cim_centralized.delay_line_2b[1:0]
 @22
 [color] 1
 cim_centralized_tb.cim_centralized.cnt_4b_i.cnt[3:0]
@@ -176,6 +174,8 @@ cim_centralized_tb.cim_centralized.int_res_write_i.data_width
 cim_centralized_tb.cim_centralized.mac.io.start
 [color] 3
 cim_centralized_tb.cim_centralized.mac.io.done
+[color] 3
+cim_centralized_tb.cim_centralized.mac.io.busy
 @100000028
 [color] 3
 cim_centralized_tb.cim_centralized.mac_io_extra.direction
@@ -186,6 +186,9 @@ cim_centralized_tb.cim_centralized.mac_io_extra.matrix_width[6:0]
 cim_centralized_tb.cim_centralized.mac.io_extra.start_addr_1[15:0]
 [color] 3
 cim_centralized_tb.cim_centralized.mac.io_extra.start_addr_2[15:0]
+@25
+[color] 3
+cim_centralized_tb.cim_centralized.mac.io_extra.bias_addr[14:0]
 @420
 [color] 3
 cim_centralized_tb.cim_centralized.mac.io.out[38:0]
@@ -273,12 +276,12 @@ cim_centralized_tb.cim_centralized.layernorm.io.start
 cim_centralized_tb.cim_centralized.layernorm.io.done
 @200
 -SOFTMAX
-@29
+@28
 [color] 1
 cim_centralized_tb.cim_centralized.softmax_io.start
 [color] 1
 cim_centralized_tb.cim_centralized.softmax_io.done
-@25
+@24
 [color] 1
 cim_centralized_tb.cim_centralized.softmax.io_extra.start_addr_1[15:0]
 [pattern_trace] 1

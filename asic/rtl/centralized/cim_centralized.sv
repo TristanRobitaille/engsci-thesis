@@ -87,7 +87,7 @@ module cim_centralized #()(
 
     // ----- GLOBAL SIGNALS ----- //
     logic rst_n, done;
-    logic [1:0] delay_line_2b;
+    logic [2:0] delay_line_3b;
     State_t cim_state;
     InferenceStep_t current_inf_step;
 
@@ -97,7 +97,7 @@ module cim_centralized #()(
     // ----- BYPASS ----- //
     CompFx_t adder_in_1_reg;
     always_comb begin : adder_bypass
-        if ((current_inf_step == POS_EMB_COMPRESSION_STEP) & delay_line_2b[0]) add_io_cim.in_1 = add_io.out;
+        if ((current_inf_step == POS_EMB_COMPRESSION_STEP) & delay_line_3b[0]) add_io_cim.in_1 = add_io.out;
         else add_io_cim.in_1 = adder_in_1_reg;
     end
 
@@ -109,16 +109,16 @@ module cim_centralized #()(
             unique case (cim_state)
                 IDLE_CIM: begin
                     current_inf_step <= PATCH_PROJ_STEP;
-                    delay_line_2b <= 'b0;
+                    delay_line_3b <= 'b0;
                     if (soc_ctrl_i.start_eeg_load) cim_state <= EEG_LOAD;
                     if (soc_ctrl_i.new_sleep_epoch) start_inference();
                 end
                 EEG_LOAD: begin
-                    delay_line_2b <= 'b0;
+                    delay_line_3b <= 'b0;
                     if (soc_ctrl_i.new_sleep_epoch) start_inference();
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) begin
+                    if (current_inf_step == ENC_LAYERNORM_2_1ST_HALF_STEP) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -154,10 +154,10 @@ module cim_centralized #()(
                     /* cnt_7b_i holds current parameters row
                        cnt_9b_i holds current patch */
 
-                    delay_line_2b[0] <= cnt_7b_i.inc | cnt_9b_i.inc;
-                    delay_line_2b[1] <= delay_line_2b[0];
+                    delay_line_3b[0] <= cnt_7b_i.inc | cnt_9b_i.inc;
+                    delay_line_3b[1] <= delay_line_3b[0];
 
-                    if (delay_line_2b[1]) begin
+                    if (delay_line_3b[1]) begin
                         IntResAddr_t patch_addr = mem_map[EEG_INPUT_MEM] + IntResAddr_t'(int'(cnt_9b_i.cnt) << $clog2(EMB_DEPTH));
                         ParamAddr_t param_addr  = param_addr_map[PATCH_PROJ_KERNEL_PARAMS] + ParamAddr_t'(int'(EMB_DEPTH*cnt_7b_i.cnt));
                         ParamAddr_t bias_addr   = param_addr_map_bias[PATCH_PROJ_BIAS] + ParamAddr_t'(cnt_7b_i.cnt);
@@ -181,10 +181,10 @@ module cim_centralized #()(
                 end
                 CLASS_TOKEN_CONCAT_STEP: begin
                     cnt_7b_i.inc <= 1'b1;
-                    delay_line_2b[0] <= cnt_7b_i.inc; // One cycle delay
-                    cnt_9b_i.inc <= delay_line_2b[0];
+                    delay_line_3b[0] <= cnt_7b_i.inc; // One cycle delay
+                    cnt_9b_i.inc <= delay_line_3b[0];
                     if (int'(cnt_9b_i.cnt) == EMB_DEPTH) begin
-                        delay_line_2b <= 'b0;
+                        delay_line_3b <= 'b0;
                         cnt_7b_i.rst_n <= 1'b0;
                         cnt_9b_i.rst_n <= 1'b0;
                         current_inf_step <= POS_EMB_STEP;
@@ -210,15 +210,15 @@ module cim_centralized #()(
                     if (cnt_7b_i.inc) read_int_res(int_res_addr_read, int_res_width[CLASS_EMB_TOKEN_WIDTH], int_res_format[CLASS_EMB_TOKEN_FORMAT]);
 
                     // Add
-                    if (delay_line_2b[1]) start_add(param_read_i.data, int_res_read_i.data);
+                    if (delay_line_3b[1]) start_add(param_read_i.data, int_res_read_i.data);
 
                     // Write
                     if (add_io_cim.done) write_int_res(int_res_addr_write, add_io_cim.out, int_res_width[POS_EMB_WIDTH], int_res_format[POS_EMB_FORMAT]);
 
                     // Counter control
                     cnt_7b_i.inc <= 1'b1;
-                    delay_line_2b[0] <= param_read_cim_i.en;
-                    delay_line_2b[1] <= delay_line_2b[0]; // One cycle delay
+                    delay_line_3b[0] <= param_read_cim_i.en;
+                    delay_line_3b[1] <= delay_line_3b[0]; // One cycle delay
                     if (int'(cnt_7b_i.cnt) == EMB_DEPTH-2) begin
                         cnt_7b_i.rst_n <= 1'b0;
                         cnt_9b_i.inc <= 1'b1;
@@ -227,7 +227,7 @@ module cim_centralized #()(
                     // Done
                     if (int_res_addr_write == IntResAddr_t'(int'(mem_map[POS_EMB_MEM]) + EMB_DEPTH*(NUM_PATCHES+1) - 1)) begin
                         current_inf_step <= ENC_LAYERNORM_1_1ST_HALF_STEP;
-                        delay_line_2b <= 'b0;
+                        delay_line_3b <= 'b0;
                         cnt_7b_i.rst_n <= 1'b0;
                         cnt_9b_i.rst_n <= 1'b0;
                     end
@@ -266,18 +266,18 @@ module cim_centralized #()(
                     end
                 end
                 POS_EMB_COMPRESSION_STEP: begin
-                    delay_line_2b[0] <= 1'b1;
-                    delay_line_2b[1] <= int_res_read_i.en;
+                    delay_line_3b[0] <= 1'b1;
+                    delay_line_3b[1] <= int_res_read_i.en;
 
-                    if (delay_line_2b[0]) read_int_res(IntResAddr_t'(add_io.out), int_res_width[LN_OUTPUT_WIDTH], int_res_format[LN_OUTPUT_FORMAT]);
-                    if (delay_line_2b[1]) write_int_res(IntResAddr_t'(add_io.out-2), int_res_read_i.data, int_res_width[POS_EMB_COMPRESSION_WIDTH], int_res_format[POS_EMB_COMPRESSION_FORMAT]); // TODO: Need to fine-tune format using fixed-point accuracy study
+                    if (delay_line_3b[0]) read_int_res(IntResAddr_t'(add_io.out), int_res_width[LN_OUTPUT_WIDTH], int_res_format[LN_OUTPUT_FORMAT]);
+                    if (delay_line_3b[1]) write_int_res(IntResAddr_t'(add_io.out-2), int_res_read_i.data, int_res_width[POS_EMB_COMPRESSION_WIDTH], int_res_format[POS_EMB_COMPRESSION_FORMAT]); // TODO: Need to fine-tune format using fixed-point accuracy study
 
                     // Update index control (just add ADD)
                     start_add(add_io.out, CompFx_t'(1));
 
                     if (int'(add_io.out) == EMB_DEPTH*(NUM_PATCHES+1)+1) begin
                         current_inf_step <= ENC_MHSA_Q_STEP;
-                        delay_line_2b <= {1'b1, 1'b0};
+                        delay_line_3b <= 3'b010;
                     end
                 end
                 ENC_MHSA_Q_STEP,
@@ -317,11 +317,11 @@ module cim_centralized #()(
                     end
 
                     // Execute
-                    if (delay_line_2b[1]) start_mac(data_row_addr, IntResAddr_t'(kernel_col_addr), bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, VectorLen_t'(EMB_DEPTH), VectorLen_t'(0), HORIZONTAL, input_format, input_width, input_params_format);
+                    if (delay_line_3b[1]) start_mac(data_row_addr, IntResAddr_t'(kernel_col_addr), bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, VectorLen_t'(EMB_DEPTH), VectorLen_t'(0), HORIZONTAL, input_format, input_width, input_params_format);
 
                     // Control
-                    delay_line_2b[0] <= cnt_7b_i.inc | cnt_9b_i.inc;
-                    delay_line_2b[1] <= delay_line_2b[0];
+                    delay_line_3b[0] <= cnt_7b_i.inc | cnt_9b_i.inc;
+                    delay_line_3b[1] <= delay_line_3b[0];
 
                     if (mac_io.done) begin
                         IntResAddr_t int_res_write_addr;
@@ -342,7 +342,7 @@ module cim_centralized #()(
 
                     if (done) begin
                         done <= 1'b0;
-                        delay_line_2b[1] <= 1'b1;
+                        delay_line_3b[1] <= 1'b1;
                         current_inf_step <= InferenceStep_t'(int'(current_inf_step) + 1);
                     end
                 end
@@ -357,11 +357,11 @@ module cim_centralized #()(
                     */
 
                     read_params(param_addr_map_bias[ENC_INV_SQRT_NUM_HEADS], params_format[ENC_INV_SQRT_NUM_HEADS_FORMAT]);
-                    delay_line_2b[0] <= mult_io_cim.start;
-                    delay_line_2b[1] <= 'b0;
+                    delay_line_3b[0] <= mult_io_cim.start;
+                    delay_line_3b[1] <= 'b0;
 
                     // Execute
-                    if ((delay_line_2b[1] | delay_line_2b[0]) & ~done) begin
+                    if ((delay_line_3b[1] | delay_line_3b[0]) & ~done) begin
                         IntResAddr_t Q_addr   = mem_map[ENC_Q_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_9b_i.cnt + NUM_HEADS*cnt_4b_i.cnt);
                         IntResAddr_t K_T_addr = mem_map[ENC_K_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt + NUM_HEADS*cnt_4b_i.cnt);
                         start_mac(Q_addr, K_T_addr, ParamAddr_t'(0), INTERMEDIATE_RES, NO_ACTIVATION, VectorLen_t'(NUM_HEADS), VectorLen_t'(0), HORIZONTAL, int_res_format[QK_T_OUTPUT_FORMAT], int_res_width[QK_T_OUTPUT_WIDTH], FxFormatParams_t'(0));
@@ -369,7 +369,7 @@ module cim_centralized #()(
 
                     if (mac_io.done) start_mult(mac_io.out, param_read_i.data); // Multiply by inverse of number of heads (read in previous step and remains on the params bus)
 
-                    if (delay_line_2b[0] & ~done) begin
+                    if (delay_line_3b[0] & ~done) begin
                         IntResAddr_t int_res_write_addr = mem_map[ENC_QK_T_MEM] + IntResAddr_t'(cnt_7b_i.cnt) + IntResAddr_t'((NUM_PATCHES+1)*cnt_9b_i.cnt) + IntResAddr_t'((NUM_PATCHES+1)*(NUM_PATCHES+1)*cnt_4b_i.cnt) - IntResAddr_t'(1); // -1 to account for the counter having been increment by one to start a new MAC
                         write_int_res(int_res_write_addr, mult_io.out, int_res_width[QK_T_OUTPUT_WIDTH], int_res_format[QK_T_OUTPUT_FORMAT]);
                     end
@@ -392,7 +392,7 @@ module cim_centralized #()(
                     if (done & mult_io.done) begin
                         IntResAddr_t int_res_write_addr = mem_map[ENC_QK_T_MEM] + IntResAddr_t'(NUM_PATCHES) + IntResAddr_t'((NUM_PATCHES+1)*60) + IntResAddr_t'((NUM_PATCHES+1)*(NUM_PATCHES+1)*(NUM_HEADS-1));
                         done <= 1'b0;
-                        delay_line_2b[0] <= 'b1;
+                        delay_line_3b[0] <= 'b1;
                         cnt_7b_i.rst_n <= 1'b0;
                         current_inf_step <= ENC_MHSA_SOFTMAX_STEP;
                         write_int_res(int_res_write_addr, mult_io.out, int_res_width[QK_T_OUTPUT_WIDTH], int_res_format[QK_T_OUTPUT_FORMAT]);
@@ -405,8 +405,8 @@ module cim_centralized #()(
                     else num_rows = 1;
 
                     // Execute
-                    delay_line_2b[0] <= 'b0;
-                    if ((softmax_io.done | delay_line_2b[0]) & ~done) begin
+                    delay_line_3b[0] <= 'b0;
+                    if ((softmax_io.done | delay_line_3b[0]) & ~done) begin
                         if (current_inf_step == ENC_MHSA_SOFTMAX_STEP) begin
                             IntResAddr_t addr = mem_map[ENC_QK_T_MEM] + IntResAddr_t'((NUM_PATCHES+1)*cnt_9b_i.cnt);
                             start_softmax(addr, VectorLen_t'(NUM_PATCHES+1), int_res_format[QK_T_OUTPUT_FORMAT], int_res_width[QK_T_OUTPUT_WIDTH], int_res_format[MHSA_SOFTMAX_OUTPUT_FORMAT], int_res_width[MHSA_SOFTMAX_OUTPUT_WIDTH]);
@@ -423,8 +423,8 @@ module cim_centralized #()(
 
                     // Exit control
                     if (done & softmax_io.done) begin
-                        current_inf_step <= InferenceStep_t'(int'(current_inf_step) + 1); 
-                        delay_line_2b[0] <= 'b1;
+                        current_inf_step <= InferenceStep_t'(int'(current_inf_step) + 1);
+                        delay_line_3b[0] <= 'b1;
                         done <= 1'b0;
                     end
                 end
@@ -439,15 +439,15 @@ module cim_centralized #()(
                     */
 
                     // Execute
-                    if (delay_line_2b[1]) begin
+                    if (delay_line_3b[1]) begin
                         IntResAddr_t QK_T_addr = mem_map[ENC_QK_T_MEM] + IntResAddr_t'((NUM_PATCHES+1)*cnt_9b_i.cnt) + IntResAddr_t'((NUM_PATCHES+1)*(NUM_PATCHES+1)*cnt_4b_i.cnt);
                         IntResAddr_t V_addr    = mem_map[ENC_V_MEM]    + IntResAddr_t'(cnt_7b_i.cnt) + IntResAddr_t'(NUM_HEADS*cnt_4b_i.cnt);
                         start_mac(QK_T_addr, V_addr, ParamAddr_t'(0), INTERMEDIATE_RES, NO_ACTIVATION, VectorLen_t'(NUM_PATCHES+1), VectorLen_t'(EMB_DEPTH), VERTICAL, int_res_format[MHSA_SOFTMAX_OUTPUT_FORMAT], int_res_width[MHSA_SOFTMAX_OUTPUT_WIDTH], FxFormatParams_t'(0));
                     end
 
                     // Control
-                    delay_line_2b[0] <= cnt_7b_i.inc | cnt_9b_i.inc | cnt_4b_i.inc;
-                    delay_line_2b[1] <= delay_line_2b[0];
+                    delay_line_3b[0] <= cnt_7b_i.inc | cnt_9b_i.inc | cnt_4b_i.inc;
+                    delay_line_3b[1] <= delay_line_3b[0];
 
                     // Control
                     if (mac_io.done) begin
@@ -471,9 +471,61 @@ module cim_centralized #()(
                         IntResAddr_t int_res_write_addr = mem_map[ENC_V_MULT_MEM] + IntResAddr_t'(EMB_DEPTH/NUM_HEADS-1) + IntResAddr_t'(EMB_DEPTH*NUM_PATCHES) + IntResAddr_t'((EMB_DEPTH/NUM_HEADS)*(NUM_HEADS-1));
                         write_int_res(int_res_write_addr, mac_io.out, int_res_width[MULT_V_OUTPUT_WIDTH], int_res_format[MULT_V_OUTPUT_FORMAT]);
                         done <= 1'b0;
-                        delay_line_2b[0] <= 'b1;
+                        delay_line_3b[0] <= 'b1;
                         cnt_7b_i.rst_n <= 1'b0;
                         current_inf_step <= ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP;
+                    end
+                end
+                ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP: begin
+                    /*  cnt_7b_i holds x
+                        cnt_9b_i holds y
+
+                    for y in 0...(NUM_PATCHES):
+                        for x 0...(EMB_DEPTH-1):
+                    */
+
+                    // Variables
+                    int input_height;
+                    if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) input_height = int'(NUM_PATCHES+1);
+                    else if (current_inf_step == MLP_DENSE_2_AND_SUM_STEP) input_height = 1;
+
+                    // Execute
+                    delay_line_3b[0] <= int_res_write_cim_i.en;
+                    if (delay_line_3b[0] & ~done) begin
+                        if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) begin
+                            IntResAddr_t input_addr = mem_map[ENC_V_MULT_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_9b_i.cnt);
+                            IntResAddr_t kernel_addr = param_addr_map[ENC_COMB_HEAD_PARAMS] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt);
+                            ParamAddr_t bias_addr = param_addr_map_bias[ENC_COMB_HEAD_BIAS] + ParamAddr_t'(cnt_7b_i.cnt);
+                            start_mac(input_addr, kernel_addr, bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, VectorLen_t'(EMB_DEPTH), VectorLen_t'(0), HORIZONTAL, int_res_format[MULT_V_OUTPUT_FORMAT], int_res_width[MULT_V_OUTPUT_WIDTH], params_format[POST_MHSA_FORMAT]);
+                        end else begin end // TODO: Fill this
+                    end
+
+                    if (mac_io.done) begin
+                        IntResAddr_t add_addr;
+                        if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) add_addr = mem_map[POS_EMB_MEM] + IntResAddr_t'(cnt_7b_i.cnt) + IntResAddr_t'(EMB_DEPTH*cnt_9b_i.cnt);
+                        else begin end // TODO: Fill this
+                        read_int_res(add_addr, int_res_width[POS_EMB_COMPRESSION_WIDTH], int_res_format[POS_EMB_COMPRESSION_FORMAT]);
+                    end
+
+                    delay_line_3b[1] <= int_res_read_cim_i.en;
+                    if (delay_line_3b[1]) start_add(mac_io.out, int_res_read_i.data);
+
+                    delay_line_3b[2] <= add_io_cim.start;
+                    if (delay_line_3b[2]) begin // TODO: Need to delay this by one cycle
+                        IntResAddr_t output_addr;
+                        if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) output_addr = mem_map[ENC_MHSA_OUT_MEM] + IntResAddr_t'(cnt_7b_i.cnt) + IntResAddr_t'(EMB_DEPTH*cnt_9b_i.cnt);
+                        else begin end // TODO: Fill this
+                        write_int_res(output_addr, add_io.out, int_res_width[MHSA_SUM_OUTPUT_WIDTH], int_res_format[MHSA_SUM_OUTPUT_FORMAT]);
+
+                        if (int'(cnt_7b_i.cnt) == EMB_DEPTH-1) begin
+                            cnt_7b_i.rst_n <= 1'b0;
+                            delay_line_3b[0] <= 1'b1;
+                            if (int'(cnt_9b_i.cnt) == input_height-1) begin
+                                cnt_9b_i.rst_n <= 1'b0;
+                                done <= 1'b1;
+                                current_inf_step <= InferenceStep_t'(int'(current_inf_step) + 1);
+                            end else cnt_9b_i.inc <= 1'b1;
+                        end else cnt_7b_i.inc <= 1'b1;
                     end
                 end
                 default: begin
@@ -695,7 +747,7 @@ module cim_centralized #()(
     endtask
 
     task automatic start_inference();
-        delay_line_2b[1] <= 1;
+        delay_line_3b[1] <= 1;
         cim_state <= INFERENCE_RUNNING;
     endtask
 

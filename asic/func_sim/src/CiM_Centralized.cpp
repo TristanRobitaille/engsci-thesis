@@ -153,7 +153,7 @@ void CiM_Centralized::load_params_from_h5(const string params_filepath) {
     layernorm_beta = file.getGroup("mlp_head_layerNorm").getGroup(transformer_name).getGroup("mlp_head_layerNorm").getDataSet("beta:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 2
     layernorm_gamma = file.getGroup("mlp_head_layerNorm").getGroup(transformer_name).getGroup("mlp_head_layerNorm").getDataSet("gamma:0").read<EmbDepthVect_t>(); // Encoder's LayerNorm 2
     for (int col=0; col<param_addr_map_bias[ENC_LAYERNORM_3_BETA_OFF].len; col++) {
-        param_write(layernorm_beta[col], param_addr_map_bias[ENC_LAYERNORM_3_BETA_OFF].addr + col);   
+        param_write(layernorm_beta[col], param_addr_map_bias[ENC_LAYERNORM_3_BETA_OFF].addr + col);
     }
     for (int col=0; col<param_addr_map_bias[ENC_LAYERNORM_3_GAMMA_OFF].len; col++) {
         param_write(layernorm_gamma[col], param_addr_map_bias[ENC_LAYERNORM_3_GAMMA_OFF].addr + col);
@@ -646,11 +646,8 @@ bool CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_base_file
 
             uint16_t input_height;
 
-            if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) {
-                input_height = NUM_PATCHES+1;
-            } else if (current_inf_step == MLP_DENSE_2_AND_SUM_STEP) {
-                input_height = 1; // We only compute the first row of the output
-            }
+            if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) { input_height = NUM_PATCHES+1; }
+            else if (current_inf_step == MLP_DENSE_2_AND_SUM_STEP) { input_height = 1; } // We only compute the first row of the output
 
             if (compute_done || (gen_cnt_7b.get_cnt() == 0 && gen_cnt_9b.get_cnt() == 0 && !compute_in_progress)) { // Start a new MAC
                 if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) {
@@ -686,7 +683,6 @@ bool CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_base_file
                         gen_cnt_7b.reset();
                         if (gen_cnt_9b.get_cnt() == input_height-1) {
                             gen_cnt_9b.reset();
-
                             if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) {
                                 current_inf_step = ENC_LAYERNORM_2_1ST_HALF_STEP;
                                 if (PRINT_INF_PROGRESS) { cout << "Finished encoder's MHSA dense and input step" << endl; }
