@@ -256,6 +256,7 @@ package Defines;
         MHSA_SOFTMAX_OUTPUT_WIDTH,
         MULT_V_OUTPUT_WIDTH,
         MHSA_SUM_OUTPUT_WIDTH,
+        MLP_DENSE_1_OUTPUT_WIDTH,
         NUM_INT_RES_WIDTHS
     } IntResWidth_t;
 
@@ -273,6 +274,7 @@ package Defines;
         MHSA_SOFTMAX_OUTPUT_FORMAT,
         MULT_V_OUTPUT_FORMAT,
         MHSA_SUM_OUTPUT_FORMAT,
+        MLP_DENSE_1_OUTPUT_FORMAT,
         NUM_INT_RES_FORMATS
     } IntResFormat_t;
 
@@ -284,6 +286,7 @@ package Defines;
         QKV_PARAMS_FORMAT,
         ENC_INV_SQRT_NUM_HEADS_FORMAT,
         POST_MHSA_FORMAT,
+        MLP_DENSE_1_PARAMS_FORMAT,
         NUM_PARAMS_FORMATS
     } ParamFormat_t;
 
@@ -300,7 +303,8 @@ package Defines;
         SINGLE_WIDTH, // QK_T_OUTPUT_WIDTH
         SINGLE_WIDTH, // MHSA_SOFTMAX_OUTPUT_WIDTH
         SINGLE_WIDTH, // MULT_V_OUTPUT_WIDTH
-        DOUBLE_WIDTH  // MHSA_SUM_OUTPUT_WIDTH
+        DOUBLE_WIDTH, // MHSA_SUM_OUTPUT_WIDTH
+        DOUBLE_WIDTH  // MLP_DENSE_1_OUTPUT_WIDTH
     };
 
     const FxFormatIntRes_t int_res_format [NUM_INT_RES_FORMATS] = '{
@@ -316,7 +320,8 @@ package Defines;
         INT_RES_SW_FX_6_X, // QK_T_OUTPUT_FORMAT
         INT_RES_SW_FX_2_X, // MHSA_SOFTMAX_OUTPUT_FORMAT
         INT_RES_SW_FX_4_X, // MULT_V_OUTPUT_FORMAT
-        INT_RES_DW_FX      // MHSA_SUM_OUTPUT_FORMAT
+        INT_RES_DW_FX,     // MHSA_SUM_OUTPUT_FORMAT
+        INT_RES_DW_FX      // MLP_DENSE_1_OUTPUT_FORMAT
     };
 
     const FxFormatParams_t params_format [NUM_PARAMS_FORMATS] = '{
@@ -326,7 +331,8 @@ package Defines;
         PARAMS_FX_3_X, // LN_PARAM_FORMAT
         PARAMS_FX_2_X, // QKV_PARAMS_FORMAT
         PARAMS_FX_4_X, // ENC_INV_SQRT_NUM_HEADS_FORMAT
-        PARAMS_FX_2_X  // POST_MHSA_FORMAT
+        PARAMS_FX_2_X, // POST_MHSA_FORMAT
+        PARAMS_FX_2_X  // MLP_DENSE_1_PARAMS_FORMAT
     };
 
 endpackage

@@ -99,7 +99,6 @@ module mac (
             state <= IDLE;
         end else begin
             set_default_values();
-
             unique case (state)
                 IDLE: begin
                     if (io.start) begin

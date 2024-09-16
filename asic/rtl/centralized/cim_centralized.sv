@@ -120,7 +120,7 @@ module cim_centralized #()(
                     if (soc_ctrl_i.new_sleep_epoch) start_inference();
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == MLP_DENSE_1_STEP) begin
+                    if (current_inf_step == MLP_DENSE_2_AND_SUM_STEP) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -235,7 +235,7 @@ module cim_centralized #()(
                         done <= 1'b0;
                     end
                 end
-                ENC_LAYERNORM_1_1ST_HALF_STEP,
+            ENC_LAYERNORM_1_1ST_HALF_STEP,
                 ENC_LAYERNORM_2_1ST_HALF_STEP: begin : layernorm_1st_half
                     int num_rows;
                     IntResAddr_t input_starting_addr, output_starting_addr;
@@ -303,7 +303,10 @@ module cim_centralized #()(
                     if (done & ln_io.done) begin
                         start_add(CompFx_t'(0), CompFx_t'(0));
                         cnt_7b_i.rst_n <= 1'b0;
-                        current_inf_step <= InferenceStep_t'(int'(current_inf_step) + 1);;
+                        delay_line_3b[2] <= 1'b1;
+                        current_inf_step <= InferenceStep_t'(int'(current_inf_step) + 1);
+                        done <= 1'b0;
+                        start_add(CompFx_t'(0), CompFx_t'(0));
                     end
                 end
                 POS_EMB_COMPRESSION_STEP: begin : pos_emb_compression
@@ -318,12 +321,13 @@ module cim_centralized #()(
 
                     if (int'(add_io.out) == EMB_DEPTH*(NUM_PATCHES+1)+1) begin
                         current_inf_step <= ENC_MHSA_Q_STEP;
-                        delay_line_3b <= 3'b010;
+                        delay_line_3b <= 3'b100;
                     end
                 end
                 ENC_MHSA_Q_STEP,
                 ENC_MHSA_K_STEP,
-                ENC_MHSA_V_STEP: begin : mhsa_qkv
+                ENC_MHSA_V_STEP,
+                MLP_DENSE_1_STEP: begin : mhsa_qkv
                     /* cnt_7b_i holds current parameters row
                        cnt_9b_i holds current patch */
 
@@ -334,7 +338,18 @@ module cim_centralized #()(
                     FxFormatIntRes_t input_format, output_format;
                     DataWidth_t input_width, output_width;
                     FxFormatParams_t input_params_format;
-                    if (1 == 0) begin
+                    if (current_inf_step == MLP_DENSE_1_STEP) begin
+                        kernel_width = MLP_DIM;
+                        input_height = NUM_PATCHES + 1;
+                        input_format = int_res_format[LN_OUTPUT_FORMAT];
+                        input_width = int_res_width[LN_OUTPUT_WIDTH];
+                        output_format = int_res_format[MLP_DENSE_1_OUTPUT_FORMAT];
+                        output_width = int_res_width[MLP_DENSE_1_OUTPUT_WIDTH];
+                        input_params_format = params_format[MLP_DENSE_1_PARAMS_FORMAT];
+                        kernel_col_addr = param_addr_map[ENC_MLP_DENSE_1_PARAMS] + ParamAddr_t'(EMB_DEPTH*cnt_9b_i.cnt);
+                        bias_addr = param_addr_map_bias[ENC_MLP_DENSE_1_BIAS] + ParamAddr_t'(cnt_9b_i.cnt);
+                        data_row_addr = mem_map[ENC_LN2_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt);
+                    end else if (1 == 0) begin
                         // TODO: Fill with correct values from other steps
                     end else begin
                         kernel_width = EMB_DEPTH;
@@ -358,23 +373,28 @@ module cim_centralized #()(
                     end
 
                     // Execute
-                    if (delay_line_3b[1]) start_mac(data_row_addr, IntResAddr_t'(kernel_col_addr), bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, VectorLen_t'(EMB_DEPTH), VectorLen_t'(0), HORIZONTAL, input_format, input_width, input_params_format);
-
-                    // Control
                     delay_line_3b[0] <= cnt_7b_i.inc | cnt_9b_i.inc;
-                    delay_line_3b[1] <= delay_line_3b[0];
+                    delay_line_3b[1] <= delay_line_3b[0] | delay_line_3b[2];
+                    delay_line_3b[2] <= 1'b0;
+                    if (delay_line_3b[1]) begin
+                        if (current_inf_step == MLP_DENSE_1_STEP || current_inf_step == MLP_HEAD_DENSE_1_STEP) start_mac(data_row_addr, IntResAddr_t'(kernel_col_addr), bias_addr, MODEL_PARAM, SWISH_ACTIVATION, VectorLen_t'(EMB_DEPTH), VectorLen_t'(0), HORIZONTAL, input_format, input_width, input_params_format);
+                        else if (current_inf_step == MLP_HEAD_DENSE_2_STEP) begin end // TODO
+                        else start_mac(data_row_addr, IntResAddr_t'(kernel_col_addr), bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, VectorLen_t'(EMB_DEPTH), VectorLen_t'(0), HORIZONTAL, input_format, input_width, input_params_format);
 
+                    end
+                    // Control
                     if (mac_io.done) begin
                         IntResAddr_t int_res_write_addr;
                         if (current_inf_step == ENC_MHSA_Q_STEP) int_res_write_addr = mem_map[ENC_Q_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt + int'(cnt_9b_i.cnt));
                         else if (current_inf_step == ENC_MHSA_K_STEP) int_res_write_addr = mem_map[ENC_K_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt + int'(cnt_9b_i.cnt));
                         else if (current_inf_step == ENC_MHSA_V_STEP) int_res_write_addr = mem_map[ENC_V_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt + int'(cnt_9b_i.cnt));
+                        else if (current_inf_step == MLP_DENSE_1_STEP) int_res_write_addr = mem_map[ENC_MLP_DENSE1_MEM] + IntResAddr_t'(MLP_DIM*cnt_7b_i.cnt + int'(cnt_9b_i.cnt));
                         write_int_res(int_res_write_addr, mac_io.out, output_width, output_format);
 
                         // Update index control
                         if (int'(cnt_7b_i.cnt) == input_height-1) begin
                             cnt_7b_i.rst_n <= 1'b0;
-                            if (int'(cnt_9b_i.cnt) == EMB_DEPTH-1) begin
+                            if (int'(cnt_9b_i.cnt) == kernel_width-1) begin
                                 cnt_9b_i.rst_n <= 1'b0;
                                 done <= 1'b1;
                             end else cnt_9b_i.inc <= 1'b1;
