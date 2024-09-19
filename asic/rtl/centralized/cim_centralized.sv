@@ -120,7 +120,7 @@ module cim_centralized #()(
                     if (soc_ctrl_i.new_sleep_epoch) start_inference();
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == ENC_LAYERNORM_3_1ST_HALF_STEP) begin
+                    if (current_inf_step == MLP_HEAD_DENSE_1_STEP) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -236,7 +236,8 @@ module cim_centralized #()(
                     end
                 end
                 ENC_LAYERNORM_1_1ST_HALF_STEP,
-                ENC_LAYERNORM_2_1ST_HALF_STEP: begin : layernorm_1st_half
+                ENC_LAYERNORM_2_1ST_HALF_STEP,
+                ENC_LAYERNORM_3_1ST_HALF_STEP: begin : layernorm_1st_half
                     int num_rows;
                     IntResAddr_t input_starting_addr, output_starting_addr;
                     if (current_inf_step == ENC_LAYERNORM_3_1ST_HALF_STEP) num_rows = 1;
@@ -271,7 +272,8 @@ module cim_centralized #()(
                     end
                 end
                 ENC_LAYERNORM_1_2ND_HALF_STEP,
-                ENC_LAYERNORM_2_2ND_HALF_STEP: begin : layernorm_2nd_half
+                ENC_LAYERNORM_2_2ND_HALF_STEP,
+                ENC_LAYERNORM_3_2ND_HALF_STEP: begin : layernorm_2nd_half
                     IntResAddr_t input_starting_addr, output_starting_addr;
                     ParamAddr_t beta_addr, gamma_addr;
 
@@ -280,17 +282,17 @@ module cim_centralized #()(
 
                     if (~done & (delay_line_3b[1] | ln_io.done)) begin
                         if (current_inf_step == ENC_LAYERNORM_1_2ND_HALF_STEP) begin
-                            input_starting_addr = mem_map[ENC_LN1_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt);
-                            beta_addr = param_addr_map_bias[ENC_LAYERNORM_1_BETA];
-                            gamma_addr = param_addr_map_bias[ENC_LAYERNORM_1_GAMMA];
+                            input_starting_addr = mem_map[ENC_LN1_MEM] + IntResAddr_t'(cnt_7b_i.cnt);
+                            beta_addr = param_addr_map_bias[ENC_LAYERNORM_1_BETA] + ParamAddr_t'(cnt_7b_i.cnt);
+                            gamma_addr = param_addr_map_bias[ENC_LAYERNORM_1_GAMMA] + ParamAddr_t'(cnt_7b_i.cnt);
                         end else if (current_inf_step == ENC_LAYERNORM_2_2ND_HALF_STEP) begin
-                            input_starting_addr = mem_map[ENC_LN2_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt);
-                            beta_addr = param_addr_map_bias[ENC_LAYERNORM_2_BETA];
-                            gamma_addr = param_addr_map_bias[ENC_LAYERNORM_2_GAMMA];
+                            input_starting_addr = mem_map[ENC_LN2_MEM] + IntResAddr_t'(cnt_7b_i.cnt);
+                            beta_addr = param_addr_map_bias[ENC_LAYERNORM_2_BETA] + ParamAddr_t'(cnt_7b_i.cnt);
+                            gamma_addr = param_addr_map_bias[ENC_LAYERNORM_2_GAMMA] + ParamAddr_t'(cnt_7b_i.cnt);
                         end else if (current_inf_step == ENC_LAYERNORM_3_2ND_HALF_STEP) begin
-                            input_starting_addr = mem_map[ENC_LN3_MEM];
-                            beta_addr = param_addr_map_bias[ENC_LAYERNORM_3_BETA];
-                            gamma_addr = param_addr_map_bias[ENC_LAYERNORM_3_GAMMA];
+                            input_starting_addr = mem_map[ENC_LN3_MEM] + IntResAddr_t'(cnt_7b_i.cnt);
+                            beta_addr = param_addr_map_bias[ENC_LAYERNORM_3_BETA] + ParamAddr_t'(cnt_7b_i.cnt);
+                            gamma_addr = param_addr_map_bias[ENC_LAYERNORM_3_GAMMA] + ParamAddr_t'(cnt_7b_i.cnt);
                         end
                         output_starting_addr = input_starting_addr;
                         start_layernorm(SECOND_HALF, input_starting_addr, output_starting_addr, beta_addr, gamma_addr,
