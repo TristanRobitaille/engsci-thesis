@@ -120,7 +120,7 @@ module cim_centralized #()(
                     if (soc_ctrl_i.new_sleep_epoch) start_inference();
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == MLP_DENSE_2_AND_SUM_STEP) begin
+                    if (current_inf_step == ENC_LAYERNORM_3_1ST_HALF_STEP) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -235,7 +235,7 @@ module cim_centralized #()(
                         done <= 1'b0;
                     end
                 end
-            ENC_LAYERNORM_1_1ST_HALF_STEP,
+                ENC_LAYERNORM_1_1ST_HALF_STEP,
                 ENC_LAYERNORM_2_1ST_HALF_STEP: begin : layernorm_1st_half
                     int num_rows;
                     IntResAddr_t input_starting_addr, output_starting_addr;
@@ -403,7 +403,7 @@ module cim_centralized #()(
 
                     if (done) begin
                         done <= 1'b0;
-                        delay_line_3b[1] <= 1'b1;
+                        delay_line_3b[0] <= 'b1;
                         current_inf_step <= InferenceStep_t'(int'(current_inf_step) + 1);
                     end
                 end
@@ -537,7 +537,8 @@ module cim_centralized #()(
                         current_inf_step <= ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP;
                     end
                 end
-                ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP: begin : post_mhsa_dense_and_input_sum
+                ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP,
+                MLP_DENSE_2_AND_SUM_STEP: begin : dense_and_input_sum
                     /*  cnt_7b_i holds x
                         cnt_9b_i holds y
 
@@ -557,15 +558,29 @@ module cim_centralized #()(
                             IntResAddr_t input_addr = mem_map[ENC_V_MULT_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_9b_i.cnt);
                             IntResAddr_t kernel_addr = param_addr_map[ENC_COMB_HEAD_PARAMS] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt);
                             ParamAddr_t bias_addr = param_addr_map_bias[ENC_COMB_HEAD_BIAS] + ParamAddr_t'(cnt_7b_i.cnt);
-                            start_mac(input_addr, kernel_addr, bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, VectorLen_t'(EMB_DEPTH), VectorLen_t'(0), HORIZONTAL, int_res_format[MULT_V_OUTPUT_FORMAT], int_res_width[MULT_V_OUTPUT_WIDTH], params_format[POST_MHSA_FORMAT]);
-                        end else begin end // TODO: Fill this
+                            start_mac(input_addr, kernel_addr, bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, VectorLen_t'(EMB_DEPTH), VectorLen_t'(0), HORIZONTAL, int_res_format[MULT_V_OUTPUT_FORMAT], int_res_width[MULT_V_OUTPUT_WIDTH], params_format[POST_MHSA_PARAM_FORMAT]);
+                        end else begin
+                            IntResAddr_t input_addr = mem_map[ENC_MLP_DENSE1_MEM];
+                            IntResAddr_t kernel_addr = param_addr_map[ENC_MLP_DENSE_2_PARAMS] + IntResAddr_t'(MLP_DIM*cnt_7b_i.cnt);
+                            ParamAddr_t bias_addr = param_addr_map_bias[ENC_MLP_DENSE_2_BIAS] + ParamAddr_t'(cnt_7b_i.cnt);
+                            start_mac(input_addr, kernel_addr, bias_addr, MODEL_PARAM, LINEAR_ACTIVATION, VectorLen_t'(MLP_DIM), VectorLen_t'(0), HORIZONTAL, int_res_format[MLP_DENSE_1_OUTPUT_FORMAT], int_res_width[MLP_DENSE_1_OUTPUT_WIDTH], params_format[MLP_DENSE_2_PARAMS_FORMAT]);
+                        end
                     end
 
                     if (mac_io.done) begin
                         IntResAddr_t add_addr;
-                        if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) add_addr = mem_map[POS_EMB_MEM] + IntResAddr_t'(cnt_7b_i.cnt) + IntResAddr_t'(EMB_DEPTH*cnt_9b_i.cnt);
-                        else begin end // TODO: Fill this
-                        read_int_res(add_addr, int_res_width[POS_EMB_COMPRESSION_WIDTH], int_res_format[POS_EMB_COMPRESSION_FORMAT]);
+                        DataWidth_t width;
+                        FxFormatIntRes_t format;
+                        if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) begin
+                            add_addr = mem_map[POS_EMB_MEM] + IntResAddr_t'(cnt_7b_i.cnt) + IntResAddr_t'(EMB_DEPTH*cnt_9b_i.cnt);
+                            width = int_res_width[POS_EMB_COMPRESSION_WIDTH];
+                            format = int_res_format[POS_EMB_COMPRESSION_FORMAT];
+                        end else begin 
+                            add_addr = mem_map[ENC_MHSA_OUT_MEM] + IntResAddr_t'(cnt_7b_i.cnt);
+                            width = int_res_width[MLP_DENSE_1_OUTPUT_WIDTH];
+                            format = int_res_format[MLP_DENSE_1_OUTPUT_FORMAT];
+                        end
+                        read_int_res(add_addr, width, format);
                     end
 
                     delay_line_3b[1] <= int_res_read_cim_i.en;
@@ -574,9 +589,18 @@ module cim_centralized #()(
                     delay_line_3b[2] <= add_io_cim.start;
                     if (delay_line_3b[2]) begin // TODO: Need to delay this by one cycle
                         IntResAddr_t output_addr;
-                        if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) output_addr = mem_map[ENC_MHSA_OUT_MEM] + IntResAddr_t'(cnt_7b_i.cnt) + IntResAddr_t'(EMB_DEPTH*cnt_9b_i.cnt);
-                        else begin end // TODO: Fill this
-                        write_int_res(output_addr, add_io.out, int_res_width[MHSA_SUM_OUTPUT_WIDTH], int_res_format[MHSA_SUM_OUTPUT_FORMAT]);
+                        DataWidth_t width;
+                        FxFormatIntRes_t format;
+                        if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) begin
+                            output_addr = mem_map[ENC_MHSA_OUT_MEM] + IntResAddr_t'(cnt_7b_i.cnt) + IntResAddr_t'(EMB_DEPTH*cnt_9b_i.cnt);
+                            width = int_res_width[MHSA_SUM_OUTPUT_WIDTH];
+                            format = int_res_format[MHSA_SUM_OUTPUT_FORMAT];
+                        end else begin
+                            output_addr = mem_map[ENC_MLP_OUT_MEM] + IntResAddr_t'(cnt_7b_i.cnt);
+                            width = int_res_width[MLP_DENSE_2_OUTPUT_WIDTH];
+                            format = int_res_format[MLP_DENSE_2_OUTPUT_FORMAT];
+                        end
+                        write_int_res(output_addr, add_io.out, width, format);
 
                         if (int'(cnt_7b_i.cnt) == EMB_DEPTH-1) begin
                             cnt_7b_i.rst_n <= 1'b0;

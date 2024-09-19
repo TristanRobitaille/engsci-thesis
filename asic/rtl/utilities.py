@@ -145,7 +145,7 @@ def random_input(min, max):
 
 def params(param_name:str, params_file:h5py.File):
     if (param_name == "patch_proj_kernel"):                 return params_file["patch_projection_dense"]["vision_transformer"]["patch_projection_dense"]["kernel:0"] # Patch projection kernel
-    elif (param_name == "pos_emb"):                         return params_file["top_level_model_weights"]["pos_emb:0"] # Positional embedding
+    elif (param_name == "pos_emb"):                         return params_file["top_level_model_weights"]["pos_emb:0"][0] # Positional embedding
     elif (param_name == "enc_Q_dense_kernel"):              return params_file["Encoder_1"]["mhsa_query_dense"]["kernel:0"] # Encoder Q dense kernel
     elif (param_name == "enc_K_dense_kernel"):              return params_file["Encoder_1"]["mhsa_key_dense"]["kernel:0"] # Encoder K dense kernel
     elif (param_name == "enc_V_dense_kernel"):              return params_file["Encoder_1"]["mhsa_value_dense"]["kernel:0"] # Encoder V dense kernel
@@ -180,10 +180,14 @@ def twos_complement_to_float(input_data, bit_width:int=const.N_COMP):
     return float(integer_value / 2**const.Q_COMP)
 
 async def write_one_word_cent(dut, addr:int, data:int, device:str, data_format, data_width:const.DataWidth) -> None:
-    if device == "params": data_fx = FXnum(data, FXfamily(const.N_STO_PARAMS-data_format.value, data_format.value))
-    elif device == "int_res": 
-        if data_width == const.DataWidth.SINGLE_WIDTH: 
-            data_fx = FXnum(data, FXfamily(const.N_STO_INT_RES-data_format.value, data_format.value))
+    if device == "params":
+        try:
+            data_fx = FXnum(data, FXfamily(const.N_STO_PARAMS-data_format.value, data_format.value))
+        except:
+            if data < 0: data_fx = FXnum(-(2**(data_format.value-1)) + 1/2**(const.N_STO_PARAMS-data_format.value), FXfamily(const.N_STO_PARAMS-data_format.value, data_format.value))
+            elif data > 0: data_fx = FXnum(2**(data_format.value-1) - 1/2**(const.N_STO_PARAMS-data_format.value), FXfamily(const.N_STO_PARAMS-data_format.value, data_format.value))
+    elif device == "int_res":
+        if data_width == const.DataWidth.SINGLE_WIDTH: data_fx = FXnum(data, FXfamily(const.N_STO_INT_RES-data_format.value, data_format.value))
         elif data_width == const.DataWidth.DOUBLE_WIDTH: data_fx = FXnum(data, FXfamily(2*const.N_STO_INT_RES-data_format.value, data_format.value))
     
     data_fx = FXnum(data_fx, const.num_Q_comp)
