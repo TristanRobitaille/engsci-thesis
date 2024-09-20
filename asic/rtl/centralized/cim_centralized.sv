@@ -120,7 +120,7 @@ module cim_centralized #()(
                     if (soc_ctrl_i.new_sleep_epoch) start_inference();
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == MLP_HEAD_DENSE_1_STEP) begin
+                    if (current_inf_step == MLP_HEAD_DENSE_2_STEP) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -329,7 +329,8 @@ module cim_centralized #()(
                 ENC_MHSA_Q_STEP,
                 ENC_MHSA_K_STEP,
                 ENC_MHSA_V_STEP,
-                MLP_DENSE_1_STEP: begin : mhsa_qkv
+                MLP_DENSE_1_STEP,
+                MLP_HEAD_DENSE_1_STEP: begin : mhsa_qkv
                     /* cnt_7b_i holds current parameters row
                        cnt_9b_i holds current patch */
 
@@ -351,8 +352,17 @@ module cim_centralized #()(
                         kernel_col_addr = param_addr_map[ENC_MLP_DENSE_1_PARAMS] + ParamAddr_t'(EMB_DEPTH*cnt_9b_i.cnt);
                         bias_addr = param_addr_map_bias[ENC_MLP_DENSE_1_BIAS] + ParamAddr_t'(cnt_9b_i.cnt);
                         data_row_addr = mem_map[ENC_LN2_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt);
-                    end else if (1 == 0) begin
-                        // TODO: Fill with correct values from other steps
+                    end else if (current_inf_step == MLP_HEAD_DENSE_1_STEP) begin
+                        kernel_width = MLP_DIM;
+                        input_height = 1;
+                        input_format = int_res_format[LN_OUTPUT_FORMAT];
+                        input_width = int_res_width[LN_OUTPUT_WIDTH];
+                        output_format = int_res_format[MLP_HEAD_DENSE_1_OUTPUT_FORMAT];
+                        output_width = int_res_width[MLP_HEAD_DENSE_1_OUTPUT_WIDTH];
+                        input_params_format = params_format[MLP_HEAD_DENSE_1_PARAMS_FORMAT];
+                        kernel_col_addr = param_addr_map[MLP_HEAD_DENSE_1_PARAMS] + ParamAddr_t'(EMB_DEPTH*cnt_9b_i.cnt);
+                        bias_addr = param_addr_map_bias[MLP_HEAD_DENSE_1_BIAS] + ParamAddr_t'(cnt_9b_i.cnt);
+                        data_row_addr = mem_map[ENC_LN3_MEM];
                     end else begin
                         kernel_width = EMB_DEPTH;
                         input_height = NUM_PATCHES + 1;
@@ -391,6 +401,7 @@ module cim_centralized #()(
                         else if (current_inf_step == ENC_MHSA_K_STEP) int_res_write_addr = mem_map[ENC_K_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt + int'(cnt_9b_i.cnt));
                         else if (current_inf_step == ENC_MHSA_V_STEP) int_res_write_addr = mem_map[ENC_V_MEM] + IntResAddr_t'(EMB_DEPTH*cnt_7b_i.cnt + int'(cnt_9b_i.cnt));
                         else if (current_inf_step == MLP_DENSE_1_STEP) int_res_write_addr = mem_map[ENC_MLP_DENSE1_MEM] + IntResAddr_t'(MLP_DIM*cnt_7b_i.cnt + int'(cnt_9b_i.cnt));
+                        else if (current_inf_step == MLP_HEAD_DENSE_1_STEP) int_res_write_addr = mem_map[MLP_HEAD_DENSE_1_OUT_MEM] + IntResAddr_t'(cnt_9b_i.cnt);
                         write_int_res(int_res_write_addr, mac_io.out, output_width, output_format);
 
                         // Update index control
