@@ -120,7 +120,7 @@ module cim_centralized #()(
                     if (soc_ctrl_i.new_sleep_epoch) start_inference();
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == MLP_HEAD_SOFTMAX_STEP) begin
+                    if (current_inf_step == SOFTMAX_DIVIDE_STEP) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -485,7 +485,8 @@ module cim_centralized #()(
                         write_int_res(int_res_write_addr, mult_io.out, int_res_width[QK_T_OUTPUT_WIDTH], int_res_format[QK_T_OUTPUT_FORMAT]);
                     end
                 end
-                ENC_MHSA_SOFTMAX_STEP: begin : softmax
+                ENC_MHSA_SOFTMAX_STEP,
+                MLP_HEAD_SOFTMAX_STEP: begin : softmax
                     // Variables
                     int num_rows;
                     if (current_inf_step == ENC_MHSA_SOFTMAX_STEP) num_rows = NUM_HEADS*(NUM_PATCHES+1);
@@ -497,7 +498,7 @@ module cim_centralized #()(
                         if (current_inf_step == ENC_MHSA_SOFTMAX_STEP) begin
                             IntResAddr_t addr = mem_map[ENC_QK_T_MEM] + IntResAddr_t'((NUM_PATCHES+1)*cnt_9b_i.cnt);
                             start_softmax(addr, VectorLen_t'(NUM_PATCHES+1), int_res_format[QK_T_OUTPUT_FORMAT], int_res_width[QK_T_OUTPUT_WIDTH], int_res_format[MHSA_SOFTMAX_OUTPUT_FORMAT], int_res_width[MHSA_SOFTMAX_OUTPUT_WIDTH]);
-                        end else begin end// TODO: Start softmax
+                        end else start_softmax(mem_map[MLP_HEAD_DENSE_2_OUT_MEM], VectorLen_t'(NUM_SLEEP_STAGES), int_res_format[MLP_HEAD_DENSE_2_OUTPUT_FORMAT], int_res_width[MLP_HEAD_DENSE_2_OUTPUT_WIDTH], int_res_format[MLP_SOFTMAX_OUTPUT_FORMAT], int_res_width[MLP_SOFTMAX_OUTPUT_WIDTH]);
                     end
 
                     // Control
