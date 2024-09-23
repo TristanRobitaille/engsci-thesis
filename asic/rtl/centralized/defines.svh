@@ -2,7 +2,7 @@
 `define _defines_svh_
 
 package Defines;
-    /* ----- Constants ----- */
+    /* ----- Memory constants ----- */
     localparam int CIM_PARAMS_BANK_SIZE_NUM_WORD    = 15872; // Need 2 banks
     localparam int CIM_INT_RES_BANK_SIZE_NUM_WORD   = 14336; // Need 4 banks
     localparam int CIM_PARAMS_NUM_BANKS             = 2;
@@ -13,16 +13,6 @@ package Defines;
     localparam int N_COMP                           = 39;
     localparam int Q_COMP                           = 21;
     localparam int ADC_BITWIDTH                     = 16; // Assume that the ADC feeding EEG data is 16b unsigned integer
-
-    localparam int EMB_DEPTH = 64;
-    localparam int NUM_PATCHES = 60;
-    localparam int PATCH_LEN = 64;
-    localparam int MLP_DIM = 32;
-    localparam int NUM_HEADS = 8;
-    localparam int NUM_SLEEP_STAGES = 5;
-    localparam int NUM_SAMPLES_OUT_AVG = 3;
-
-    localparam int VECTOR_MAX_LEN = 64;
 
     /* ----- Types ----- */
     typedef logic [$clog2(CIM_INT_RES_NUM_BANKS*CIM_PARAMS_BANK_SIZE_NUM_WORD)-1:0] IntResAddr_t;
@@ -36,6 +26,18 @@ package Defines;
     typedef logic signed [N_COMP-1:0]                                               CompFx_t;
     typedef logic signed                                                            FxFormat_Unused_t; // Needed for MemoryInterface to instantiate correctly for banks
     typedef logic [ADC_BITWIDTH-1:0]                                                AdcData_t;
+
+    /* ----- Transformer constants ----- */
+    localparam int EMB_DEPTH = 64;
+    localparam int NUM_PATCHES = 60;
+    localparam int PATCH_LEN = 64;
+    localparam int MLP_DIM = 32;
+    localparam int NUM_HEADS = 8;
+    localparam int NUM_SLEEP_STAGES = 5;
+    localparam CompFx_t NUM_SLEEP_STAGES_INVERSE_COMP_FX = CompFx_t'($rtoi(0.2 * (1 << Q_COMP)));
+    localparam int NUM_SAMPLES_OUT_AVG = 3;
+
+    localparam int VECTOR_MAX_LEN = 64;
 
     /* ----- Enum ----- */
     typedef enum logic {
@@ -261,6 +263,7 @@ package Defines;
         MLP_HEAD_DENSE_1_OUTPUT_WIDTH,
         MLP_HEAD_DENSE_2_OUTPUT_WIDTH,
         MLP_SOFTMAX_OUTPUT_WIDTH,
+        SOFTMAX_AVG_SUM_INV_WIDTH,
         NUM_INT_RES_WIDTHS
     } IntResWidth_t;
 
@@ -283,6 +286,7 @@ package Defines;
         MLP_HEAD_DENSE_1_OUTPUT_FORMAT,
         MLP_HEAD_DENSE_2_OUTPUT_FORMAT,
         MLP_SOFTMAX_OUTPUT_FORMAT,
+        SOFTMAX_AVG_SUM_INV_FORMAT,
         NUM_INT_RES_FORMATS
     } IntResFormat_t;
 
@@ -319,7 +323,8 @@ package Defines;
         DOUBLE_WIDTH, // MLP_DENSE_2_OUTPUT_WIDTH
         DOUBLE_WIDTH, // MLP_HEAD_DENSE_1_OUTPUT_WIDTH
         DOUBLE_WIDTH, // MLP_HEAD_DENSE_2_OUTPUT_WIDTH
-        SINGLE_WIDTH  // MLP_SOFTMAX_OUTPUT_WIDTH
+        DOUBLE_WIDTH, // MLP_SOFTMAX_OUTPUT_WIDTH
+        DOUBLE_WIDTH  // SOFTMAX_AVG_SUM_INV_WIDTH
     };
 
     const FxFormatIntRes_t int_res_format [NUM_INT_RES_FORMATS] = '{
@@ -340,7 +345,8 @@ package Defines;
         INT_RES_DW_FX,     // MLP_DENSE_2_OUTPUT_FORMAT
         INT_RES_DW_FX,     // MLP_HEAD_DENSE_1_OUTPUT_FORMAT
         INT_RES_DW_FX,     // MLP_HEAD_DENSE_2_OUTPUT_FORMAT
-        INT_RES_DW_FX      // MLP_SOFTMAX_OUTPUT_FORMAT
+        INT_RES_DW_FX,     // MLP_SOFTMAX_OUTPUT_FORMAT
+        INT_RES_DW_FX      // SOFTMAX_AVG_SUM_INV_FORMAT
     };
 
     const FxFormatParams_t params_format [NUM_PARAMS_FORMATS] = '{

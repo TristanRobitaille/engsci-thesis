@@ -120,7 +120,7 @@ module cim_centralized #()(
                     if (soc_ctrl_i.new_sleep_epoch) start_inference();
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == SOFTMAX_DIVIDE_STEP) begin
+                    if (current_inf_step == SOFTMAX_AVERAGING_STEP) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -514,6 +514,7 @@ module cim_centralized #()(
                         current_inf_step <= InferenceStep_t'(int'(current_inf_step) + 1);
                         delay_line_3b[0] <= 'b1;
                         done <= 1'b0;
+                        if (current_inf_step == MLP_HEAD_SOFTMAX_STEP) read_int_res(mem_map[MLP_HEAD_DENSE_2_OUT_MEM], int_res_width[MLP_SOFTMAX_OUTPUT_WIDTH], int_res_format[MLP_SOFTMAX_OUTPUT_FORMAT]);
                     end
                 end
                 ENC_MHSA_MULT_V_STEP: begin : mult_v
@@ -644,6 +645,31 @@ module cim_centralized #()(
                         delay_line_3b[0] <= 'b1;
                         current_inf_step <= InferenceStep_t'(int'(current_inf_step) + 1);
                     end
+                end
+                SOFTMAX_DIVIDE_STEP: begin : softmax_divide
+                    /* cnt_4b_i internal step
+                       cnt_7b_i holds sleep stage
+                    */
+
+                    if (cnt_4b_i.cnt == 0) begin
+                        start_mult(int_res_read_i.data, NUM_SLEEP_STAGES_INVERSE_COMP_FX); // Divide by NUM_SLEEP_STAGES
+                    end else if (cnt_4b_i.cnt == 2) begin
+                        write_int_res(mem_map[MLP_HEAD_DENSE_2_OUT_MEM] + IntResAddr_t'(cnt_7b_i.cnt), mult_io.out, int_res_width[SOFTMAX_AVG_SUM_INV_WIDTH], int_res_format[SOFTMAX_AVG_SUM_INV_FORMAT]);
+                    end else if (cnt_4b_i.cnt == 3) begin
+                        write_int_res(mem_map[SOFTMAX_AVG_SUM_MEM] + IntResAddr_t'(cnt_7b_i.cnt), mult_io.out, int_res_width[SOFTMAX_AVG_SUM_INV_WIDTH], int_res_format[SOFTMAX_AVG_SUM_INV_FORMAT]);
+                    end
+
+                    // Execute
+                    if (cnt_4b_i.cnt == 4) begin
+                        cnt_4b_i.rst_n <= 1'b0;
+                        read_int_res(mem_map[MLP_HEAD_DENSE_2_OUT_MEM] + IntResAddr_t'(cnt_7b_i.cnt), int_res_width[MLP_SOFTMAX_OUTPUT_WIDTH], int_res_format[MLP_SOFTMAX_OUTPUT_FORMAT]);
+                        if (int'(cnt_7b_i.cnt) == NUM_SLEEP_STAGES) begin
+                            cnt_7b_i.rst_n <= 1'b0;
+                            current_inf_step <= SOFTMAX_AVERAGING_STEP;
+                        end
+                    end else cnt_4b_i.inc <= 1'b1;
+
+                    if (cnt_4b_i.cnt == 2) cnt_7b_i.inc <= 1'b1;
                 end
                 default: begin
                 end

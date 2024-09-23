@@ -19,7 +19,6 @@ module exp (
 );
 
 function automatic CompFx_t real_to_fixed(input real decimal_float);
-    real scale_factor;
     CompFx_t fixed_value;
     begin
         // Convert the real number to fixed-point by scaling and rounding

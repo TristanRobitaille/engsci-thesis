@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Thu Sep 19 12:01:56 2024
+[*] Mon Sep 23 15:28:07 2024
 [*]
 [dumpfile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/sim/sim_build/dump.fst"
-[dumpfile_mtime] "Thu Sep 19 12:00:18 2024"
-[dumpfile_size] 134228514
+[dumpfile_mtime] "Mon Sep 23 15:25:47 2024"
+[dumpfile_size] 33772033
 [savefile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/sim/cim_centralized.gtkw"
-[timestart] 0
+[timestart] 45632630600
 [size] 1512 916
 [pos] -1 -1
-*-30.852135 3838820000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+*-15.552135 45632680000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -38,11 +38,11 @@
 [markername] ZZ
 [treeopen] cim_centralized_tb.
 [treeopen] cim_centralized_tb.cim_centralized.
-[treeopen] cim_centralized_tb.cim_centralized.layernorm.
+[treeopen] cim_centralized_tb.cim_centralized.mult.
 [sst_width] 253
 [signals_width] 324
 [sst_expanded] 1
-[sst_vpaned_height] 624
+[sst_vpaned_height] 500
 @28
 clk
 @200
@@ -193,6 +193,14 @@ cim_centralized_tb.cim_centralized.mac.io.done
 [color] 3
 cim_centralized_tb.cim_centralized.mac.io.out[38:0]
 @200
+-MULT
+@28
+cim_centralized_tb.cim_centralized.mult.io.start
+@421
+cim_centralized_tb.cim_centralized.mult.io.in_1[38:0]
+cim_centralized_tb.cim_centralized.mult.io.in_2[38:0]
+cim_centralized_tb.cim_centralized.mult.io.out[38:0]
+@200
 -ADD
 @28
 cim_centralized_tb.cim_centralized.add.io.start
@@ -274,11 +282,6 @@ cim_centralized_tb.cim_centralized.div.io.out[38:0]
 @28
 cim_centralized_tb.cim_centralized.layernorm.io.start
 cim_centralized_tb.cim_centralized.layernorm.io.done
-@25
-cim_centralized_tb.cim_centralized.ln_io_extra.start_addr_1[15:0]
-cim_centralized_tb.cim_centralized.ln_io_extra.start_addr_2[15:0]
-cim_centralized_tb.cim_centralized.ln_io_extra.start_addr_3[15:0]
-cim_centralized_tb.cim_centralized.ln_io_extra.start_addr_4[15:0]
 @100000028
 cim_centralized_tb.cim_centralized.layernorm.state[3:0]
 @200

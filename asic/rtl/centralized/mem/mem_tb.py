@@ -11,7 +11,7 @@ import Constants as const
 # ----- CONSTANTS ----- #
 CLK_FREQ_MHZ = 100
 NUM_WRITES = 1000
-TOLERANCE = 0.03
+TOLERANCE = 0.01
 
 # ----- FUNCTIONS ----- #
 async def test_params(dut):
@@ -19,11 +19,11 @@ async def test_params(dut):
         data_format = random.choice(list(const.FxFormatParams))
         addr = random.randint(0, const.CIM_PARAMS_NUM_BANKS * const.CIM_PARAMS_BANK_SIZE_NUM_WORD-1)
         data_in = random.uniform(-2**(data_format.value-1)+1, 2**(data_format.value-1)-1)
-        await utilities.write_one_word_cent(dut, addr=addr, data=data_in, device="params", data_format=data_format)
+        await utilities.write_one_word_cent(dut, addr=addr, data=data_in, device="params", data_format=data_format, data_width=const.DataWidth.SINGLE_WIDTH)
 
         # Check that the data was written correctly
         expected = float(FXnum(data_in, FXfamily(const.N_STO_PARAMS-data_format.value, data_format.value)))
-        received = await utilities.read_one_word_cent(dut, addr=addr, device="params", data_format=data_format)
+        received = await utilities.read_one_word_cent(dut, addr=addr, device="params", data_format=data_format, data_width=const.DataWidth.SINGLE_WIDTH)
         assert received == pytest.approx(expected, rel=TOLERANCE, abs=0.01), f"Expected: {expected}, received: {received}"
 
 async def test_int_res(dut):

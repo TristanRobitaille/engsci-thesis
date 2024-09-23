@@ -709,9 +709,9 @@ bool CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_base_file
             } else if (gen_cnt_4b.get_cnt() == 1) {
                 computation_result *= static_cast<float> ( comp_fx_t { 1.0f / NUM_SAMPLES_OUT_AVG } ); // Multiply by 1/NUM_SAMPLES_OUT_AVG saves cycles on the ASIC vs dividing by NUM_SAMPLES_OUT_AVG
             } else if (gen_cnt_4b.get_cnt() == 2) {
-                int_res_write(computation_result, mem_map.at(MLP_HEAD_DENSE_2_OUT_MEM) + gen_cnt_7b.get_cnt(), SINGLE_WIDTH);
+                int_res_write(computation_result, mem_map.at(MLP_HEAD_DENSE_2_OUT_MEM) + gen_cnt_7b.get_cnt(), DOUBLE_WIDTH);
             } else if (gen_cnt_4b.get_cnt() == 3) {
-                int_res_write(computation_result, mem_map.at(SOFTMAX_AVG_SUM_MEM) + gen_cnt_7b.get_cnt(), SINGLE_WIDTH);
+                int_res_write(computation_result, mem_map.at(SOFTMAX_AVG_SUM_MEM) + gen_cnt_7b.get_cnt(), DOUBLE_WIDTH);
             }
 
             if (gen_cnt_4b.get_cnt() == 3) {
@@ -735,11 +735,11 @@ bool CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_base_file
             uint32_t addr_softmax_divide_sum = mem_map.at(SOFTMAX_AVG_SUM_MEM) + gen_cnt_7b.get_cnt();
 
             if (gen_cnt_4b.get_cnt() == 0) {
-                computation_result = int_res_read(addr_prev_softmax); // Prev softmax
+                computation_result = static_cast<float> ( sw_fx_1_x_t { int_res_read(addr_prev_softmax) } ); // Prev softmax
             } else if (gen_cnt_4b.get_cnt() == 1) {
-                computation_result += int_res_read(addr_softmax_divide_sum); // Current accumulator
+                computation_result += static_cast<float> ( sw_fx_1_x_t { int_res_read(addr_softmax_divide_sum) } ); // Current accumulator
             } else if (gen_cnt_4b.get_cnt() == 2) {
-                int_res_write(computation_result, addr_softmax_divide_sum, SINGLE_WIDTH); // Update accumulator
+                int_res_write(computation_result, addr_softmax_divide_sum, DOUBLE_WIDTH); // Update accumulator
             }
 
             if (gen_cnt_4b.get_cnt() == 2) {

@@ -71,6 +71,7 @@ module int_res_mem (
     mem_model #(.DEPTH(CIM_INT_RES_BANK_SIZE_NUM_WORD)) int_res_2 (.clk, .rst_n, .read(int_res_2_read), .write(int_res_2_write));
     mem_model #(.DEPTH(CIM_INT_RES_BANK_SIZE_NUM_WORD)) int_res_3 (.clk, .rst_n, .read(int_res_3_read), .write(int_res_3_write));
 
+    logic read_en_prev;
     logic [1:0] bank_read_current, bank_read_prev;
     logic [1:0] bank_write_current;
     IntResBankAddr_t read_base_addr, write_base_addr;
@@ -148,17 +149,19 @@ module int_res_mem (
         end
     end
 
-    always_comb begin : int_res_mem_ctrl_read_sel
-        if (read_data_width_prev == SINGLE_WIDTH) begin
-            if (bank_read_prev == 0)        read.data = cast_to_CompFx_t({IntResSingle_t'(0), IntResSingle_t'(int_res_0_read.data)}, read.format);
-            else if (bank_read_prev == 1)   read.data = cast_to_CompFx_t({IntResSingle_t'(0), IntResSingle_t'(int_res_1_read.data)}, read.format);
-            else if (bank_read_prev == 2)   read.data = cast_to_CompFx_t({IntResSingle_t'(0), IntResSingle_t'(int_res_2_read.data)}, read.format);
-            else                            read.data = cast_to_CompFx_t({IntResSingle_t'(0), IntResSingle_t'(int_res_3_read.data)}, read.format);
-        end else begin
-            if (bank_read_prev == 0 || bank_read_prev == 2) begin
-                read.data = cast_to_CompFx_t(IntResDouble_t'({int_res_0_read.data, int_res_2_read.data}), read.format);
+    always_latch begin : int_res_mem_ctrl_read_sel
+        if (read_en_prev) begin
+            if (read_data_width_prev == SINGLE_WIDTH) begin
+                if (bank_read_prev == 0)        read.data = cast_to_CompFx_t({IntResSingle_t'(0), IntResSingle_t'(int_res_0_read.data)}, read.format);
+                else if (bank_read_prev == 1)   read.data = cast_to_CompFx_t({IntResSingle_t'(0), IntResSingle_t'(int_res_1_read.data)}, read.format);
+                else if (bank_read_prev == 2)   read.data = cast_to_CompFx_t({IntResSingle_t'(0), IntResSingle_t'(int_res_2_read.data)}, read.format);
+                else                            read.data = cast_to_CompFx_t({IntResSingle_t'(0), IntResSingle_t'(int_res_3_read.data)}, read.format);
             end else begin
-                read.data = cast_to_CompFx_t(IntResDouble_t'({int_res_1_read.data, int_res_3_read.data}), read.format);
+                if (bank_read_prev == 0 || bank_read_prev == 2) begin
+                    read.data = cast_to_CompFx_t(IntResDouble_t'({int_res_0_read.data, int_res_2_read.data}), read.format);
+                end else begin
+                    read.data = cast_to_CompFx_t(IntResDouble_t'({int_res_1_read.data, int_res_3_read.data}), read.format);
+                end
             end
         end
     end
@@ -166,6 +169,7 @@ module int_res_mem (
     always_ff @ (posedge clk) begin : int_res_mem_ctrl_read_ff
         read_data_width_prev <= read.data_width;
         bank_read_prev <= bank_read_current;
+        read_en_prev <= read.en;
     end
 
     // Write logic
