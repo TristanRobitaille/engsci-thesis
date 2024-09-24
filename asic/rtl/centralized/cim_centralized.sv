@@ -120,7 +120,7 @@ module cim_centralized #()(
                     if (soc_ctrl_i.new_sleep_epoch) start_inference();
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == SOFTMAX_AVERAGING_STEP) begin
+                    if (current_inf_step == SOFTMAX_AVERAGE_ARGMAX_STEP) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -665,11 +665,39 @@ module cim_centralized #()(
                         read_int_res(mem_map[MLP_HEAD_DENSE_2_OUT_MEM] + IntResAddr_t'(cnt_7b_i.cnt), int_res_width[MLP_SOFTMAX_OUTPUT_WIDTH], int_res_format[MLP_SOFTMAX_OUTPUT_FORMAT]);
                         if (int'(cnt_7b_i.cnt) == NUM_SLEEP_STAGES) begin
                             cnt_7b_i.rst_n <= 1'b0;
+                            start_add(CompFx_t'(0), CompFx_t'(0));
                             current_inf_step <= SOFTMAX_AVERAGING_STEP;
                         end
                     end else cnt_4b_i.inc <= 1'b1;
 
                     if (cnt_4b_i.cnt == 2) cnt_7b_i.inc <= 1'b1;
+                end
+                SOFTMAX_AVERAGING_STEP: begin : softmax_averaging
+                    /* gen_cnt_7b holds the current sleep stage within an epoch's softmax
+                    gen_cnt_9b holds the epoch
+                    gen_cnt_4b holds internal step
+                    */
+
+                    IntResAddr_t addr_prev_softmax = mem_map[PREV_SOFTMAX_OUTPUT_MEM] + IntResAddr_t'(int'(cnt_7b_i.cnt) + int'(NUM_SLEEP_STAGES*cnt_9b_i.cnt));
+                    IntResAddr_t addr_softmax_divide_sum = mem_map[SOFTMAX_AVG_SUM_MEM] + IntResAddr_t'(cnt_7b_i.cnt);
+
+                    if (cnt_4b_i.cnt == 0) read_int_res(addr_prev_softmax, int_res_width[SOFTMAX_AVG_SUM_INV_WIDTH], int_res_format[SOFTMAX_AVG_SUM_INV_FORMAT]);
+                    else if (cnt_4b_i.cnt == 1) read_int_res(addr_softmax_divide_sum, int_res_width[SOFTMAX_AVG_SUM_INV_WIDTH], int_res_format[SOFTMAX_AVG_SUM_INV_FORMAT]);
+                    else if (cnt_4b_i.cnt == 2) start_add(int_res_read_i.data, CompFx_t'(0)); // Use add as a storage location for previous softmax
+                    else if (cnt_4b_i.cnt == 4) start_add(int_res_read_i.data, add_io.out);
+                    else if (cnt_4b_i.cnt == 6) write_int_res(addr_softmax_divide_sum, add_io.out, int_res_width[SOFTMAX_AVG_SUM_INV_WIDTH], int_res_format[SOFTMAX_AVG_SUM_INV_FORMAT]);
+
+                    if (cnt_4b_i.cnt == 6) begin
+                        cnt_4b_i.rst_n <= 1'b0;
+                        start_add(CompFx_t'(0), CompFx_t'(0));
+                        if (int'(cnt_7b_i.cnt) == NUM_SLEEP_STAGES-1) begin
+                            cnt_7b_i.rst_n <= 1'b0;
+                            if (int'(cnt_9b_i.cnt) == NUM_SAMPLES_OUT_AVG-2) begin
+                                cnt_9b_i.rst_n <= 1'b0;
+                                current_inf_step <= SOFTMAX_AVERAGE_ARGMAX_STEP;
+                            end else cnt_9b_i.inc <= 1'b1;
+                        end else cnt_7b_i.inc <= 1'b1;
+                    end else cnt_4b_i.inc <= 1'b1;
                 end
                 default: begin
                 end
