@@ -4,6 +4,7 @@ module cim_centralized_tb (
     input AdcData_t soc_ctrl_eeg,
     output InferenceStep_t current_inf_step, // For testbench monitoring purposes only
     output logic soc_ctrl_inference_complete,
+    output SleepStage_t soc_ctrl_inferred_sleep_stage,
 
     // ----- Memory ---- //
     // Params
@@ -29,7 +30,8 @@ module cim_centralized_tb (
         soc_ctrl_i.new_eeg_data = soc_ctrl_new_eeg_data;
         soc_ctrl_i.new_sleep_epoch = soc_ctrl_new_sleep_epoch;
         soc_ctrl_i.eeg = soc_ctrl_eeg;
-        soc_ctrl_inference_complete = soc_ctrl_i.inference_complete;        
+        soc_ctrl_inference_complete = soc_ctrl_i.inference_complete;
+        soc_ctrl_inferred_sleep_stage = soc_ctrl_i.inferred_sleep_stage;
     end
 
     // Memory

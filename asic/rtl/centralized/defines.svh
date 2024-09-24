@@ -20,6 +20,7 @@ package Defines;
     typedef logic [$clog2(CIM_INT_RES_BANK_SIZE_NUM_WORD)-1:0]                      IntResBankAddr_t;
     typedef logic [$clog2(CIM_PARAMS_BANK_SIZE_NUM_WORD)-1:0]                       ParamBankAddr_t;
     typedef logic [$clog2(VECTOR_MAX_LEN+1)-1:0]                                    VectorLen_t;
+    typedef logic [$clog2(NUM_SLEEP_STAGES)-1:0]                                    SleepStage_t;
     typedef logic signed [N_STO_PARAMS-1:0]                                         Param_t;
     typedef logic signed [N_STO_INT_RES-1:0]                                        IntResSingle_t;
     typedef logic signed [2*N_STO_INT_RES-1:0]                                      IntResDouble_t;
@@ -55,7 +56,7 @@ package Defines;
         SECOND_HALF
     } HalfSelect_t;
 
-    typedef enum logic { 
+    typedef enum logic {
         HORIZONTAL,
         VERTICAL
     } Direction_t;

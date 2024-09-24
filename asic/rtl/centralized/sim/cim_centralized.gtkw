@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Tue Sep 24 20:09:58 2024
+[*] Tue Sep 24 21:40:06 2024
 [*]
 [dumpfile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/sim/sim_build/dump.fst"
-[dumpfile_mtime] "Tue Sep 24 20:08:23 2024"
-[dumpfile_size] 33473564
+[dumpfile_mtime] "Tue Sep 24 21:36:35 2024"
+[dumpfile_size] 33474001
 [savefile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/sim/cim_centralized.gtkw"
-[timestart] 45632358000
+[timestart] 45633667900
 [size] 1512 916
 [pos] -1 -1
-*-18.252136 45632970000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+*-15.252136 45633780000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -38,11 +38,10 @@
 [markername] ZZ
 [treeopen] cim_centralized_tb.
 [treeopen] cim_centralized_tb.cim_centralized.
-[treeopen] cim_centralized_tb.cim_centralized.mult.
 [sst_width] 253
-[signals_width] 324
+[signals_width] 308
 [sst_expanded] 1
-[sst_vpaned_height] 500
+[sst_vpaned_height] 269
 @28
 clk
 @200
@@ -77,6 +76,9 @@ cim_centralized_tb.cim_centralized.delay_line_3b[2:0]
 (2)cim_centralized_tb.cim_centralized.delay_line_3b[2:0]
 @1401200
 -group_end
+@25
+[color] 1
+cim_centralized_tb.soc_ctrl_inferred_sleep_stage[2:0]
 @28
 [color] 1
 cim_centralized_tb.cim_centralized.done
@@ -196,7 +198,7 @@ cim_centralized_tb.cim_centralized.mac.io.out[38:0]
 -MULT
 @28
 cim_centralized_tb.cim_centralized.mult.io.start
-@421
+@420
 cim_centralized_tb.cim_centralized.mult.io.in_1[38:0]
 cim_centralized_tb.cim_centralized.mult.io.in_2[38:0]
 cim_centralized_tb.cim_centralized.mult.io.out[38:0]

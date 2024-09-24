@@ -120,7 +120,7 @@ module cim_centralized #()(
                     if (soc_ctrl_i.new_sleep_epoch) start_inference();
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == SOFTMAX_AVERAGE_ARGMAX_STEP) begin
+                    if (current_inf_step == SOFTMAX_RETIRE_STEP) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -695,9 +695,36 @@ module cim_centralized #()(
                             if (int'(cnt_9b_i.cnt) == NUM_SAMPLES_OUT_AVG-2) begin
                                 cnt_9b_i.rst_n <= 1'b0;
                                 current_inf_step <= SOFTMAX_AVERAGE_ARGMAX_STEP;
+                                delay_line_3b <= 3'b000;
+                                start_mult(CompFx_t'(0), CompFx_t'(0));
                             end else cnt_9b_i.inc <= 1'b1;
                         end else cnt_7b_i.inc <= 1'b1;
                     end else cnt_4b_i.inc <= 1'b1;
+                end
+                SOFTMAX_AVERAGE_ARGMAX_STEP: begin : softmax_avg_argmax
+                    /* Compute argmax of the averaged softmax.
+                    * ADD out holds the current max softmax
+                    * MULT out holds the current argmax
+                    */
+
+                    delay_line_3b[0] <= 1'b1;
+                    delay_line_3b[1] <= int_res_read_i.en;
+
+                    if (delay_line_3b[0]) read_int_res(mem_map[SOFTMAX_AVG_SUM_MEM] + IntResAddr_t'(cnt_9b_i.cnt), int_res_width[SOFTMAX_AVG_SUM_INV_WIDTH], int_res_format[SOFTMAX_AVG_SUM_INV_FORMAT]);
+
+                    if (delay_line_3b[1] && cnt_9b_i.cnt < 7) begin
+                        if (int_res_read_i.data > add_io.in_1) begin
+                            start_add(int_res_read_i.data, CompFx_t'(0)); // Update max softmax found
+                            start_mult(CompFx_t'(cnt_9b_i.cnt) - CompFx_t'(2), CompFx_t'(1 << Q_COMP)); // Update max argmax found
+                        end
+                    end
+
+                    if (cnt_9b_i.cnt == 8) begin
+                        soc_ctrl_i.inferred_sleep_stage <= SleepStage_t'(mult_io.out);
+                        current_inf_step <= SOFTMAX_RETIRE_STEP;
+                        cnt_9b_i.rst_n <= 1'b0;
+                        delay_line_3b <= 3'b000;
+                    end else cnt_9b_i.inc <= 1'b1;
                 end
                 default: begin
                 end
