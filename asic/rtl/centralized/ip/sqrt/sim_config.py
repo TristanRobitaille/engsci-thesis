@@ -2,6 +2,8 @@ import os
 import sys
 from cocotb_test.simulator import run
 
+RANDOM_SEED = 1
+
 # Paths
 src_dir = "asic/rtl/centralized"
 home_dir = os.path.expanduser("~/../tmp")
@@ -35,5 +37,6 @@ def test_dff_verilog():
         compile_args=ARGS,
         sim_args=ARGS,
         make_args=["-j16"],
-        waves=True
+        waves=True,
+        seed=RANDOM_SEED
     )

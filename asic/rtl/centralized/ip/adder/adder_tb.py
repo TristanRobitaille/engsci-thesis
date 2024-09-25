@@ -51,8 +51,6 @@ async def basic_count(dut):
         dut.input_q_1.value = utilities.BinToDec(input_1, const.num_Q_comp)
         dut.input_q_2.value = utilities.BinToDec(input_2, const.num_Q_comp)
         for _ in range(2): await RisingEdge(dut.clk)
-
-        # Check that expected_str is a string
         assert dut.output_q.value == pytest.approx(int(expected_str, base=2), rel=0), \
             f"Expected: {int(expected_str, base=2)}, received: {int(str(dut.output_q.value), base=2)} (in_1: {const.num_Q_comp(input_1)}, in_2: {const.num_Q_comp(input_2)})"
 
@@ -60,14 +58,14 @@ async def basic_count(dut):
 async def overflow(dut):
     await utilities.start_routine_basic_arithmetic(dut)
 
-    input_q_1 = [2**(const.N_COMP-const.Q_COMP-1)-1]
-    input_q_2 = [2**(const.N_COMP-const.Q_COMP-1)-1]
-    expected  = [0]
+    input_q_1 = [2**(const.N_COMP-const.Q_COMP-1)-1, -2**(const.N_COMP-const.Q_COMP-1)+1]
+    input_q_2 = [2**(const.N_COMP-const.Q_COMP-1)-1, -2**(const.N_COMP-const.Q_COMP-1)+1]
+    expected = [2**(const.N_COMP-1)-1, 2**(const.N_COMP-1)]
 
     for i in range(len(input_q_1)):
-        dut.input_q_1.value = utilities.BinToDec(input_q_1[i], const.num_Q_comp_overflow)
-        dut.input_q_2.value = utilities.BinToDec(input_q_2[i], const.num_Q_comp_overflow)
+        dut.input_q_1.value = utilities.BinToDec(input_q_1[i], const.num_Q_comp)
+        dut.input_q_2.value = utilities.BinToDec(input_q_2[i], const.num_Q_comp)
         dut.start.value = 1
-        expected = const.num_Q_comp_overflow(expected[i])
         for _ in range(2): await RisingEdge(dut.clk)
         assert dut.overflow.value == 1, "Overflow not set as expected!"
+        assert int(str(dut.output_q.value), base=2) == expected[i], f"Expected: {expected[i]}, received: {dut.output_q.value}"

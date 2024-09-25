@@ -35,7 +35,6 @@ module multiplier (
     end
 
     always_comb begin : multiplier_rounding
-        logic need_rounding;
         if (temp_result[Q_COMP-1:0] == HALF_FRACT) begin // Need convergent rounding
             if (temp_result[LSB]) begin // LSb of fractional part is 1 (odd)
                 rounded_temp = {temp_result[2*N_COMP-1:LSB] + 1, {LSB{1'b0}}};
@@ -49,14 +48,21 @@ module multiplier (
         end
     end
 
-    assign io.out = rounded_temp[N_COMP+Q_COMP-1:Q_COMP]; // Essentially AP_TRN (truncation towards minus infinity)
+    always_comb begin : multiplier_overflow
+        if (io.overflow) begin
+            if (rounded_temp[N_COMP+Q_COMP]) 
+                io.out = {1'b0, {N_COMP-1{1'b1}}}; // Positive overflow --> Saturate to max. positive value
+            else 
+                io.out = {1'b1, {N_COMP-1{1'b0}}}; // Negative overflow --> Saturate to min. negative value
+        end else io.out = rounded_temp[N_COMP+Q_COMP-1:Q_COMP]; // Essentially AP_TRN (truncation towards minus infinity)
+    end
 
     // Overflow detection
     // Note that if the result is too small to be represented (and thus "0"), the overflow may trigger if one of the input was negative
-    always_comb begin : multipler_overflow
+    always_comb begin : multipler_overflow_detection
         logic one_input_is_zero = (in_1_q == 'd0) || (in_2_q == 'd0);
-        logic out_is_neg = io.out[N_COMP-1];
-        logic out_is_zero = (io.out == 'd0);
+        logic out_is_neg = rounded_temp[N_COMP+Q_COMP];
+        logic out_is_zero = (rounded_temp[N_COMP+Q_COMP-2:Q_COMP] == 'd0); // Ignore sign bit
 
         if (io.done) begin
             if (one_input_is_zero & out_is_neg) begin

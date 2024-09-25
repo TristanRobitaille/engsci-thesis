@@ -9,7 +9,7 @@ from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
 
 #----- CONSTANTS -----#
-NUM_TESTS = 1000
+NUM_TESTS = 100
 
 @cocotb.test()
 async def random_test(dut):

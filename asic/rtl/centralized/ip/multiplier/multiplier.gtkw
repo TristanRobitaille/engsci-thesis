@@ -1,0 +1,226 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Wed Sep 25 11:52:19 2024
+[*]
+[dumpfile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/ip/multiplier/sim_build/dump.fst"
+[dumpfile_mtime] "Wed Sep 25 11:52:11 2024"
+[dumpfile_size] 472214
+[savefile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/ip/multiplier/multiplier.gtkw"
+[timestart] 0
+[size] 1512 916
+[pos] -1 -1
+*-13.800000 43070 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[markername] AA
+[markername] BB
+[markername] CC
+[markername] DD
+[markername] EE
+[markername] FF
+[markername] GG
+[markername] HH
+[markername] II
+[markername] JJ
+[markername] KK
+[markername] LL
+[markername] MM
+[markername] NN
+[markername] OO
+[markername] PP
+[markername] QQ
+[markername] RR
+[markername] SS
+[markername] TT
+[markername] UU
+[markername] VV
+[markername] WW
+[markername] XX
+[markername] YY
+[markername] ZZ
+[treeopen] multiplier_tb.
+[treeopen] multiplier_tb.multiplier.
+[sst_width] 253
+[signals_width] 177
+[sst_expanded] 1
+[sst_vpaned_height] 256
+@28
+clk
+start
+@c00420
+input_q_1[38:0]
+@28
+(0)input_q_1[38:0]
+(1)input_q_1[38:0]
+(2)input_q_1[38:0]
+(3)input_q_1[38:0]
+(4)input_q_1[38:0]
+(5)input_q_1[38:0]
+(6)input_q_1[38:0]
+(7)input_q_1[38:0]
+(8)input_q_1[38:0]
+(9)input_q_1[38:0]
+(10)input_q_1[38:0]
+(11)input_q_1[38:0]
+(12)input_q_1[38:0]
+(13)input_q_1[38:0]
+(14)input_q_1[38:0]
+(15)input_q_1[38:0]
+(16)input_q_1[38:0]
+(17)input_q_1[38:0]
+(18)input_q_1[38:0]
+(19)input_q_1[38:0]
+(20)input_q_1[38:0]
+(21)input_q_1[38:0]
+(22)input_q_1[38:0]
+(23)input_q_1[38:0]
+(24)input_q_1[38:0]
+(25)input_q_1[38:0]
+(26)input_q_1[38:0]
+(27)input_q_1[38:0]
+(28)input_q_1[38:0]
+(29)input_q_1[38:0]
+(30)input_q_1[38:0]
+(31)input_q_1[38:0]
+(32)input_q_1[38:0]
+(33)input_q_1[38:0]
+(34)input_q_1[38:0]
+(35)input_q_1[38:0]
+(36)input_q_1[38:0]
+(37)input_q_1[38:0]
+(38)input_q_1[38:0]
+@1401200
+-group_end
+@420
+input_q_2[38:0]
+@c00420
+output_q[38:0]
+@28
+(0)output_q[38:0]
+(1)output_q[38:0]
+(2)output_q[38:0]
+(3)output_q[38:0]
+(4)output_q[38:0]
+(5)output_q[38:0]
+(6)output_q[38:0]
+(7)output_q[38:0]
+(8)output_q[38:0]
+(9)output_q[38:0]
+(10)output_q[38:0]
+(11)output_q[38:0]
+(12)output_q[38:0]
+(13)output_q[38:0]
+(14)output_q[38:0]
+(15)output_q[38:0]
+(16)output_q[38:0]
+(17)output_q[38:0]
+(18)output_q[38:0]
+(19)output_q[38:0]
+(20)output_q[38:0]
+(21)output_q[38:0]
+(22)output_q[38:0]
+(23)output_q[38:0]
+(24)output_q[38:0]
+(25)output_q[38:0]
+(26)output_q[38:0]
+(27)output_q[38:0]
+(28)output_q[38:0]
+(29)output_q[38:0]
+(30)output_q[38:0]
+(31)output_q[38:0]
+(32)output_q[38:0]
+(33)output_q[38:0]
+(34)output_q[38:0]
+(35)output_q[38:0]
+(36)output_q[38:0]
+(37)output_q[38:0]
+(38)output_q[38:0]
+@1401200
+-group_end
+@28
+overflow
+multiplier_tb.multiplier.multipler_overflow_detection.out_is_neg
+multiplier_tb.multiplier.multipler_overflow_detection.out_is_zero
+@800023
+multiplier_tb.multiplier.rounded_temp[77:0]
+@29
+(0)multiplier_tb.multiplier.rounded_temp[77:0]
+(1)multiplier_tb.multiplier.rounded_temp[77:0]
+(2)multiplier_tb.multiplier.rounded_temp[77:0]
+(3)multiplier_tb.multiplier.rounded_temp[77:0]
+(4)multiplier_tb.multiplier.rounded_temp[77:0]
+(5)multiplier_tb.multiplier.rounded_temp[77:0]
+(6)multiplier_tb.multiplier.rounded_temp[77:0]
+(7)multiplier_tb.multiplier.rounded_temp[77:0]
+(8)multiplier_tb.multiplier.rounded_temp[77:0]
+(9)multiplier_tb.multiplier.rounded_temp[77:0]
+(10)multiplier_tb.multiplier.rounded_temp[77:0]
+(11)multiplier_tb.multiplier.rounded_temp[77:0]
+(12)multiplier_tb.multiplier.rounded_temp[77:0]
+(13)multiplier_tb.multiplier.rounded_temp[77:0]
+(14)multiplier_tb.multiplier.rounded_temp[77:0]
+(15)multiplier_tb.multiplier.rounded_temp[77:0]
+(16)multiplier_tb.multiplier.rounded_temp[77:0]
+(17)multiplier_tb.multiplier.rounded_temp[77:0]
+(18)multiplier_tb.multiplier.rounded_temp[77:0]
+(19)multiplier_tb.multiplier.rounded_temp[77:0]
+(20)multiplier_tb.multiplier.rounded_temp[77:0]
+(21)multiplier_tb.multiplier.rounded_temp[77:0]
+(22)multiplier_tb.multiplier.rounded_temp[77:0]
+(23)multiplier_tb.multiplier.rounded_temp[77:0]
+(24)multiplier_tb.multiplier.rounded_temp[77:0]
+(25)multiplier_tb.multiplier.rounded_temp[77:0]
+(26)multiplier_tb.multiplier.rounded_temp[77:0]
+(27)multiplier_tb.multiplier.rounded_temp[77:0]
+(28)multiplier_tb.multiplier.rounded_temp[77:0]
+(29)multiplier_tb.multiplier.rounded_temp[77:0]
+(30)multiplier_tb.multiplier.rounded_temp[77:0]
+(31)multiplier_tb.multiplier.rounded_temp[77:0]
+(32)multiplier_tb.multiplier.rounded_temp[77:0]
+(33)multiplier_tb.multiplier.rounded_temp[77:0]
+(34)multiplier_tb.multiplier.rounded_temp[77:0]
+(35)multiplier_tb.multiplier.rounded_temp[77:0]
+(36)multiplier_tb.multiplier.rounded_temp[77:0]
+(37)multiplier_tb.multiplier.rounded_temp[77:0]
+(38)multiplier_tb.multiplier.rounded_temp[77:0]
+(39)multiplier_tb.multiplier.rounded_temp[77:0]
+(40)multiplier_tb.multiplier.rounded_temp[77:0]
+(41)multiplier_tb.multiplier.rounded_temp[77:0]
+(42)multiplier_tb.multiplier.rounded_temp[77:0]
+(43)multiplier_tb.multiplier.rounded_temp[77:0]
+(44)multiplier_tb.multiplier.rounded_temp[77:0]
+(45)multiplier_tb.multiplier.rounded_temp[77:0]
+(46)multiplier_tb.multiplier.rounded_temp[77:0]
+(47)multiplier_tb.multiplier.rounded_temp[77:0]
+(48)multiplier_tb.multiplier.rounded_temp[77:0]
+(49)multiplier_tb.multiplier.rounded_temp[77:0]
+(50)multiplier_tb.multiplier.rounded_temp[77:0]
+(51)multiplier_tb.multiplier.rounded_temp[77:0]
+(52)multiplier_tb.multiplier.rounded_temp[77:0]
+(53)multiplier_tb.multiplier.rounded_temp[77:0]
+(54)multiplier_tb.multiplier.rounded_temp[77:0]
+(55)multiplier_tb.multiplier.rounded_temp[77:0]
+(56)multiplier_tb.multiplier.rounded_temp[77:0]
+(57)multiplier_tb.multiplier.rounded_temp[77:0]
+(58)multiplier_tb.multiplier.rounded_temp[77:0]
+(59)multiplier_tb.multiplier.rounded_temp[77:0]
+(60)multiplier_tb.multiplier.rounded_temp[77:0]
+(61)multiplier_tb.multiplier.rounded_temp[77:0]
+(62)multiplier_tb.multiplier.rounded_temp[77:0]
+(63)multiplier_tb.multiplier.rounded_temp[77:0]
+(64)multiplier_tb.multiplier.rounded_temp[77:0]
+(65)multiplier_tb.multiplier.rounded_temp[77:0]
+(66)multiplier_tb.multiplier.rounded_temp[77:0]
+(67)multiplier_tb.multiplier.rounded_temp[77:0]
+(68)multiplier_tb.multiplier.rounded_temp[77:0]
+(69)multiplier_tb.multiplier.rounded_temp[77:0]
+(70)multiplier_tb.multiplier.rounded_temp[77:0]
+(71)multiplier_tb.multiplier.rounded_temp[77:0]
+(72)multiplier_tb.multiplier.rounded_temp[77:0]
+(73)multiplier_tb.multiplier.rounded_temp[77:0]
+(74)multiplier_tb.multiplier.rounded_temp[77:0]
+(75)multiplier_tb.multiplier.rounded_temp[77:0]
+(76)multiplier_tb.multiplier.rounded_temp[77:0]
+(77)multiplier_tb.multiplier.rounded_temp[77:0]
+@1001201
+-group_end
+[pattern_trace] 1
+[pattern_trace] 0

@@ -7,12 +7,10 @@ import Constants as const
 import cocotb
 from cocotb.triggers import RisingEdge
 
-NUM_TESTS = 1000
+NUM_TESTS = 10000
 
 #----- HELPERS -----#
 async def output_check(dut, in_1:float, in_2:float):
-    # if expected is None:
-    #     expected = FXnum(in_1, const.num_Q_comp)*FXnum(in_2, const.num_Q_comp)
     expected = const.num_Q_comp(in_1) * const.num_Q_comp(in_2)
     expected_str = expected.toBinaryString(logBase=1).replace(".","")
 
@@ -23,10 +21,6 @@ async def output_check(dut, in_1:float, in_2:float):
     dut.start.value = 0
     await RisingEdge(dut.clk)
 
-    # assert dut.output_q.value == pytest.approx(int(expected_str, base=2), rel=0), \
-    #     f"Expected: {int(expected_str, base=2)}, received: {int(str(dut.output_q.value), base=2)} (in_1: {const.num_Q_comp(input_1)}, in_2: {const.num_Q_comp(input_2)})"
-
-    # assert (dut.output_q.value == int(expected_str, base=2) or dut.output_q.value == (int(expected_str, base=2)-1)), f"Expected: {int(expected_str, base=2)}, received: {int(str(dut.output_q.value), base=2)} (in1: {in1:.6f}, in2: {in2:.6f})"
     assert dut.output_q.value == pytest.approx(int(expected_str, base=2), rel=0), \
         f"Expected: {int(expected_str, base=2)}, received: {int(str(dut.output_q.value), base=2)} (in_1: {in_1:.6f}, in_2: {in_2:.6f})"
 
@@ -67,3 +61,20 @@ async def unary_test_cases(dut):
     # Edge cases
     for i in range(len(input_q_1)):
         await output_check(dut, input_q_1[i], input_q_2[i])
+
+@cocotb.test()
+async def overflow(dut):
+    await utilities.start_routine_basic_arithmetic(dut)
+
+    input_q_1 = [2**(const.N_COMP-const.Q_COMP-1)-1, -2**(const.N_COMP-const.Q_COMP-1)+1, 2**(const.N_COMP-const.Q_COMP-1)-1, -2**(const.N_COMP-const.Q_COMP-1)+1]
+    input_q_2 = [2**(const.N_COMP-const.Q_COMP-1)-1, -2**(const.N_COMP-const.Q_COMP-1)+1, -2**(const.N_COMP-const.Q_COMP-1)+1, 2**(const.N_COMP-const.Q_COMP-1)-1]
+    expected = [2**(const.N_COMP-1)-1, 2**(const.N_COMP-1)-1, 2**(const.N_COMP-1), 2**(const.N_COMP-1)]
+
+    for i in range(len(input_q_1)):
+        print(f"input_q_1: {input_q_1[i]}, input_q_2: {input_q_2[i]}")
+        dut.input_q_1.value = utilities.BinToDec(input_q_1[i], const.num_Q_comp)
+        dut.input_q_2.value = utilities.BinToDec(input_q_2[i], const.num_Q_comp)
+        dut.start.value = 1
+        for _ in range(2): await RisingEdge(dut.clk)
+        assert dut.overflow.value == 1, "Overflow not set as expected!"
+        assert int(str(dut.output_q.value), base=2) == expected[i], f"Expected: {expected[i]}, received: {dut.output_q.value}"

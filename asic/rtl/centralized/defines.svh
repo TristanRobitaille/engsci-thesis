@@ -337,7 +337,7 @@ package Defines;
         INT_RES_DW_FX,     // CLASS_EMB_TOKEN_FORMAT
         INT_RES_DW_FX,     // POS_EMB_FORMAT
         INT_RES_DW_FX,     // LN_INPUT_FORMAT
-        INT_RES_SW_FX_5_X, // POS_EMB_COMPRESSION_FORMAT // TODO: Need to fine-tune this value using fixed-point accuracy study
+        INT_RES_SW_FX_4_X, // POS_EMB_COMPRESSION_FORMAT
         INT_RES_DW_FX,     // LN_OUTPUT_FORMAT
         INT_RES_DW_FX,     // QKV_INPUT_FORMAT
         INT_RES_SW_FX_5_X, // QKV_OUTPUT_FORMAT

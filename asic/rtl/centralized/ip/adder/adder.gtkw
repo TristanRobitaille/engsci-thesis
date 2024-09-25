@@ -1,0 +1,156 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Wed Sep 25 11:03:28 2024
+[*]
+[dumpfile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/ip/adder/sim_build/dump.fst"
+[dumpfile_mtime] "Wed Sep 25 10:56:30 2024"
+[dumpfile_size] 3002
+[savefile] "/Users/tristan/Developer/engsci-thesis/asic/rtl/centralized/ip/adder/sim_build/adder.gtkw"
+[timestart] 0
+[size] 1512 916
+[pos] -1 -1
+*-15.000000 130010 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[treeopen] adder_tb.
+[sst_width] 253
+[signals_width] 270
+[sst_expanded] 1
+[sst_vpaned_height] 269
+@28
+clk
+start
+@c00420
+input_q_1[38:0]
+@28
+(0)input_q_1[38:0]
+(1)input_q_1[38:0]
+(2)input_q_1[38:0]
+(3)input_q_1[38:0]
+(4)input_q_1[38:0]
+(5)input_q_1[38:0]
+(6)input_q_1[38:0]
+(7)input_q_1[38:0]
+(8)input_q_1[38:0]
+(9)input_q_1[38:0]
+(10)input_q_1[38:0]
+(11)input_q_1[38:0]
+(12)input_q_1[38:0]
+(13)input_q_1[38:0]
+(14)input_q_1[38:0]
+(15)input_q_1[38:0]
+(16)input_q_1[38:0]
+(17)input_q_1[38:0]
+(18)input_q_1[38:0]
+(19)input_q_1[38:0]
+(20)input_q_1[38:0]
+(21)input_q_1[38:0]
+(22)input_q_1[38:0]
+(23)input_q_1[38:0]
+(24)input_q_1[38:0]
+(25)input_q_1[38:0]
+(26)input_q_1[38:0]
+(27)input_q_1[38:0]
+(28)input_q_1[38:0]
+(29)input_q_1[38:0]
+(30)input_q_1[38:0]
+(31)input_q_1[38:0]
+(32)input_q_1[38:0]
+(33)input_q_1[38:0]
+(34)input_q_1[38:0]
+(35)input_q_1[38:0]
+(36)input_q_1[38:0]
+(37)input_q_1[38:0]
+(38)input_q_1[38:0]
+@1401200
+-group_end
+@c00420
+input_q_2[38:0]
+@28
+(0)input_q_2[38:0]
+(1)input_q_2[38:0]
+(2)input_q_2[38:0]
+(3)input_q_2[38:0]
+(4)input_q_2[38:0]
+(5)input_q_2[38:0]
+(6)input_q_2[38:0]
+(7)input_q_2[38:0]
+(8)input_q_2[38:0]
+(9)input_q_2[38:0]
+(10)input_q_2[38:0]
+(11)input_q_2[38:0]
+(12)input_q_2[38:0]
+(13)input_q_2[38:0]
+(14)input_q_2[38:0]
+(15)input_q_2[38:0]
+(16)input_q_2[38:0]
+(17)input_q_2[38:0]
+(18)input_q_2[38:0]
+(19)input_q_2[38:0]
+(20)input_q_2[38:0]
+(21)input_q_2[38:0]
+(22)input_q_2[38:0]
+(23)input_q_2[38:0]
+(24)input_q_2[38:0]
+(25)input_q_2[38:0]
+(26)input_q_2[38:0]
+(27)input_q_2[38:0]
+(28)input_q_2[38:0]
+(29)input_q_2[38:0]
+(30)input_q_2[38:0]
+(31)input_q_2[38:0]
+(32)input_q_2[38:0]
+(33)input_q_2[38:0]
+(34)input_q_2[38:0]
+(35)input_q_2[38:0]
+(36)input_q_2[38:0]
+(37)input_q_2[38:0]
+(38)input_q_2[38:0]
+@1401200
+-group_end
+@c00420
+output_q[38:0]
+@28
+(0)output_q[38:0]
+(1)output_q[38:0]
+(2)output_q[38:0]
+(3)output_q[38:0]
+(4)output_q[38:0]
+(5)output_q[38:0]
+(6)output_q[38:0]
+(7)output_q[38:0]
+(8)output_q[38:0]
+(9)output_q[38:0]
+(10)output_q[38:0]
+(11)output_q[38:0]
+(12)output_q[38:0]
+(13)output_q[38:0]
+(14)output_q[38:0]
+(15)output_q[38:0]
+(16)output_q[38:0]
+(17)output_q[38:0]
+(18)output_q[38:0]
+(19)output_q[38:0]
+(20)output_q[38:0]
+(21)output_q[38:0]
+(22)output_q[38:0]
+(23)output_q[38:0]
+(24)output_q[38:0]
+(25)output_q[38:0]
+(26)output_q[38:0]
+(27)output_q[38:0]
+(28)output_q[38:0]
+(29)output_q[38:0]
+(30)output_q[38:0]
+(31)output_q[38:0]
+(32)output_q[38:0]
+(33)output_q[38:0]
+(34)output_q[38:0]
+(35)output_q[38:0]
+(36)output_q[38:0]
+(37)output_q[38:0]
+(38)output_q[38:0]
+@1401200
+-group_end
+@28
+overflow
+[pattern_trace] 1
+[pattern_trace] 0
