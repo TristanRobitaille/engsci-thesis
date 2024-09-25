@@ -265,6 +265,7 @@ package Defines;
         MLP_HEAD_DENSE_2_OUTPUT_WIDTH,
         MLP_SOFTMAX_OUTPUT_WIDTH,
         SOFTMAX_AVG_SUM_INV_WIDTH,
+        PREV_SOFTMAX_OUTPUT_WIDTH,
         NUM_INT_RES_WIDTHS
     } IntResWidth_t;
 
@@ -288,6 +289,7 @@ package Defines;
         MLP_HEAD_DENSE_2_OUTPUT_FORMAT,
         MLP_SOFTMAX_OUTPUT_FORMAT,
         SOFTMAX_AVG_SUM_INV_FORMAT,
+        PREV_SOFTMAX_OUTPUT_FORMAT,
         NUM_INT_RES_FORMATS
     } IntResFormat_t;
 
@@ -325,7 +327,8 @@ package Defines;
         DOUBLE_WIDTH, // MLP_HEAD_DENSE_1_OUTPUT_WIDTH
         DOUBLE_WIDTH, // MLP_HEAD_DENSE_2_OUTPUT_WIDTH
         DOUBLE_WIDTH, // MLP_SOFTMAX_OUTPUT_WIDTH
-        DOUBLE_WIDTH  // SOFTMAX_AVG_SUM_INV_WIDTH
+        DOUBLE_WIDTH, // SOFTMAX_AVG_SUM_INV_WIDTH
+        SINGLE_WIDTH  // PREV_SOFTMAX_OUTPUT_WIDTH
     };
 
     const FxFormatIntRes_t int_res_format [NUM_INT_RES_FORMATS] = '{
@@ -347,7 +350,8 @@ package Defines;
         INT_RES_DW_FX,     // MLP_HEAD_DENSE_1_OUTPUT_FORMAT
         INT_RES_DW_FX,     // MLP_HEAD_DENSE_2_OUTPUT_FORMAT
         INT_RES_DW_FX,     // MLP_SOFTMAX_OUTPUT_FORMAT
-        INT_RES_DW_FX      // SOFTMAX_AVG_SUM_INV_FORMAT
+        INT_RES_DW_FX,     // SOFTMAX_AVG_SUM_INV_FORMAT
+        INT_RES_SW_FX_2_X  // PREV_SOFTMAX_OUTPUT_FORMAT
     };
 
     const FxFormatParams_t params_format [NUM_PARAMS_FORMATS] = '{

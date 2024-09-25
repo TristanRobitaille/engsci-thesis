@@ -120,7 +120,7 @@ module cim_centralized #()(
                     if (soc_ctrl_i.new_sleep_epoch) start_inference();
                 end
                 INFERENCE_RUNNING: begin
-                    if (current_inf_step == SOFTMAX_RETIRE_STEP) begin
+                    if (current_inf_step == INFERENCE_COMPLETE) begin
                         cim_state <= IDLE_CIM;
                         soc_ctrl_i.inference_complete <= 1'b1;
                     end
@@ -725,6 +725,26 @@ module cim_centralized #()(
                         cnt_9b_i.rst_n <= 1'b0;
                         delay_line_3b <= 3'b000;
                     end else cnt_9b_i.inc <= 1'b1;
+                end
+                SOFTMAX_RETIRE_STEP: begin : softmax_retire
+                    /* Move dummy #0 into dummy #1's position and current softmax into dummy #0
+                    gen_cnt_7b holds the current sleep stage within an epoch's softmax
+                    gen_cnt_4b holds internal step
+                    */
+                    if (cnt_9b_i.cnt == 0) read_int_res(mem_map[PREV_SOFTMAX_OUTPUT_MEM] + IntResAddr_t'(cnt_7b_i.cnt), int_res_width[SOFTMAX_AVG_SUM_INV_WIDTH], int_res_format[SOFTMAX_AVG_SUM_INV_FORMAT]);
+                    else if (cnt_9b_i.cnt == 2) write_int_res(mem_map[PREV_SOFTMAX_OUTPUT_MEM] + IntResAddr_t'(cnt_7b_i.cnt) + IntResAddr_t'(NUM_SLEEP_STAGES), int_res_read_i.data, int_res_width[PREV_SOFTMAX_OUTPUT_WIDTH], int_res_format[PREV_SOFTMAX_OUTPUT_FORMAT]);
+                    else if (cnt_9b_i.cnt == 3) read_int_res(mem_map[MLP_HEAD_DENSE_2_OUT_MEM] + IntResAddr_t'(cnt_7b_i.cnt), int_res_width[SOFTMAX_AVG_SUM_INV_WIDTH], int_res_format[SOFTMAX_AVG_SUM_INV_FORMAT]);
+                    else if (cnt_9b_i.cnt == 5) write_int_res(mem_map[PREV_SOFTMAX_OUTPUT_MEM] + IntResAddr_t'(cnt_7b_i.cnt), int_res_read_i.data, int_res_width[PREV_SOFTMAX_OUTPUT_WIDTH], int_res_format[PREV_SOFTMAX_OUTPUT_FORMAT]);
+                
+                    if (cnt_9b_i.cnt == 5) begin
+                        cnt_9b_i.rst_n <= 1'b0;
+                        if (int'(cnt_7b_i.cnt) == NUM_SLEEP_STAGES-1) begin
+                            cnt_7b_i.rst_n <= 1'b0;
+                            current_inf_step <= INFERENCE_COMPLETE;
+                        end else cnt_7b_i.inc <= 1'b1;
+                    end else cnt_9b_i.inc <= 1'b1;
+                end
+                INFERENCE_COMPLETE: begin
                 end
                 default: begin
                 end
