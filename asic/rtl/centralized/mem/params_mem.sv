@@ -41,8 +41,11 @@ module params_mem (
     MemoryInterface #(Param_t, ParamBankAddr_t, FxFormat_Unused_t) params_0_write ();
     MemoryInterface #(Param_t, ParamBankAddr_t, FxFormat_Unused_t) params_1_read ();
     MemoryInterface #(Param_t, ParamBankAddr_t, FxFormat_Unused_t) params_1_write ();
+
+`ifdef USE_MEM_MODEL
     mem_model #(.DEPTH(CIM_PARAMS_BANK_SIZE_NUM_WORD)) params_0 (.rst_n, .clk, .read(params_0_read), .write(params_0_write));
     mem_model #(.DEPTH(CIM_PARAMS_BANK_SIZE_NUM_WORD)) params_1 (.rst_n, .clk, .read(params_1_read), .write(params_1_write));
+`endif
 
     // Constants
     assign params_0_write.chip_en = write.chip_en;

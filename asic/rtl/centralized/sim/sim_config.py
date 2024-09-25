@@ -30,6 +30,7 @@ ARGS = [
 
     # SV compilation
     "-DCENTRALIZED_ARCH=1",
+    "-DUSE_MEM_MODEL=1",
 ]
 
 if OVERFLOW_WARNING: ARGS.append("-DOVERFLOW_WARNING")

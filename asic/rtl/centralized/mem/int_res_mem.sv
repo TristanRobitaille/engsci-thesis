@@ -66,10 +66,12 @@ module int_res_mem (
     MemoryInterface #(IntResSingle_t, IntResBankAddr_t, FxFormat_Unused_t) int_res_3_read ();
     MemoryInterface #(IntResSingle_t, IntResBankAddr_t, FxFormat_Unused_t) int_res_3_write ();
 
+`ifdef USE_MEM_MODEL
     mem_model #(.DEPTH(CIM_INT_RES_BANK_SIZE_NUM_WORD)) int_res_0 (.clk, .rst_n, .read(int_res_0_read), .write(int_res_0_write));
     mem_model #(.DEPTH(CIM_INT_RES_BANK_SIZE_NUM_WORD)) int_res_1 (.clk, .rst_n, .read(int_res_1_read), .write(int_res_1_write));
     mem_model #(.DEPTH(CIM_INT_RES_BANK_SIZE_NUM_WORD)) int_res_2 (.clk, .rst_n, .read(int_res_2_read), .write(int_res_2_write));
     mem_model #(.DEPTH(CIM_INT_RES_BANK_SIZE_NUM_WORD)) int_res_3 (.clk, .rst_n, .read(int_res_3_read), .write(int_res_3_write));
+`endif
 
     logic read_en_prev;
     logic [1:0] bank_read_current, bank_read_prev;

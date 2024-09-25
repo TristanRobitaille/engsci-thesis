@@ -38,13 +38,13 @@ module adder (
         io.out = sum[N_COMP-1:0]; // Essentially AP_TRN (truncation towards minus infinity)
     end
     
-    `ifdef OVERFLOW_WARNING
+`ifdef OVERFLOW_WARNING
         always @(posedge clk) begin : adder_assertions
             if (io.overflow) begin
                 $display("Overflow detected in adder at time %d (in_1: %d, in_2: %d, out: %d)", $time, io.in_1, io.in_2, io.out);
             end
         end
-    `endif
+`endif
 endmodule // adder
 
 `endif
