@@ -54,9 +54,10 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
         }
         return config
 
-class MovingAverage():
-    def __init__(self, num_samples:int, self_reset_threshold:int=-1):
+class OutputFilter():
+    def __init__(self, num_samples:int, type:str="mean", self_reset_threshold:int=-1):
         self.num_samples = num_samples # Number of desired samples in moving average
+        self.type = type
         self.self_reset_enabled = (self_reset_threshold > 0)
         self.self_reset_threshold = self_reset_threshold # After this number of samples with a constant sleep stage, we self reset the filter. This is to provide a sharp edge on transitions if the output has been stable.
 
@@ -73,7 +74,13 @@ class MovingAverage():
         self.output_samples.append(new_output)
         if len(self.output_samples) > self.num_samples: self.output_samples.pop(0)
 
-        return tf.reduce_mean(self.output_samples, axis=0)
+        if self.type == "mean": return tf.reduce_mean(self.output_samples, axis=0)
+        elif self.type == "median":
+            stacked_tensors = tf.stack(self.output_samples)
+            sorted_tensors = tf.sort(stacked_tensors, axis=0)
+            middle_idx = stacked_tensors.shape[0] // 2
+            median_tensor = sorted_tensors[middle_idx]
+            return median_tensor
 
     def reset(self):
         self.output_samples = []
@@ -257,7 +264,7 @@ def run_model(model, data:dict, whole_night_indices:list, data_type:tf.DType, nu
     sleep_stages_pred = []
     ground_truth = []
     total = 0
-    output_filter = MovingAverage(num_output_filtering, self_reset_threshold=self_reset_threshold)
+    output_filter = OutputFilter(num_output_filtering, type="mean", self_reset_threshold=self_reset_threshold)
     if num_sleep_stage_history > 0: historical_pred = tf.zeros(shape=(1, num_sleep_stage_history), dtype=data_type)
 
     try:
@@ -294,7 +301,7 @@ def run_tflite_model(model_fp:str, data:str, whole_night_indices:list, data_type
 
     predictions = []
     total = 0
-    output_filter = MovingAverage(num_output_filtering, self_reset_threshold=self_reset_threshold)
+    output_filter = OutputFilter(num_output_filtering, type="mean", self_reset_threshold=self_reset_threshold)
     if num_sleep_stage_history > 0: historical_pred = tf.zeros(shape=(1, num_sleep_stage_history), dtype=data_type)
 
     for x, y in zip(data["signals_val"], data["sleep_stages_val"]):
