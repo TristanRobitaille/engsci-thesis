@@ -4,9 +4,9 @@
 import Defines::*;
 
 interface MemoryInterface # (
-    parameter type Data_t,
-    parameter type Addr_t,
-    parameter type FxFormat_t
+    parameter type Data_t = CompFx_t,
+    parameter type Addr_t = IntResAddr_t,
+    parameter type FxFormat_t = FxFormatIntRes_t
 );
 
     // Signals
@@ -17,7 +17,7 @@ interface MemoryInterface # (
     FxFormat_t format;
 
     // To memory controllers
-    modport input_read (
+    modport read_in (
         input en,
         input addr,
         input data_width,
@@ -25,7 +25,7 @@ interface MemoryInterface # (
         output data
     );
 
-    modport input_write (
+    modport write_in (
         input en, chip_en,
         input data,
         input addr,
@@ -34,7 +34,7 @@ interface MemoryInterface # (
     );
 
     // From compute
-    modport output_read (
+    modport read_out (
         output en,
         output addr,
         output data_width,
@@ -42,7 +42,7 @@ interface MemoryInterface # (
         input data
     );
 
-    modport output_write (
+    modport write_out (
         output en, chip_en,
         output data,
         output addr,
@@ -51,13 +51,13 @@ interface MemoryInterface # (
     );
 
     // To memory banks
-    modport input_read_bank (
+    modport read_bank_in (
         input en,
         input addr,
         output data
     );
 
-    modport input_write_bank (
+    modport write_bank_in (
         input en, chip_en,
         input data,
         input addr
@@ -67,7 +67,7 @@ interface MemoryInterface # (
     FxFormatIntRes_t int_res_read_format, int_res_write_format;
     DataWidth_t int_res_read_width, int_res_write_width;
     FxFormatParams_t params_read_format, params_write_format;
-    modport casts (
+    modport casts_in (
         input int_res_read_format, int_res_write_format,
         input int_res_read_width, int_res_write_width,
         input params_read_format, params_write_format

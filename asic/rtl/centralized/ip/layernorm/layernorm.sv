@@ -14,18 +14,18 @@ module layernorm (
     input wire clk, rst_n,
 
     // Memory access signals
-    input MemoryInterface.casts casts,
-    output MemoryInterface.output_read  param_read,
-    output MemoryInterface.output_read  int_res_read,
-    output MemoryInterface.output_write int_res_write,
+    MemoryInterface.casts_in casts,
+    MemoryInterface.read_out param_read,
+    MemoryInterface.read_out int_res_read,
+    MemoryInterface.write_out int_res_write,
 
     // Compute IO signals
-    input ComputeIPInterface.basic_in   io,
-    input ComputeIPInterface.extra      io_extra,
-    output ComputeIPInterface.basic_out add_io,
-    output ComputeIPInterface.basic_out mult_io,
-    output ComputeIPInterface.basic_out div_io,
-    output ComputeIPInterface.basic_out sqrt_io
+    ComputeIPInterface.basic_in io,
+    ComputeIPInterface.extra_in io_extra,
+    ComputeIPInterface.basic_out add_io,
+    ComputeIPInterface.basic_out mult_io,
+    ComputeIPInterface.basic_out div_io,
+    ComputeIPInterface.basic_out sqrt_io
 );
 
     /*----- TASKS -----*/
@@ -82,8 +82,6 @@ module layernorm (
         param_read.addr <= addr;
         param_read.format <= param_format;
     endtask
-
-    // TODO as of 2024/09/08: Change output indexing for second half to increment by EMB_DEPTH instead of 1 to match C++ centralized
 
     /*----- LOGIC -----*/
     localparam  LEN_FIRST_HALF = 64, // LEN_FIRST_HALF must be a power of 2 since we divide by bit shifting

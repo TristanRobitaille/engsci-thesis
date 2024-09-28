@@ -127,6 +127,10 @@ asic/rtl/cim/~*
 asic/rtl/rtl_env
 *.saif
 *sim_build*
+asic/rtl/reports/
+asic/rtl/results/
+asic/rtl/centralized/mem/int_res_14336x15
+asic/rtl/centralized/mem/params_15872x15
 
 ### ASIC functional simulation
 asic/fixed_point_accuracy_study/results_test.csv

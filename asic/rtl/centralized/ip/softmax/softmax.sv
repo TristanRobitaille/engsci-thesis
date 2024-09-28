@@ -13,17 +13,17 @@ module softmax (
     input wire clk, rst_n,
 
     // Memory access signals
-    input MemoryInterface.casts casts,
-    output MemoryInterface.output_read int_res_read,
-    output MemoryInterface.output_write int_res_write,
+    MemoryInterface.casts_in casts,
+    MemoryInterface.read_out int_res_read,
+    MemoryInterface.write_out int_res_write,
 
     // Compute IO signals
-    input ComputeIPInterface.basic_in   io,
-    input ComputeIPInterface.extra      io_extra,
-    output ComputeIPInterface.basic_out add_io,
-    output ComputeIPInterface.basic_out mult_io,
-    output ComputeIPInterface.basic_out div_io,
-    output ComputeIPInterface.basic_out exp_io
+    ComputeIPInterface.basic_in io,
+    ComputeIPInterface.extra_in io_extra,
+    ComputeIPInterface.basic_out add_io,
+    ComputeIPInterface.basic_out mult_io,
+    ComputeIPInterface.basic_out div_io,
+    ComputeIPInterface.basic_out exp_io
 );
 
     /*----- MEMORY -----*/

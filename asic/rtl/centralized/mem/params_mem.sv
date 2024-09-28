@@ -2,8 +2,8 @@ import Defines::*;
 
 module params_mem (
     input logic clk, rst_n,
-    input MemoryInterface.input_write write,
-    output MemoryInterface.input_read read
+    MemoryInterface.write_in write,
+    MemoryInterface.read_in read
 );
 
     /* Theory of operation
@@ -45,6 +45,12 @@ module params_mem (
 `ifdef USE_MEM_MODEL
     mem_model #(.DEPTH(CIM_PARAMS_BANK_SIZE_NUM_WORD)) params_0 (.rst_n, .clk, .read(params_0_read), .write(params_0_write));
     mem_model #(.DEPTH(CIM_PARAMS_BANK_SIZE_NUM_WORD)) params_1 (.rst_n, .clk, .read(params_1_read), .write(params_1_write));
+`else
+    ParamBankAddr_t params_0_addr, params_1_addr;
+    assign params_0_addr = (params_0_write.en) ? params_0_write.addr : params_0_read.addr;
+    assign params_1_addr = (params_1_write.en) ? params_1_write.addr : params_1_read.addr;
+    params_15872x15 params_0 (.Q(params_0_read.data), .CLK(clk), .CEN(params_0_write.chip_en), .WEN(params_0_write.en), .A(params_0_addr), .D(params_0_write.data), .EMA(3'b000), .RETN(RETENTION_ENABLED), .PGEN(POWER_GATING_DISABLED));
+    params_15872x15 params_1 (.Q(params_1_read.data), .CLK(clk), .CEN(params_1_write.chip_en), .WEN(params_1_write.en), .A(params_1_addr), .D(params_1_write.data), .EMA(3'b000), .RETN(RETENTION_ENABLED), .PGEN(POWER_GATING_DISABLED));
 `endif
 
     // Constants
@@ -107,9 +113,11 @@ module params_mem (
         end
     end
 
+`ifdef ENABLE_ASSERTIONS
     // Assertions
     always_ff @ (posedge clk) begin : params_mem_assertions
         assert (!(params_0_read.en & params_1_read.en)) else $error("Trying to read from both banks of parameters memory simultaneously!");
         assert (!(params_0_write.en & params_1_write.en)) else $error("Trying to write to both banks of parameters memory simultaneously!");        
     end
+`endif
 endmodule

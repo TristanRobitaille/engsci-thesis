@@ -2,7 +2,7 @@
 `define _defines_svh_
 
 package Defines;
-    /* ----- Memory constants ----- */
+    /* ----- Memory ----- */
     localparam int CIM_PARAMS_BANK_SIZE_NUM_WORD    = 15872; // Need 2 banks
     localparam int CIM_INT_RES_BANK_SIZE_NUM_WORD   = 14336; // Need 4 banks
     localparam int CIM_PARAMS_NUM_BANKS             = 2;
@@ -13,8 +13,9 @@ package Defines;
     localparam int N_COMP                           = 39;
     localparam int Q_COMP                           = 21;
     localparam int ADC_BITWIDTH                     = 16; // Assume that the ADC feeding EEG data is 16b unsigned integer
+    localparam int VECTOR_MAX_LEN = 64;
+    localparam int NUM_SLEEP_STAGES = 5;
 
-    /* ----- Types ----- */
     typedef logic [$clog2(CIM_INT_RES_NUM_BANKS*CIM_PARAMS_BANK_SIZE_NUM_WORD)-1:0] IntResAddr_t;
     typedef logic [$clog2(CIM_PARAMS_NUM_BANKS*CIM_INT_RES_BANK_SIZE_NUM_WORD)-1:0] ParamAddr_t;
     typedef logic [$clog2(CIM_INT_RES_BANK_SIZE_NUM_WORD)-1:0]                      IntResBankAddr_t;
@@ -34,11 +35,8 @@ package Defines;
     localparam int PATCH_LEN = 64;
     localparam int MLP_DIM = 32;
     localparam int NUM_HEADS = 8;
-    localparam int NUM_SLEEP_STAGES = 5;
-    localparam CompFx_t NUM_SLEEP_STAGES_INVERSE_COMP_FX = CompFx_t'($rtoi(0.2 * (1 << Q_COMP)));
+    localparam CompFx_t NUM_SLEEP_STAGES_INVERSE_COMP_FX = CompFx_t'(0.2 * (1 << Q_COMP)); // 1/NUM_SLEEP_STAGES
     localparam int NUM_SAMPLES_OUT_AVG = 3;
-
-    localparam int VECTOR_MAX_LEN = 64;
 
     /* ----- Enum ----- */
     typedef enum logic {
@@ -60,6 +58,18 @@ package Defines;
         HORIZONTAL,
         VERTICAL
     } Direction_t;
+
+`ifndef USE_MEM_MODEL
+    typedef enum logic {
+        POWER_GATING_ENABLED = 0,
+        POWER_GATING_DISABLED = 1
+    } PowerGatingCtrl_t;
+
+    typedef enum logic {
+        RETENTION_ENABLED = 0,
+        RETENTION_DISABLED = 1
+    } RetentionEnable_t;
+`endif
 
     typedef enum logic [2:0] {
         INT_RES_SW_FX_1_X,

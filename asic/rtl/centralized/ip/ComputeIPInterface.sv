@@ -33,7 +33,7 @@ interface ComputeIPInterface;
     ParamAddr_t bias_addr;
     Direction_t direction;
     IntResAddr_t start_addr_1, start_addr_2, start_addr_3, start_addr_4;
-    modport extra (
+    modport extra_in (
         input half_select,
         input len, matrix_width,
         input param_type,

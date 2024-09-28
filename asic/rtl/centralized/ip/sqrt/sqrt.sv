@@ -12,7 +12,7 @@
 
 module sqrt (
     input wire clk, rst_n,
-    input ComputeIPInterface.basic_in io
+    ComputeIPInterface.basic_in io
 );
 
     logic neg_rad;      // Negative radicand flag
@@ -37,7 +37,7 @@ module sqrt (
         io.overflow = io.done && io.out[N_COMP-1]; // Overflow occurs when the output is negative since sqrt(x) is always positive
     end
 
-    enum {IDLE, CALC} state;
+    enum logic {IDLE, CALC} state;
     typedef logic [$clog2(N_COMP)-1:0] count_t;
     localparam CNT_THRESHOLD = (N_COMP + Q_COMP) >> 1;
     count_t count;
@@ -84,11 +84,11 @@ module sqrt (
         end
     end
 
-    // synopsys translate_off
+`ifdef ENABLE_ASSERTIONS
     always_ff @ (posedge clk) begin : sqrt_assertions
         assert (~io.in_1[N_COMP-1]) else $fatal("Error from sqrt: Negative radicand detected.");
     end
-    // synopsys translate_on
+`endif
 endmodule
 
 `endif

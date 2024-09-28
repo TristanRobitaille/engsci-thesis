@@ -13,7 +13,7 @@
 
 module divider (
     input wire clk, rst_n,
-    input ComputeIPInterface.basic_in io
+    ComputeIPInterface.basic_in io
 );
     typedef logic [$clog2(N_COMP):0] count_t;
     count_t count;
@@ -80,11 +80,13 @@ module divider (
         end
     end
 
+`ifdef ENABLE_ASSERTIONS
     always_ff @ (posedge clk) begin : div_assertions
         if (io.start && ($countones(io.in_2[N_COMP-2:0]) == 1)) begin
             $display("Warning from divide module: Divisor is a power of 2, consider using a bit-shift instead of division.");
         end
     end
+`endif
     
 endmodule
 

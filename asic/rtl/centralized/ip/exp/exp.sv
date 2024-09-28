@@ -13,27 +13,18 @@ module exp (
     input wire clk,
     input wire rst_n,
 
-    input ComputeIPInterface.basic_in io,
-    output ComputeIPInterface.basic_out adder_io,
-    output ComputeIPInterface.basic_out mult_io
+    ComputeIPInterface.basic_in io,
+    ComputeIPInterface.basic_out adder_io,
+    ComputeIPInterface.basic_out mult_io
 );
 
-function automatic CompFx_t real_to_fixed(input real decimal_float);
-    CompFx_t fixed_value;
-    begin
-        // Convert the real number to fixed-point by scaling and rounding
-        fixed_value = CompFx_t'($rtoi(decimal_float * (1 << Q_COMP)));
-        return fixed_value;
-    end
-endfunction
-
 // Constants
-localparam CompFx_t ln2_inv = real_to_fixed(1.44269504089); // 1/ln(2)
+localparam CompFx_t ln2_inv = CompFx_t'(1.44269504089 * 2**Q_COMP); // 1/ln(2)
 localparam CompFx_t Taylor_mult[0:3] = {
-    real_to_fixed(1.0),             // 1.0
-    real_to_fixed(0.69314718056),   // ln(2)
-    real_to_fixed(0.24022650700),   // ln(2)^2/2!
-    real_to_fixed(0.05550410866)    // ln(2)^3/3!
+    CompFx_t'(1.0 * 2**Q_COMP), // 1.0
+    CompFx_t'(0.69314718056 * 2**Q_COMP), // ln(2)
+    CompFx_t'(0.24022650700 * 2**Q_COMP), // ln(2)^2/2!
+    CompFx_t'(0.05550410866 * 2**Q_COMP)  // ln(2)^3/3!
 };
 
 enum [2:0] {IDLE, UPDATE_SUM, MULT, TAYLOR_TERM_1, TAYLOR_TERM_2, TAYLOR_TERM_3, FINISH} state, next_state;

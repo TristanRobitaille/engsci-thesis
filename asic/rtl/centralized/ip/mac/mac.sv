@@ -14,18 +14,26 @@ module mac (
     input wire clk, rst_n,
 
     // Memory access signals
-    input MemoryInterface.casts         casts,
-    output MemoryInterface.output_read  param_read,
-    output MemoryInterface.output_read  int_res_read,
+    MemoryInterface.casts_in casts,
+    MemoryInterface.read_out param_read,
+    MemoryInterface.read_out int_res_read,
 
     // Compute IO signals
-    input ComputeIPInterface.basic_in   io,
-    input ComputeIPInterface.extra      io_extra,
-    output ComputeIPInterface.basic_out add_io,
-    output ComputeIPInterface.basic_out mult_io,
-    output ComputeIPInterface.basic_out div_io,
-    output ComputeIPInterface.basic_out exp_io
+    ComputeIPInterface.basic_in io,
+    ComputeIPInterface.extra_in io_extra,
+    ComputeIPInterface.basic_out add_io,
+    ComputeIPInterface.basic_out mult_io,
+    ComputeIPInterface.basic_out div_io,
+    ComputeIPInterface.basic_out exp_io
 );
+
+    /*----- SIGNALS -----*/
+    logic input_currently_reading;
+    logic [3:0] delay_signal;
+    VectorLen_t index;
+    CompFx_t compute_temp, compute_temp_2, add_in_2_reg;
+    enum logic [3:0] {IDLE, BASIC_MAC_INTERMEDIATE_RES, BASIC_MAC_MODEL_PARAM, BASIC_MAC_DONE, LINEAR_ACTIVATION_COMP,
+                      SWISH_ACTIVATION_ADD, SWISH_ACTIVATION_EXP, SWISH_ACTIVATION_DIV, SWISH_ACTIVATION_FINAL_ADD} state;
 
     /*----- TASKS -----*/
     task set_default_values();
@@ -80,14 +88,6 @@ module mac (
     end
 
     /*----- LOGIC -----*/
-    logic input_currently_reading;
-    logic [3:0] delay_signal;
-    VectorLen_t index;
-    CompFx_t compute_temp, compute_temp_2, add_in_2_reg;
-
-    enum logic [3:0] {IDLE, BASIC_MAC_INTERMEDIATE_RES, BASIC_MAC_MODEL_PARAM, BASIC_MAC_DONE, LINEAR_ACTIVATION_COMP,
-                      SWISH_ACTIVATION_ADD, SWISH_ACTIVATION_EXP, SWISH_ACTIVATION_DIV, SWISH_ACTIVATION_FINAL_ADD} state;
-
     // Flip add
     CompFx_t add_out_flipped;
     always_comb begin : add_flip

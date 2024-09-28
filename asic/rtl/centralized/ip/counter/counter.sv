@@ -13,7 +13,7 @@ module counter # (
     parameter CounterMode_t MODE = POSEDGE_TRIGGERED // 0: posedge-triggered, 1: level-triggered
 ) (
     input wire clk,
-    CounterInterface sig
+    CounterInterface.data_in sig
 );
 
     logic inc_prev;

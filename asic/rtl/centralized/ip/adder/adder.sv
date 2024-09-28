@@ -9,7 +9,7 @@
 
 module adder (
     input wire clk, rst_n,
-    input ComputeIPInterface.basic_in io
+    ComputeIPInterface.basic_in io
 );
 
     CompFx_t in_1_q, in_2_q;

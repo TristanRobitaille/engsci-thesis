@@ -1,3 +1,8 @@
+`ifndef _cim_centralized_tb_vh_
+`define _cim_centralized_tb_vh_
+
+import Defines::*;
+
 module cim_centralized_tb (
     input logic clk, soc_ctrl_rst_n, soc_ctrl_start_eeg_load,
     input logic soc_ctrl_new_eeg_data, soc_ctrl_new_sleep_epoch,
@@ -62,3 +67,5 @@ module cim_centralized_tb (
         .param_write_tb_i, .int_res_write_tb_i
     );
 endmodule
+
+`endif

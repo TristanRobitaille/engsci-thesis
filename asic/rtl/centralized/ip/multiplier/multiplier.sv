@@ -11,7 +11,7 @@
 module multiplier (
     input wire clk,
     input wire rst_n,
-    input ComputeIPInterface.basic_in io
+    ComputeIPInterface.basic_in io
 );
 
     localparam LSB = Q_COMP; // LSB of fractional part that we retain in output
@@ -66,16 +66,16 @@ module multiplier (
 
         if (io.done) begin
             if (one_input_is_zero & out_is_neg) begin
-                assign io.overflow = 1'b1;
+                io.overflow = 1'b1;
             end else if ((in_1_q[N_COMP-1] == in_2_q[N_COMP-1]) & out_is_neg) begin
-                assign io.overflow = 1'b1;
+                io.overflow = 1'b1;
             end else if ((in_1_q[N_COMP-1] != in_2_q[N_COMP-1] & ~one_input_is_zero) & ~out_is_neg & ~out_is_zero) begin
-                assign io.overflow = 1'b1;
+                io.overflow = 1'b1;
             end else begin
-                assign io.overflow = 1'b0;
+                io.overflow = 1'b0;
             end
         end else begin
-            assign io.overflow = 1'b0;
+            io.overflow = 1'b0;
         end
     end
 

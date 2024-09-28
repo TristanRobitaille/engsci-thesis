@@ -2,8 +2,8 @@ import Defines::*;
 
 module int_res_mem (
     input clk, rst_n,
-    input MemoryInterface.input_write write,
-    output MemoryInterface.input_read read
+    MemoryInterface.write_in write,
+    MemoryInterface.read_in read
 );
 
     /*  Theory of operation
@@ -71,6 +71,16 @@ module int_res_mem (
     mem_model #(.DEPTH(CIM_INT_RES_BANK_SIZE_NUM_WORD)) int_res_1 (.clk, .rst_n, .read(int_res_1_read), .write(int_res_1_write));
     mem_model #(.DEPTH(CIM_INT_RES_BANK_SIZE_NUM_WORD)) int_res_2 (.clk, .rst_n, .read(int_res_2_read), .write(int_res_2_write));
     mem_model #(.DEPTH(CIM_INT_RES_BANK_SIZE_NUM_WORD)) int_res_3 (.clk, .rst_n, .read(int_res_3_read), .write(int_res_3_write));
+`else
+    IntResBankAddr_t int_res_0_addr, int_res_1_addr, int_res_2_addr, int_res_3_addr;
+    assign int_res_0_addr = (int_res_0_write.en) ? int_res_0_write.addr : int_res_0_read.addr;
+    assign int_res_1_addr = (int_res_1_write.en) ? int_res_1_write.addr : int_res_1_read.addr;
+    assign int_res_2_addr = (int_res_2_write.en) ? int_res_2_write.addr : int_res_2_read.addr;
+    assign int_res_3_addr = (int_res_3_write.en) ? int_res_3_write.addr : int_res_3_read.addr;
+    int_res_14336x15 int_res_0 (.Q(int_res_0_read.data), .CLK(clk), .CEN(int_res_0_write.chip_en), .WEN(int_res_0_write.en), .A(int_res_0_addr), .D(int_res_0_write.data), .EMA(3'b000), .RETN(RETENTION_DISABLED), .PGEN(POWER_GATING_ENABLED));
+    int_res_14336x15 int_res_1 (.Q(int_res_1_read.data), .CLK(clk), .CEN(int_res_1_write.chip_en), .WEN(int_res_1_write.en), .A(int_res_1_addr), .D(int_res_1_write.data), .EMA(3'b000), .RETN(RETENTION_DISABLED), .PGEN(POWER_GATING_ENABLED));
+    int_res_14336x15 int_res_2 (.Q(int_res_2_read.data), .CLK(clk), .CEN(int_res_2_write.chip_en), .WEN(int_res_2_write.en), .A(int_res_2_addr), .D(int_res_2_write.data), .EMA(3'b000), .RETN(RETENTION_DISABLED), .PGEN(POWER_GATING_ENABLED));
+    int_res_14336x15 int_res_3 (.Q(int_res_3_read.data), .CLK(clk), .CEN(int_res_3_write.chip_en), .WEN(int_res_3_write.en), .A(int_res_3_addr), .D(int_res_3_write.data), .EMA(3'b000), .RETN(RETENTION_DISABLED), .PGEN(POWER_GATING_ENABLED));
 `endif
 
     logic read_en_prev;
@@ -256,9 +266,11 @@ module int_res_mem (
         end
     end
 
+`ifdef ENABLE_ASSERTIONS
     // Assertions
     always_ff @ (posedge clk) begin : int_res_mem_assertions
         if (read.data_width == DOUBLE_WIDTH) assert (read.format == INT_RES_DW_FX) else $error("Intermediate results memory: Read format must be INT_RES_DW_FX if width is DOUBLE_WIDTH");
         if (write.data_width == DOUBLE_WIDTH) assert (write.format == INT_RES_DW_FX) else $error("Intermediate results memory: Write format must be INT_RES_DW_FX if width is DOUBLE_WIDTH");
     end
+`endif
 endmodule

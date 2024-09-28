@@ -3,4 +3,5 @@ source /CMC/tools/CSHRCs/Mentor.Modelsim10.7c
 source /CMC/tools/CSHRCs/Cadence.SOC
 source /CMC/tools/CSHRCs/Synopsys.2017.09
 source /CMC/tools/CSHRCs/Synopsys.Formality
+source /CMC/tools/CSHRCs/Synopsys.LC.2022
 design_vision
