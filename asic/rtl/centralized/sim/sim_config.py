@@ -16,6 +16,7 @@ sys.path.append(f"{home_dir}/asic/rtl/") # For testbench utilities
 
 OVERFLOW_WARNING = False
 ALLOW_NEG_RADICAND_SQRT = True # Allow negative radicand in sqrt
+ASSERTIONS_ENABLE = False
 
 # Arguments
 ARGS = [
@@ -35,6 +36,7 @@ ARGS = [
 
 if OVERFLOW_WARNING: ARGS.append("-DOVERFLOW_WARNING")
 if ALLOW_NEG_RADICAND_SQRT: ARGS.append("-DALLOW_NEG_RAD_SQRT")
+if ASSERTIONS_ENABLE: ARGS.append("-DASSERTIONS_ENABLE")
 
 # Run the simulation
 def test_dff_verilog():
