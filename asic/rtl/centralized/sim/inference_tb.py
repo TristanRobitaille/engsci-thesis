@@ -64,8 +64,8 @@ async def print_progress(dut):
             cocotb.log.info(f"Current step: {current_step}")
         for _ in range(5000): await RisingEdge(dut.clk)
 
-async def update_active_signals(dut):
-    """Determines whether each module is active at each cycle"""
+async def update_active_cnt(dut):
+    """Updates the active cycle count for each module"""
     while True:
         active_cnt["total"]["active"] = True
         active_cnt["add"]["active"] = True if (dut.cim_centralized.add_io.start.value or dut.cim_centralized.add_io.done.value) else False
@@ -76,11 +76,7 @@ async def update_active_signals(dut):
         active_cnt["mac"]["active"] = True if dut.cim_centralized.mac_io.busy.value else False
         active_cnt["layernorm"]["active"] = True if dut.cim_centralized.ln_io.busy.value else False
         active_cnt["softmax"]["active"] = True if dut.cim_centralized.softmax_io.busy.value else False
-        await RisingEdge(dut.clk)
 
-async def update_active_cnt(dut):
-    """Updates the active cycle count for each module"""
-    while True:
         for module in active_cnt.values(): module["cnt"] += module["active"]
         await RisingEdge(dut.clk)
 
@@ -95,7 +91,7 @@ async def inference_tb(dut):
     dut.soc_ctrl_rst_n.value = 1
 
     cocotb.start_soon(print_progress(dut))
-    cocotb.start_soon(update_active_signals(dut))
+    # cocotb.start_soon(update_active_signals(dut))
     cocotb.start_soon(update_active_cnt(dut))
 
     # Fill memory concurrently
@@ -117,6 +113,6 @@ async def inference_tb(dut):
 
     # Active counts
     for (name,module) in active_cnt.items():
-        cocotb.log.info(f"{name } active percentage: {100*module['cnt']/active_cnt['total']['cnt']:.3f}%")
+        cocotb.log.info(f"{name} active percentage: {100*module['cnt']/active_cnt['total']['cnt']:.3f}% (out of 30s: {100*module['cnt']/(utilities.CLIP_LENGTH_S * CLK_FREQ_MHZ * 1e3):.3f} x 10^-3%)")
 
     # for _ in range(int((30-0.045) * 10e6*CLK_FREQ_MHZ)): await RisingEdge(dut.clk) # Wait for ~30s for accurate .saif file
