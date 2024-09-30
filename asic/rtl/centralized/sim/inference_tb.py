@@ -2,6 +2,7 @@
 import os
 import h5py
 import cocotb
+import socket
 import random
 import utilities
 import Constants as const
@@ -11,9 +12,13 @@ from cocotb.clock import Clock
 # ----- CONSTANTS ----- #
 CLK_FREQ_MHZ = 100
 CLIP_INDEX = 0
-home_dir = os.path.expanduser("~/../tmp")
-eeg = h5py.File(f"{home_dir}/asic/fixed_point_accuracy_study/reference_data/eeg.h5", "r")
-params_file = h5py.File(f"{home_dir}/asic/fixed_point_accuracy_study/reference_data/model_weights.h5", "r")
+EXTRA_SIM_TIME_S = 29.55
+
+hostname = socket.gethostname()
+if "cedar" in hostname: repo_root = os.path.expanduser("~/projects/def-xilinliu/tristanr/engsci-thesis")
+else: repo_root = os.path.expanduser("~/../tmp")
+eeg = h5py.File(f"{repo_root}/asic/fixed_point_accuracy_study/reference_data/eeg.h5", "r")
+params_file = h5py.File(f"{repo_root}/asic/fixed_point_accuracy_study/reference_data/model_weights.h5", "r")
 
 active_cnt = {
     "total":    {"active":False, "cnt":0}, # Total number of cycles over inference
@@ -115,4 +120,10 @@ async def inference_tb(dut):
     for (name,module) in active_cnt.items():
         cocotb.log.info(f"{name} active percentage: {100*module['cnt']/active_cnt['total']['cnt']:.3f}% (out of 30s: {100*module['cnt']/(utilities.CLIP_LENGTH_S * CLK_FREQ_MHZ * 1e3):.3f} x 10^-3%)")
 
-    # for _ in range(int((30-0.045) * 10e6*CLK_FREQ_MHZ)): await RisingEdge(dut.clk) # Wait for ~30s for accurate .saif file
+    if EXTRA_SIM_TIME_S != -1: # Let run for some time for accurate .saif file
+        cnt_5ms = 0
+        for i in range(int(EXTRA_SIM_TIME_S * 1e6*CLK_FREQ_MHZ)):
+            if ((i % int(0.005*1e6*CLK_FREQ_MHZ)) == 0): # Every 5ms
+                if i != 0: cocotb.log.info(f"Extra time elapsed: {int(5*cnt_5ms)}ms")
+                cnt_5ms += 1
+            await RisingEdge(dut.clk)
