@@ -15,6 +15,18 @@ home_dir = os.path.expanduser("~/../tmp")
 eeg = h5py.File(f"{home_dir}/asic/fixed_point_accuracy_study/reference_data/eeg.h5", "r")
 params_file = h5py.File(f"{home_dir}/asic/fixed_point_accuracy_study/reference_data/model_weights.h5", "r")
 
+active_cnt = {
+    "total":    {"active":False, "cnt":0}, # Total number of cycles over inference
+    "add":      {"active":False, "cnt":0},
+    "mult":     {"active":False, "cnt":0},
+    "div":      {"active":False, "cnt":0},
+    "exp":      {"active":False, "cnt":0},
+    "sqrt":     {"active":False, "cnt":0},
+    "mac":      {"active":False, "cnt":0},
+    "layernorm":{"active":False, "cnt":0},
+    "softmax":  {"active":False, "cnt":0},
+}
+
 # ----- HELPERS ----- #
 async def load_eeg(dut):
     dut.soc_ctrl_start_eeg_load.value = 1
@@ -52,6 +64,26 @@ async def print_progress(dut):
             cocotb.log.info(f"Current step: {current_step}")
         for _ in range(5000): await RisingEdge(dut.clk)
 
+async def update_active_signals(dut):
+    """Determines whether each module is active at each cycle"""
+    while True:
+        active_cnt["total"]["active"] = True
+        active_cnt["add"]["active"] = True if (dut.cim_centralized.add_io.start.value or dut.cim_centralized.add_io.done.value) else False
+        active_cnt["mult"]["active"] = True if (dut.cim_centralized.mult_io.start.value or dut.cim_centralized.mult_io.done.value) else False
+        active_cnt["div"]["active"] = True if dut.cim_centralized.div_io.busy.value else False
+        active_cnt["exp"]["active"] = True if dut.cim_centralized.exp_io.busy.value else False
+        active_cnt["sqrt"]["active"] = True if dut.cim_centralized.sqrt_io.busy.value else False
+        active_cnt["mac"]["active"] = True if dut.cim_centralized.mac_io.busy.value else False
+        active_cnt["layernorm"]["active"] = True if dut.cim_centralized.ln_io.busy.value else False
+        active_cnt["softmax"]["active"] = True if dut.cim_centralized.softmax_io.busy.value else False
+        await RisingEdge(dut.clk)
+
+async def update_active_cnt(dut):
+    """Updates the active cycle count for each module"""
+    while True:
+        for module in active_cnt.values(): module["cnt"] += module["active"]
+        await RisingEdge(dut.clk)
+
 # ----- TEST ----- #
 @cocotb.test()
 async def inference_tb(dut):
@@ -63,6 +95,8 @@ async def inference_tb(dut):
     dut.soc_ctrl_rst_n.value = 1
 
     cocotb.start_soon(print_progress(dut))
+    cocotb.start_soon(update_active_signals(dut))
+    cocotb.start_soon(update_active_cnt(dut))
 
     # Fill memory concurrently
     params_fill = cocotb.start_soon(load_params(dut))
@@ -75,6 +109,14 @@ async def inference_tb(dut):
 
     # Inference
     dut.soc_ctrl_new_sleep_epoch.value = 1
+    await RisingEdge(dut.clk)
+    dut.soc_ctrl_new_sleep_epoch.value = 0
 
     while not dut.soc_ctrl_inference_complete.value:
         await RisingEdge(dut.clk)
+
+    # Active counts
+    for (name,module) in active_cnt.items():
+        cocotb.log.info(f"{name } active percentage: {100*module['cnt']/active_cnt['total']['cnt']:.3f}%")
+
+    # for _ in range(int((30-0.045) * 10e6*CLK_FREQ_MHZ)): await RisingEdge(dut.clk) # Wait for ~30s for accurate .saif file
