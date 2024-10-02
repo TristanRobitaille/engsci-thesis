@@ -21,6 +21,9 @@ ARGS = [
     "--trace-max-array","1024", # Max array depth
     "-j","16",
     "--timescale","1ns/10ps",
+
+    # SV compilation
+    "-DUSE_MEM_MODEL=1"
 ]
 
 # Run the simulation

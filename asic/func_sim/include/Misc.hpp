@@ -28,6 +28,7 @@
 // Need to synthesize two memory banks as the maximum size is 16384. Needs to be divisible by 2*32
 #define CIM_PARAMS_BANK_SIZE_NUM_WORD   15872 // Need 2 banks
 #define CIM_INT_RES_BANK_SIZE_NUM_WORD  14336 // Need 4 banks
+#define NUM_PARAMS_BANKS                2
 #define NUM_INT_RES_BANKS               4
 #endif
 

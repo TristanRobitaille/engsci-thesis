@@ -201,7 +201,7 @@ void CiM_Centralized::load_previous_softmax(const string prev_softmax_base_filep
         rapidcsv::Document csv(filename, rapidcsv::LabelParams(-1, -1));
         vector<float> dummy_softmax = csv.GetRow<float>(0);
         for (int j = 0; j < NUM_SLEEP_STAGES; j++) {
-            int_res_write((dummy_softmax[j] / NUM_SAMPLES_OUT_AVG), mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + i*NUM_SLEEP_STAGES + j, SINGLE_WIDTH);
+            param_write((dummy_softmax[j] / NUM_SAMPLES_OUT_AVG), mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + i*NUM_SLEEP_STAGES + j);
         }
     }
 }
@@ -669,7 +669,7 @@ bool CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_base_file
                     uint32_t add_addr;
                     if (current_inf_step == ENC_POST_MHSA_DENSE_AND_INPUT_SUM_STEP) { add_addr = mem_map.at(POS_EMB_MEM) + gen_cnt_7b.get_cnt() + EMB_DEPTH*gen_cnt_9b.get_cnt(); }
                     else { add_addr = mem_map.at(ENC_MHSA_OUT_MEM) + gen_cnt_7b.get_cnt(); }
-                    computation_result += static_cast<float> ( sw_fx_5_x_t { int_res_read(add_addr) } );
+                    computation_result += static_cast<float> ( sw_fx_6_x_t { int_res_read(add_addr) } );
                     mac_or_add = MAC_OP;
                     generic_done = true;
                 } else {
@@ -735,7 +735,7 @@ bool CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_base_file
             uint32_t addr_softmax_divide_sum = mem_map.at(SOFTMAX_AVG_SUM_MEM) + gen_cnt_7b.get_cnt();
 
             if (gen_cnt_4b.get_cnt() == 0) {
-                computation_result = static_cast<float> ( sw_fx_1_x_t { int_res_read(addr_prev_softmax) } ); // Prev softmax
+                computation_result = static_cast<float> ( sw_fx_1_x_t { param_read(addr_prev_softmax) } ); // Prev softmax
             } else if (gen_cnt_4b.get_cnt() == 1) {
                 computation_result += static_cast<float> ( sw_fx_1_x_t { int_res_read(addr_softmax_divide_sum) } ); // Current accumulator
             } else if (gen_cnt_4b.get_cnt() == 2) {
@@ -772,16 +772,16 @@ bool CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_base_file
 
             if (gen_cnt_4b.get_cnt() == 0) { // Grab dummy #0
                 uint32_t addr = mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + gen_cnt_7b.get_cnt();
-                computation_result = int_res_read(addr);
+                computation_result = param_read(addr);
             } else if (gen_cnt_4b.get_cnt() == 1) { // Write to dummy #1
                 uint32_t addr = mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + (gen_cnt_7b.get_cnt() + NUM_SLEEP_STAGES);
-                int_res_write(computation_result, addr, SINGLE_WIDTH);
+                param_write(computation_result, addr);
             } else if (gen_cnt_4b.get_cnt() == 2) { // Grab current epoch
                 uint32_t addr = mem_map.at(MLP_HEAD_DENSE_2_OUT_MEM) + gen_cnt_7b.get_cnt();
-                computation_result = int_res_read(addr);
+                computation_result = param_read(addr);
             } else if (gen_cnt_4b.get_cnt() == 3) { // Write to dummy #0
                 uint32_t addr = mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) + gen_cnt_7b.get_cnt();
-                int_res_write(computation_result, addr, SINGLE_WIDTH);
+                param_write(computation_result, addr);
             }
 
             if (gen_cnt_4b.get_cnt() == 3) {
@@ -789,7 +789,7 @@ bool CiM_Centralized::run(struct ext_signals* ext_sigs, string softmax_base_file
                 if (gen_cnt_7b.get_cnt() == NUM_SLEEP_STAGES-1) {
                     gen_cnt_7b.reset();
                     current_inf_step = INFERENCE_COMPLETE;
-                    verify_softmax_storage(int_res_3, mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) - 3*CIM_INT_RES_BANK_SIZE_NUM_WORD);
+                    verify_softmax_storage(params_1, mem_map.at(PREV_SOFTMAX_OUTPUT_MEM) - CIM_PARAMS_BANK_SIZE_NUM_WORD);
                     cout << ">----- STATS -----<" << endl;
                     cout << "Inference complete. Inferred sleep stage: " << _inferred_sleep_stage  << endl;
                     cout << "Number of exponent operations with negative argument = " << _neg_exp_cnt << "/" << _total_exp_cnt << " (" << 100*_neg_exp_cnt/_total_exp_cnt  << "%)" << endl;

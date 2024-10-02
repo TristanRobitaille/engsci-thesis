@@ -181,4 +181,4 @@ params_fx_rtl_enum = {
 
 # ----- CLASSES ----- #
 num_Q_comp          = FXfamily(Q_COMP, N_COMP-Q_COMP)
-num_Q_comp_overflow = FXfamily(Q_COMP, N_COMP-Q_COMP+10)
+num_Q_comp_overflow = FXfamily(Q_COMP, N_COMP-Q_COMP+10) 

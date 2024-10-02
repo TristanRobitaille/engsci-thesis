@@ -1,21 +1,26 @@
 import os
 import sys
+import socket
 from cocotb_test.simulator import run
 
 RANDOM_SEED = 1
 
 # Paths
+hostname = socket.gethostname()
+if "cedar" in hostname: repo_root = os.path.expanduser("~/projects/def-xilinliu/tristanr/engsci-thesis")
+else: repo_root = os.path.expanduser("~/../tmp")
+
 src_dir = "asic/rtl/centralized"
 ip_dir = "asic/rtl/centralized/ip"
-home_dir = os.path.expanduser("~/../tmp")
-src_dir = os.path.join(home_dir, src_dir)
-ip_dir = os.path.join(home_dir, ip_dir)
+src_dir = os.path.join(repo_root, src_dir)
+ip_dir = os.path.join(repo_root, ip_dir)
 
-sys.path.append(f"{home_dir}/asic/rtl/centralized/sim") # For constants from Centralized CiM testbench
-sys.path.append(f"{home_dir}/asic/rtl/") # For testbench utilities
+sys.path.append(f"{repo_root}/asic/rtl/centralized/sim") # For constants from Centralized CiM testbench
+sys.path.append(f"{repo_root}/asic/rtl/") # For testbench utilities
 
 OVERFLOW_WARNING = False
 ALLOW_NEG_RADICAND_SQRT = True # Allow negative radicand in sqrt
+ASSERTIONS_ENABLE = False
 
 # Arguments
 ARGS = [
@@ -35,6 +40,7 @@ ARGS = [
 
 if OVERFLOW_WARNING: ARGS.append("-DOVERFLOW_WARNING")
 if ALLOW_NEG_RADICAND_SQRT: ARGS.append("-DALLOW_NEG_RAD_SQRT")
+if ASSERTIONS_ENABLE: ARGS.append("-DASSERTIONS_ENABLE")
 
 # Run the simulation
 def test_dff_verilog():

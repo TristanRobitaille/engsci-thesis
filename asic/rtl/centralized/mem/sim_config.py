@@ -13,6 +13,8 @@ src_dir = os.path.join(home_dir, src_dir)
 sys.path.append(f"{home_dir}/asic/rtl/centralized/sim") # For constants from Centralized CiM testbench
 sys.path.append(f"{home_dir}/asic/rtl/") # For testbench utilities
 
+ASSERTIONS_ENABLE = True
+
 # Arguments
 ARGS = [
     # Simulator
@@ -22,7 +24,12 @@ ARGS = [
     "--trace-max-array","1024", # Max array depth
     "-j","16",
     "--timescale","1ns/10ps",
+
+    # SV compilation
+    "-DUSE_MEM_MODEL=1",
 ]
+
+if ASSERTIONS_ENABLE: ARGS.append("-DASSERTIONS_ENABLE")
 
 # Run the simulation
 def test_dff_verilog():
