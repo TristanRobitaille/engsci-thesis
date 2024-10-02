@@ -5,8 +5,8 @@ set BASE_PATH "/autofs/fs1.ece/fs1.eecg.xliugrp/robita46/engsci-thesis/asic/rtl/
 
 # Create a list of memory names
 set MEM_NAMES {
-    "params_15872x15"
-    "int_res_14336x15"
+    "params_15872x8"
+    "int_res_14336x8"
 }
 
 # Loop through each memory name

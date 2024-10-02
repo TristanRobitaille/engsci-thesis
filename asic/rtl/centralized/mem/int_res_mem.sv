@@ -77,10 +77,10 @@ module int_res_mem (
     assign int_res_1_addr = (int_res_1_write.en) ? int_res_1_write.addr : int_res_1_read.addr;
     assign int_res_2_addr = (int_res_2_write.en) ? int_res_2_write.addr : int_res_2_read.addr;
     assign int_res_3_addr = (int_res_3_write.en) ? int_res_3_write.addr : int_res_3_read.addr;
-    int_res_14336x15 int_res_0 (.Q(int_res_0_read.data), .CLK(clk), .CEN(int_res_0_write.chip_en), .WEN(int_res_0_write.en), .A(int_res_0_addr), .D(int_res_0_write.data), .EMA(3'b000), .RETN(RETENTION_DISABLED), .PGEN(POWER_GATING_ENABLED));
-    int_res_14336x15 int_res_1 (.Q(int_res_1_read.data), .CLK(clk), .CEN(int_res_1_write.chip_en), .WEN(int_res_1_write.en), .A(int_res_1_addr), .D(int_res_1_write.data), .EMA(3'b000), .RETN(RETENTION_DISABLED), .PGEN(POWER_GATING_ENABLED));
-    int_res_14336x15 int_res_2 (.Q(int_res_2_read.data), .CLK(clk), .CEN(int_res_2_write.chip_en), .WEN(int_res_2_write.en), .A(int_res_2_addr), .D(int_res_2_write.data), .EMA(3'b000), .RETN(RETENTION_DISABLED), .PGEN(POWER_GATING_ENABLED));
-    int_res_14336x15 int_res_3 (.Q(int_res_3_read.data), .CLK(clk), .CEN(int_res_3_write.chip_en), .WEN(int_res_3_write.en), .A(int_res_3_addr), .D(int_res_3_write.data), .EMA(3'b000), .RETN(RETENTION_DISABLED), .PGEN(POWER_GATING_ENABLED));
+    int_res_14336x8 int_res_0 (.Q(int_res_0_read.data), .CLK(clk), .CEN(int_res_0_write.chip_en), .WEN(int_res_0_write.en), .A(int_res_0_addr), .D(int_res_0_write.data), .EMA(3'b000), .RETN(RETENTION_DISABLED), .PGEN(POWER_GATING_ENABLED));
+    int_res_14336x8 int_res_1 (.Q(int_res_1_read.data), .CLK(clk), .CEN(int_res_1_write.chip_en), .WEN(int_res_1_write.en), .A(int_res_1_addr), .D(int_res_1_write.data), .EMA(3'b000), .RETN(RETENTION_DISABLED), .PGEN(POWER_GATING_ENABLED));
+    int_res_14336x8 int_res_2 (.Q(int_res_2_read.data), .CLK(clk), .CEN(int_res_2_write.chip_en), .WEN(int_res_2_write.en), .A(int_res_2_addr), .D(int_res_2_write.data), .EMA(3'b000), .RETN(RETENTION_DISABLED), .PGEN(POWER_GATING_ENABLED));
+    int_res_14336x8 int_res_3 (.Q(int_res_3_read.data), .CLK(clk), .CEN(int_res_3_write.chip_en), .WEN(int_res_3_write.en), .A(int_res_3_addr), .D(int_res_3_write.data), .EMA(3'b000), .RETN(RETENTION_DISABLED), .PGEN(POWER_GATING_ENABLED));
 `endif
 
     logic read_en_prev;

@@ -49,8 +49,8 @@ module params_mem (
     ParamBankAddr_t params_0_addr, params_1_addr;
     assign params_0_addr = (params_0_write.en) ? params_0_write.addr : params_0_read.addr;
     assign params_1_addr = (params_1_write.en) ? params_1_write.addr : params_1_read.addr;
-    params_15872x15 params_0 (.Q(params_0_read.data), .CLK(clk), .CEN(params_0_write.chip_en), .WEN(params_0_write.en), .A(params_0_addr), .D(params_0_write.data), .EMA(3'b000), .RETN(RETENTION_ENABLED), .PGEN(POWER_GATING_DISABLED));
-    params_15872x15 params_1 (.Q(params_1_read.data), .CLK(clk), .CEN(params_1_write.chip_en), .WEN(params_1_write.en), .A(params_1_addr), .D(params_1_write.data), .EMA(3'b000), .RETN(RETENTION_ENABLED), .PGEN(POWER_GATING_DISABLED));
+    params_15872x8 params_0 (.Q(params_0_read.data), .CLK(clk), .CEN(params_0_write.chip_en), .WEN(params_0_write.en), .A(params_0_addr), .D(params_0_write.data), .EMA(3'b000), .RETN(RETENTION_ENABLED), .PGEN(POWER_GATING_DISABLED));
+    params_15872x8 params_1 (.Q(params_1_read.data), .CLK(clk), .CEN(params_1_write.chip_en), .WEN(params_1_write.en), .A(params_1_addr), .D(params_1_write.data), .EMA(3'b000), .RETN(RETENTION_ENABLED), .PGEN(POWER_GATING_DISABLED));
 `endif
 
     // Constants

@@ -7,8 +7,8 @@ package Defines;
     localparam int CIM_INT_RES_BANK_SIZE_NUM_WORD   = 14336; // Need 4 banks
     localparam int CIM_PARAMS_NUM_BANKS             = 2;
     localparam int CIM_INT_RES_NUM_BANKS            = 4;
-    localparam int N_STO_INT_RES                    = 15;
-    localparam int N_STO_PARAMS                     = 15;
+    localparam int N_STO_INT_RES                    = 8;
+    localparam int N_STO_PARAMS                     = 8;
     localparam int Q_STO_INT_RES_DOUBLE             = 2*N_STO_INT_RES - 10;
     localparam int N_COMP                           = 39;
     localparam int Q_COMP                           = 21;
