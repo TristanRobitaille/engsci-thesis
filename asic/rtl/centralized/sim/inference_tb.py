@@ -12,7 +12,7 @@ from cocotb.clock import Clock
 # ----- CONSTANTS ----- #
 CLK_FREQ_MHZ = 100
 CLIP_INDEX = 0
-EXTRA_SIM_TIME_S = 29.55
+EXTRA_SIM_TIME_S = -1
 
 hostname = socket.gethostname()
 if "cedar" in hostname: repo_root = os.path.expanduser("~/projects/def-xilinliu/tristanr/engsci-thesis")
