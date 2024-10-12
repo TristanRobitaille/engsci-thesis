@@ -55,5 +55,3 @@ In `/python_prototype`, you'll find all files for the vision transformer model, 
 In `/latex`, you'll find all deliverables for this course (ESC499).\
 In `/asic`, you'll find a C++ functional model of the ASIC accelerator and most files for its synthesis (SystemVerilog, testbenches, etc.). Some files are excluded as they may contain information under NDA. You will also find files for a fixed-point accuracy study use to determine the optimal fixed-point format.
 
-## Note
-Always execute the SLURM scripts from the root of this repository
