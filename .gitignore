@@ -129,8 +129,8 @@ asic/rtl/rtl_env
 *sim_build*
 asic/rtl/reports/
 asic/rtl/results/
-asic/rtl/centralized/mem/int_res_14336x15
-asic/rtl/centralized/mem/params_15872x15
+asic/rtl/centralized/mem/int_res_14336x*
+asic/rtl/centralized/mem/params_15872x*
 
 ### ASIC functional simulation
 asic/fixed_point_accuracy_study/results_test.csv
@@ -144,3 +144,4 @@ doc/CMC_VLSI_User_Manual_2023.pdf
 doc/Synopsys_DC_commands.pdf
 doc/PUG0086A1a_65nm_cln65gp_hd_sram_compiler_ug.pdf
 doc/Low-Power_Methodology_Manual.pdf
+doc/Standard_Cell_App_Note.pdf
