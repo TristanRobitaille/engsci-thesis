@@ -35,6 +35,7 @@ module cim_centralized (
     MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t) param_read_i ();
     MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t) param_read_mac_i ();
     MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t) param_read_cim_i ();
+    MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t) param_write_cim_i ();
     MemoryInterface #(CompFx_t, ParamAddr_t, FxFormatParams_t) param_read_ln_i ();
 
     MemoryInterface #(CompFx_t, IntResAddr_t, FxFormatIntRes_t) int_res_read_i ();
@@ -679,12 +680,12 @@ module cim_centralized (
                         gen_cnt_4b holds internal step
                         */
 
-                        IntResAddr_t addr_prev_softmax = mem_map[PREV_SOFTMAX_OUTPUT_MEM] + IntResAddr_t'(int'(cnt_7b_i.cnt) + int'(NUM_SLEEP_STAGES*cnt_9b_i.cnt));
+                        ParamAddr_t addr_prev_softmax = ParamAddr_t'(mem_map[PREV_SOFTMAX_OUTPUT_MEM]) + ParamAddr_t'(int'(cnt_7b_i.cnt) + int'(NUM_SLEEP_STAGES*cnt_9b_i.cnt));
                         IntResAddr_t addr_softmax_divide_sum = mem_map[SOFTMAX_AVG_SUM_MEM] + IntResAddr_t'(cnt_7b_i.cnt);
 
-                        if (cnt_4b_i.cnt == 0) read_int_res(addr_prev_softmax, int_res_width[SOFTMAX_AVG_SUM_INV_WIDTH], int_res_format[SOFTMAX_AVG_SUM_INV_FORMAT]);
+                        if (cnt_4b_i.cnt == 0) read_params(addr_prev_softmax, params_format[PREV_SOFTMAX_OUTPUT_FORMAT]);
                         else if (cnt_4b_i.cnt == 1) read_int_res(addr_softmax_divide_sum, int_res_width[SOFTMAX_AVG_SUM_INV_WIDTH], int_res_format[SOFTMAX_AVG_SUM_INV_FORMAT]);
-                        else if (cnt_4b_i.cnt == 2) start_add(int_res_read_i.data, CompFx_t'(0)); // Use add as a storage location for previous softmax
+                        else if (cnt_4b_i.cnt == 2) start_add(param_read_i.data, CompFx_t'(0)); // Use add as a storage location for previous softmax
                         else if (cnt_4b_i.cnt == 4) start_add(int_res_read_i.data, add_io.out);
                         else if (cnt_4b_i.cnt == 6) write_int_res(addr_softmax_divide_sum, add_io.out, int_res_width[SOFTMAX_AVG_SUM_INV_WIDTH], int_res_format[SOFTMAX_AVG_SUM_INV_FORMAT]);
 
@@ -732,10 +733,10 @@ module cim_centralized (
                         gen_cnt_7b holds the current sleep stage within an epoch's softmax
                         gen_cnt_4b holds internal step
                         */
-                        if (cnt_9b_i.cnt == 0) read_int_res(mem_map[PREV_SOFTMAX_OUTPUT_MEM] + IntResAddr_t'(cnt_7b_i.cnt), int_res_width[SOFTMAX_AVG_SUM_INV_WIDTH], int_res_format[SOFTMAX_AVG_SUM_INV_FORMAT]);
-                        else if (cnt_9b_i.cnt == 2) write_int_res(mem_map[PREV_SOFTMAX_OUTPUT_MEM] + IntResAddr_t'(cnt_7b_i.cnt) + IntResAddr_t'(NUM_SLEEP_STAGES), int_res_read_i.data, int_res_width[PREV_SOFTMAX_OUTPUT_WIDTH], int_res_format[PREV_SOFTMAX_OUTPUT_FORMAT]);
-                        else if (cnt_9b_i.cnt == 3) read_int_res(mem_map[MLP_HEAD_DENSE_2_OUT_MEM] + IntResAddr_t'(cnt_7b_i.cnt), int_res_width[SOFTMAX_AVG_SUM_INV_WIDTH], int_res_format[SOFTMAX_AVG_SUM_INV_FORMAT]);
-                        else if (cnt_9b_i.cnt == 5) write_int_res(mem_map[PREV_SOFTMAX_OUTPUT_MEM] + IntResAddr_t'(cnt_7b_i.cnt), int_res_read_i.data, int_res_width[PREV_SOFTMAX_OUTPUT_WIDTH], int_res_format[PREV_SOFTMAX_OUTPUT_FORMAT]);
+                        if (cnt_9b_i.cnt == 0) read_params(ParamAddr_t'(mem_map[PREV_SOFTMAX_OUTPUT_MEM]) + ParamAddr_t'(cnt_7b_i.cnt), params_format[PREV_SOFTMAX_OUTPUT_FORMAT]);
+                        else if (cnt_9b_i.cnt == 2) write_params(ParamAddr_t'(mem_map[PREV_SOFTMAX_OUTPUT_MEM]) + ParamAddr_t'(cnt_7b_i.cnt) + ParamAddr_t'(NUM_SLEEP_STAGES), int_res_read_i.data, params_format[PREV_SOFTMAX_OUTPUT_FORMAT]);
+                        else if (cnt_9b_i.cnt == 3) read_params(ParamAddr_t'(mem_map[MLP_HEAD_DENSE_2_OUT_MEM]) + ParamAddr_t'(cnt_7b_i.cnt), params_format[PREV_SOFTMAX_OUTPUT_FORMAT]);
+                        else if (cnt_9b_i.cnt == 5) write_params(ParamAddr_t'(mem_map[PREV_SOFTMAX_OUTPUT_MEM]) + ParamAddr_t'(cnt_7b_i.cnt), int_res_read_i.data, params_format[PREV_SOFTMAX_OUTPUT_FORMAT]);
                     
                         if (cnt_9b_i.cnt == 5) begin
                             cnt_9b_i.rst_n <= 1'b0;
@@ -971,6 +972,13 @@ module cim_centralized (
         int_res_write_cim_i.data <= data;
         int_res_write_cim_i.data_width <= width;
         int_res_write_cim_i.format <= int_res_format;
+    endtask
+
+    task automatic write_params(input ParamAddr_t addr, input CompFx_t data, input FxFormatParams_t format);
+        param_write_cim_i.en <= 1'b1;
+        param_write_cim_i.addr <= addr;
+        param_write_cim_i.data <= data;
+        param_write_cim_i.format <= format;
     endtask
 
     task automatic read_params(input ParamAddr_t addr, input FxFormatParams_t format);

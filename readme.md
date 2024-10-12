@@ -3,6 +3,8 @@
 Part of my Engineering Science (ECE option) degree at the University of Toronto. Supervised by Prof. Xilin Liu of UofT X-Lab.\
 Project description: https://tristan.cbcr.me/?type=a#edge_AI
 
+![AI Accelerator Diagram](latex/iscas_2025/assets/die_shot_black.png)
+
 ## Cloning the repo
 After you've cloned the repo, be sure to `git submodule init` and `git submodule update` to clone in the submodules for the ASIC functional simulation.
 

@@ -1,1 +1,2 @@
-SIM=verilator pytest -o log_cli=True ~/../tmp/asic/rtl/centralized/sim/sim_config.py
+#!/bin/bash
+SIM=verilator pytest -o log_cli=True sim_config.py
