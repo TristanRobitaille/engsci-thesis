@@ -2,7 +2,7 @@
 
 # Spawn processes of the program to run the fixed point accuracy study
 num_total_clips=962
-num_process=481
+num_process=$(( $(sysctl -n hw.ncpu) / 2 )) # Use half of the available cores
 starting_num_bits_int_res=6
 num_bit_studies_int_res=10
 starting_num_bits_params=5
@@ -17,6 +17,7 @@ do
         # Generate new binary
         export N_STO_PARAMS=${param_bits}
         make clean
+        rm CMakeCache.txt
         cmake CMakeLists.txt
         make -j24
         mv build/Func_Sim build/Func_Sim_${param_bits}b

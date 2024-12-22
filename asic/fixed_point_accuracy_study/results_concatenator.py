@@ -1,4 +1,5 @@
 import os
+import re
 import csv
 import glob
 import argparse
@@ -26,7 +27,7 @@ def main():
         template_data = list(reader)
 
     # Go through each partial results file
-    start_index_total = 1000000
+    start_index_total = 1e6
     end_index_total = 0
     if (args.type == "complete"): files = glob.glob(os.path.join(os.path.dirname(RESULTS_TEMPLATE_FP), f"results_template_w_python_*.csv"))
     elif (args.bit_type == "int_res"): files = glob.glob(os.path.join(os.path.dirname(RESULTS_TEMPLATE_FP), f"results_template_w_python_*_{args.target_bit}_*"))
@@ -37,19 +38,17 @@ def main():
     
     for file in files:
         # Separate the file name into its components
-        filename = file.replace(".csv", "")
-        file_name_parts = filename.split("_")
-        if args.bit_type == "int_res":
-            num_bits = int(file_name_parts[-3])
-            num_bits_fixed = int(file_name_parts[-4])
-        elif args.bit_type == "params":
-            num_bits = int(file_name_parts[-4])
-            num_bits_fixed = int(file_name_parts[-3])
+        match = re.match(r".*results_template_w_python_(\d+)_(\d+)_(\d+)_(\d+)\.csv", file)
+        if not match:
+            print(f"Filename {file} does not match expected pattern.")
+            continue
 
-        if (args.type == "partial" and num_bits != args.target_bit): continue
-        start_index = int(file_name_parts[-2])
-        end_index = int(file_name_parts[-1])
-       
+        if args.bit_type == "int_res":
+            num_bits_fixed, num_bits, start_index, end_index = map(int, match.groups())
+        elif args.bit_type == "params":
+            num_bits, num_bits_fixed, start_index, end_index = map(int, match.groups())
+
+        if (args.type == "partial" and num_bits != args.target_bit): continue       
         if (start_index < start_index_total): start_index_total = start_index
         if (end_index > end_index_total): end_index_total = end_index
         
@@ -63,15 +62,7 @@ def main():
 
     # Save the complete file
     if args.type == "partial":
-        fp_parts = files[0].split('_')
-        fp_parts[-1] = str(end_index_total)
-        fp_parts[-2] = str(start_index_total)
-        new_fp = ""
-        for i in range(len(fp_parts)):
-            if (i == 0): new_fp += fp_parts[i]
-            else: new_fp += f"_{fp_parts[i]}"
-        
-        new_fp += ".csv"
+        new_fp_regex = re.sub(r"_(\d+)_(\d+)\.csv$", f"_{start_index_total}_{end_index_total}.csv", files[0])
     elif args.type == "complete":
         if args.bit_type == "int_res":  new_fp = f"./results/results_params-{num_bits_fixed}_int-res-variable_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
         elif args.bit_type == "params": new_fp = f"./results/results_params-variable_int-res-{num_bits_fixed}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
@@ -102,7 +93,6 @@ def main():
         template_data.append(accuracies)
 
     with open(new_fp, 'w', newline='') as f:
-        print(f"new_fp: {new_fp}")
         writer = csv.writer(f)
         writer.writerows(template_data)
 
